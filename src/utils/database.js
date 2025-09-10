@@ -26,8 +26,11 @@ class DatabaseManager {
                 config.database.url.includes('localhost') || config.database.url.length < 20 ||
                 config.database.url === 'mongodb://localhost:27017/ilombot' ||
                 config.database.url.includes('ENOTFOUND') || config.database.url === '1' ||
-                config.database.url.includes('@1@') || config.database.url.includes('isaiahilom')) {
-                logger.info('🔧 Development mode: Skipping database connection');
+                config.database.url.includes('@1@') || config.database.url.includes('isaiahilom') ||
+                config.database.url.startsWith('postgresql://') || 
+                config.database.url.includes('helium') || 
+                process.env.REPLIT_ENVIRONMENT) {
+                logger.info('🔧 Development/Replit mode: Skipping database connection');
                 this.isConnected = true;
                 this.reconnectAttempts = 0;
                 logger.info('✅ Database (simulated) connected successfully');

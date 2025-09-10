@@ -25,7 +25,7 @@ const config = {
     autoTyping: process.env.AUTO_TYPING === 'true',
 
     database: {
-        url: (process.env.DATABASE_URL && process.env.DATABASE_URL.length > 20) ? process.env.DATABASE_URL : 'mongodb://localhost:27017/ilombot',
+        url: (process.env.DATABASE_URL && process.env.DATABASE_URL.length > 20 && process.env.DATABASE_URL.startsWith('mongodb')) ? process.env.DATABASE_URL : 'mongodb://localhost:27017/ilombot',
         options: {
             useNewUrlParser: true,
             useUnifiedTopology: true,
