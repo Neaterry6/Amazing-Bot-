@@ -25,13 +25,18 @@ const config = {
     autoTyping: process.env.AUTO_TYPING === 'true',
 
     database: {
-        url: (process.env.DATABASE_URL && process.env.DATABASE_URL.length > 20 && process.env.DATABASE_URL.startsWith('mongodb')) ? process.env.DATABASE_URL : 'mongodb://localhost:27017/ilombot',
+        url: process.env.MONGODB_URL || process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('mongodb') 
+            ? process.env.DATABASE_URL 
+            : 'mongodb://localhost:27017/ilombot',
+        enabled: process.env.DATABASE_ENABLED !== 'false',
         options: {
             useNewUrlParser: true,
             useUnifiedTopology: true,
-            maxPoolSize: 10,
-            serverSelectionTimeoutMS: 5000,
-            socketTimeoutMS: 45000,
+            maxPoolSize: parseInt(process.env.DB_MAX_POOL_SIZE) || 10,
+            serverSelectionTimeoutMS: parseInt(process.env.DB_TIMEOUT) || 5000,
+            socketTimeoutMS: parseInt(process.env.DB_SOCKET_TIMEOUT) || 45000,
+            bufferMaxEntries: 0,
+            bufferCommands: false
         }
     },
 
