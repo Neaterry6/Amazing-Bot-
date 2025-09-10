@@ -291,11 +291,19 @@ async function establishWhatsAppConnection() {
         });
         
         sock.ev.on('group-participants.update', async (groupUpdate) => {
-            await groupHandler.handleParticipantsUpdate(sock, groupUpdate);
+            try {
+                await groupHandler.handleParticipantsUpdate(sock, groupUpdate);
+            } catch (error) {
+                logger.error('Group participants update error:', error);
+            }
         });
         
         sock.ev.on('groups.update', async (groupsUpdate) => {
-            await groupHandler.handleGroupUpdate(sock, groupsUpdate);
+            try {
+                await groupHandler.handleGroupUpdate(sock, groupsUpdate);
+            } catch (error) {
+                logger.error('Groups update error:', error);
+            }
         });
         
         sock.ev.on('call', async (callEvents) => {
@@ -303,7 +311,11 @@ async function establishWhatsAppConnection() {
         });
         
         sock.ev.on('contacts.update', async (contactUpdates) => {
-            await eventHandler.handleContactUpdate(sock, contactUpdates);
+            try {
+                await eventHandler.handleContactUpdate(sock, contactUpdates);
+            } catch (error) {
+                logger.error('Contact update error:', error);
+            }
         });
         
         global.sock = sock;
