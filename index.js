@@ -28,7 +28,7 @@ const errorHandler = require('./src/handlers/errorHandler');
 const config = require('./src/config');
 const constants = require('./src/constants');
 const { initializeCommands } = require('./src/utils/commandManager');
-const { loadPlugins } = require('./src/utils/pluginManager');
+const { loadPlugins, getActiveCount } = require('./src/utils/pluginManager');
 const { startScheduler } = require('./src/utils/scheduler');
 const { initializeCache } = require('./src/utils/cache');
 const { startWebServer } = require('./src/utils/webServer');
@@ -162,7 +162,7 @@ async function sendBotStatusUpdate(sock) {
 │ 👨‍💻 Developer: Ilom
 │ 🎯 Prefix: ${config.prefix}
 │ 📝 Commands: ${await commandHandler.getCommandCount()}
-│ 🔌 Plugins: ${await loadPlugins.getActiveCount()}
+│ 🔌 Plugins: ${getActiveCount()}
 ╰─────────────────────────╯
 
 🚀 *${config.botName} is now operational!*
