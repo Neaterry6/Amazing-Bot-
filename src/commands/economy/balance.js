@@ -9,25 +9,16 @@ module.exports = {
     cooldown: 3,
     permissions: ['user'],
 
-    async execute(sock, message, args, { user, mentionedUsers }) {
-        if (!config.economy.enabled) {
-            return sock.sendMessage(message.key.remoteJid, {
-                text: '❌ Economy system is currently disabled.'
-            });
-        }
-
-        const targetUser = mentionedUsers[0] || user;
-        const isOwn = targetUser.id === user.id;
-        
+    async execute({ sock, message, args, from, user, prefix }) {
         const balance = 1000 + Math.floor(Math.random() * 5000);
         const bank = Math.floor(Math.random() * 10000);
         const total = balance + bank;
 
-        const balanceText = `💰 *${isOwn ? 'Your' : targetUser.name + "'s"} Balance*
+        const balanceText = `💰 *Your Balance*
 
-💵 *Cash:* ${config.economy.currency.symbol}${balance.toLocaleString()}
-🏦 *Bank:* ${config.economy.currency.symbol}${bank.toLocaleString()}
-💎 *Total:* ${config.economy.currency.symbol}${total.toLocaleString()}
+💵 *Cash:* $${balance.toLocaleString()}
+🏦 *Bank:* $${bank.toLocaleString()}
+💎 *Total:* $${total.toLocaleString()}
 
 📊 *Quick Stats:*
 • Daily claimed: ✅
@@ -35,13 +26,13 @@ module.exports = {
 • Last work: 2 hours ago
 
 💡 *Commands:*
-• ${config.prefix}daily - Get daily bonus
-• ${config.prefix}work - Earn money
-• ${config.prefix}shop - Buy items
-• ${config.prefix}transfer - Send money
+• ${prefix}daily - Get daily bonus
+• ${prefix}work - Earn money
+• ${prefix}shop - Buy items
+• ${prefix}transfer - Send money
 
 ⚠️ Note: Economy features require database setup`;
 
-        await sock.sendMessage(message.key.remoteJid, { text: balanceText });
+        await sock.sendMessage(from, { text: balanceText });
     }
 };

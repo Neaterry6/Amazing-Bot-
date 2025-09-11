@@ -162,6 +162,11 @@ class Logger {
         this.logger.silly(message, meta);
     }
 
+    async trace(message, meta = {}) {
+        await this.ensureInitialized();
+        this.logger.debug(message, meta);
+    }
+
     async logCommand(command, user, group, executionTime) {
         const logData = {
             type: 'command',
@@ -383,7 +388,8 @@ ${errorData.meta.substring(0, 1000)}
             debug: (message, meta = {}) => this.debug(message, { ...meta, context }),
             verbose: (message, meta = {}) => this.verbose(message, { ...meta, context }),
             http: (message, meta = {}) => this.http(message, { ...meta, context }),
-            silly: (message, meta = {}) => this.silly(message, { ...meta, context })
+            silly: (message, meta = {}) => this.silly(message, { ...meta, context }),
+            trace: (message, meta = {}) => this.trace(message, { ...meta, context })
         };
     }
 }

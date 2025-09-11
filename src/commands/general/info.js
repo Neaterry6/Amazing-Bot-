@@ -10,7 +10,7 @@ module.exports = {
     cooldown: 5,
     permissions: ['user'],
 
-    async execute(sock, message) {
+    async execute({ sock, message, from }) {
         const uptime = process.uptime();
         const days = Math.floor(uptime / 86400);
         const hours = Math.floor((uptime % 86400) / 3600);
@@ -48,6 +48,6 @@ module.exports = {
 
 ✨ *Thank you for using ${config.botName}!*`;
 
-        await sock.sendMessage(message.key.remoteJid, { text: infoText });
+        await sock.sendMessage(from, { text: infoText });
     }
 };

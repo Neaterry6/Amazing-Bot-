@@ -7,7 +7,7 @@ module.exports = {
     cooldown: 3,
     permissions: ['user'],
 
-    async execute(sock, message, args) {
+    async execute({ sock, message, from }) {
         const jokes = [
             "Why don't scientists trust atoms? Because they make up everything!",
             "I told my wife she was drawing her eyebrows too high. She looked surprised.",
@@ -34,6 +34,6 @@ ${randomJoke}
 
 😄 Hope that made you smile!`;
 
-        await sock.sendMessage(message.key.remoteJid, { text: responseText });
+        await sock.sendMessage(from, { text: responseText });
     }
 };

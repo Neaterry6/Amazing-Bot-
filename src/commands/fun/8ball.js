@@ -9,7 +9,7 @@ module.exports = {
     args: true,
     minArgs: 1,
 
-    async execute(sock, message, args) {
+    async execute({ sock, message, args, from }) {
         const question = args.join(' ');
         
         const responses = [
@@ -43,6 +43,6 @@ module.exports = {
 
 🔮 *Answer:* ${randomResponse}`;
 
-        await sock.sendMessage(message.key.remoteJid, { text: responseText });
+        await sock.sendMessage(from, { text: responseText });
     }
 };
