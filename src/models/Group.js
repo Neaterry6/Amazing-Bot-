@@ -114,7 +114,6 @@ const GroupSchema = new mongoose.Schema({
     versionKey: false
 });
 
-GroupSchema.index({ name: 1 });
 GroupSchema.index({ participants: -1 });
 GroupSchema.index({ isBanned: 1, banUntil: 1 });
 

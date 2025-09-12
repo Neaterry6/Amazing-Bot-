@@ -262,7 +262,6 @@ const UserSchema = new mongoose.Schema({
     versionKey: false
 });
 
-UserSchema.index({ phone: 1 });
 UserSchema.index({ 'economy.balance': -1 });
 UserSchema.index({ isPremium: 1, premiumUntil: 1 });
 UserSchema.index({ isBanned: 1, banUntil: 1 });
