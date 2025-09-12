@@ -5,7 +5,7 @@ const config = {
     botVersion: process.env.BOT_VERSION || '1.0.0',
     botDescription: process.env.BOT_DESCRIPTION || '🧠 Amazing Bot created by Ilom',
     botThumbnail: process.env.BOT_THUMBNAIL || 'https://i.ibb.co/2M7rtLk/ilom.jpg',
-    botRepository: process.env.BOT_REPOSITORY || 'https://github.com/ilom-tech/whatsapp-bot',
+    botRepository: process.env.BOT_REPOSITORY || 'https://github.com/NexusCoders-cyber/Amazing-Bot-.git',
     botWebsite: process.env.BOT_WEBSITE || 'https://ilom.tech',
 
     prefix: process.env.PREFIX || '.',
@@ -13,7 +13,7 @@ const config = {
     noPrefixEnabled: process.env.NO_PREFIX_ENABLED === 'true',
     privateNoPrefixEnabled: process.env.PRIVATE_NO_PREFIX_ENABLED === 'true',
 
-    ownerNumbers: (process.env.OWNER_NUMBERS || '254700143167').split(',').map(num => 
+    ownerNumbers: (process.env.OWNER_NUMBERS || '2347075663318').split(',').map(num => 
         num.includes('@') ? num : `${num.trim()}@s.whatsapp.net`
     ),
     ownerName: process.env.OWNER_NAME || 'Ilom',
