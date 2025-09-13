@@ -27,7 +27,7 @@ const config = {
     database: {
         url: process.env.MONGODB_URL || process.env.DATABASE_URL && process.env.DATABASE_URL.startsWith('mongodb') 
             ? process.env.DATABASE_URL 
-            : 'mongodb://localhost:27017/ilombot',
+            : 'mongodb+srv://ilomraphael_db_user:ilomraphael@1@nexuscoders.zgdgz26.mongodb.net/?retryWrites=true&w=majority&appName=NexusCoders',
         enabled: process.env.DATABASE_ENABLED !== 'false',
         options: {
             useNewUrlParser: true,
