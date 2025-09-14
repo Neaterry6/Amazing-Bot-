@@ -134,7 +134,7 @@ class WebServer {
         
         this.app.use(express.static(path.join(__dirname, '..', 'assets', 'public')));
         
-        this.app.get('*', this.handle404.bind(this));
+        this.app.use(this.handle404.bind(this));
 
         logger.info('Web server routes configured');
     }
