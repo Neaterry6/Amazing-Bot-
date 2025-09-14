@@ -1,4 +1,4 @@
-modules = ["nodejs-24"]
+modules = ["nodejs-23"]
 [agent]
 expertMode = true
 
