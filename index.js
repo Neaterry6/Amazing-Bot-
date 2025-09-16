@@ -78,12 +78,14 @@ function displayStartupBanner() {
 
 async function processSessionCredentials() {
     await fs.ensureDir(SESSION_PATH);
+    await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
     
     if (process.env.SESSION_ID && process.env.SESSION_ID.trim() !== '') {
         try {
             const sessionId = process.env.SESSION_ID.trim();
             let sessionData;
             
+            // Handle different session ID formats
             if (sessionId.startsWith('Ilom~')) {
                 const cleanId = sessionId.replace('Ilom~', '');
                 sessionData = JSON.parse(Buffer.from(cleanId, 'base64').toString());
@@ -98,21 +100,59 @@ async function processSessionCredentials() {
             }
             
             if (sessionData && typeof sessionData === 'object') {
-                await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData, { spaces: 2 });
-                logger.info('✅ Session credentials processed');
+                // Handle complete multi-file auth state structure
+                if (sessionData.creds) {
+                    // New format: contains both creds and keys
+                    await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData.creds, { spaces: 2 });
+                    
+                    // Process keys if available
+                    if (sessionData.keys && typeof sessionData.keys === 'object') {
+                        const keysPath = path.join(SESSION_PATH, 'keys');
+                        await fs.ensureDir(keysPath);
+                        
+                        for (const [keyName, keyData] of Object.entries(sessionData.keys)) {
+                            if (keyData && typeof keyData === 'object') {
+                                await fs.writeJSON(path.join(keysPath, `${keyName}.json`), keyData, { spaces: 2 });
+                            }
+                        }
+                        logger.info('✅ Session credentials and keys processed');
+                    } else {
+                        logger.info('✅ Session credentials processed (keys will be generated)');
+                    }
+                } else {
+                    // Legacy format: direct creds object
+                    await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData, { spaces: 2 });
+                    logger.info('✅ Session credentials processed (legacy format)');
+                }
                 return true;
             }
         } catch (error) {
             logger.warn('⚠️ Invalid SESSION_ID format:', error.message);
+            logger.debug('SESSION_ID content preview:', process.env.SESSION_ID?.substring(0, 100) + '...');
         }
     }
     
-    if (await fs.pathExists(path.join(SESSION_PATH, 'creds.json'))) {
-        logger.info('📁 Using existing session credentials');
-        return true;
+    // Check for existing valid session
+    const credsPath = path.join(SESSION_PATH, 'creds.json');
+    const keysPath = path.join(SESSION_PATH, 'keys');
+    
+    if (await fs.pathExists(credsPath)) {
+        try {
+            const creds = await fs.readJSON(credsPath);
+            if (creds && (creds.noiseKey || creds.signedIdentityKey)) {
+                logger.info('📁 Using existing session credentials');
+                return true;
+            } else {
+                logger.warn('🔄 Invalid creds.json found, will regenerate');
+                await fs.remove(credsPath);
+            }
+        } catch (error) {
+            logger.warn('🔄 Corrupted creds.json found, will regenerate');
+            await fs.remove(credsPath).catch(() => {});
+        }
     }
     
-    logger.info('ℹ️ No session found - will generate QR code for pairing');
+    logger.info('ℹ️ No valid session found - will generate QR code for pairing');
     return false;
 }
 
@@ -178,8 +218,22 @@ async function handleConnectionEvents(sock, connectionUpdate) {
         
         if (statusCode === DisconnectReason.loggedOut || statusCode === DisconnectReason.forbidden) {
             console.log(chalk.red('❌ Session invalid - please provide valid SESSION_ID'));
-            logger.warn('Session credentials invalid, awaiting new session...');
-            await fs.remove(SESSION_PATH).catch(() => {});
+            logger.warn('Session credentials invalid, clearing session for fresh start...');
+            
+            // Enhanced cloud deployment handling - clear session safely
+            try {
+                await fs.remove(SESSION_PATH);
+                logger.info('🔄 Session cleared, ready for new authentication');
+                
+                // In cloud environments, we should exit and let the orchestrator restart
+                if (process.env.RAILWAY_PROJECT_ID || process.env.REPL_ID || process.env.HEROKU_APP_NAME) {
+                    logger.info('🔄 Cloud deployment detected, restarting for fresh session...');
+                    setTimeout(() => process.exit(0), 3000);
+                    return;
+                }
+            } catch (error) {
+                logger.error('Error clearing session:', error);
+            }
             return;
         }
         
