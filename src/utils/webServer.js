@@ -159,12 +159,12 @@ class WebServer {
                     delete require.cache[require.resolve(routePath)];
                     const route = require(routePath);
                     
-                    if (typeof route === 'function' && route.length === 4) {
+                    if (typeof route === 'function' || (route && typeof route.stack === 'object')) {
                         this.app.use(`/api/${routeName}`, route);
                         this.routes.set(routeName, route);
                         logger.debug(`Loaded API route: /api/${routeName}`);
                     } else {
-                        logger.warn(`Skipping invalid route ${file}: not a valid middleware function`);
+                        logger.warn(`Skipping invalid route ${file}: not a valid Express router or middleware function`);
                     }
                 } catch (error) {
                     logger.warn(`Skipping problematic route ${file}: ${error.message}`);

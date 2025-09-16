@@ -13,7 +13,7 @@ const config = {
     noPrefixEnabled: process.env.NO_PREFIX_ENABLED === 'true',
     privateNoPrefixEnabled: process.env.PRIVATE_NO_PREFIX_ENABLED === 'true',
 
-    ownerNumbers: (process.env.OWNER_NUMBERS || '2347075663318').split(',').map(num => 
+    ownerNumbers: (process.env.OWNER_NUMBERS || 'YOUR_PHONE_NUMBER').split(',').map(num => 
         num.includes('@') ? num : `${num.trim()}@s.whatsapp.net`
     ),
     ownerName: process.env.OWNER_NAME || 'Ilom',
