@@ -206,11 +206,57 @@ async function handleConnectionEvents(sock, connectionUpdate) {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
         
+        // Enhanced error logging
         logger.warn(`Connection closed with status: ${statusCode}`);
+        if (lastDisconnect?.error) {
+            logger.error('Connection error details:', JSON.stringify(lastDisconnect.error, null, 2));
+        }
+        
+        // Map status code to readable reason
+        const disconnectReasons = {
+            401: 'loggedOut',
+            408: 'timedOut', 
+            411: 'multideviceMismatch',
+            428: 'connectionClosed',
+            440: 'connectionReplaced',
+            500: 'internalServerError'
+        };
+        logger.info(`Disconnect reason: ${disconnectReasons[statusCode] || 'unknown'} (${statusCode})`);
         
         if (statusCode === DisconnectReason.loggedOut) {
-            logger.error('❌ Session expired - please provide new SESSION_ID');
-            process.exit(1);
+            logger.warn('⚠️ Session expired or invalid - clearing session data');
+            try {
+                // Clear existing session
+                await fs.remove(SESSION_PATH);
+                logger.info('🗑️ Cleared session directory');
+                
+                // Reset for retry
+                reconnectAttempts = 0;
+                
+                // If we have SESSION_ID, try processing it again
+                if (process.env.SESSION_ID && process.env.SESSION_ID.trim() !== '') {
+                    logger.info('🔄 Re-processing SESSION_ID...');
+                    const sessionProcessed = await processSessionCredentials();
+                    if (sessionProcessed) {
+                        logger.info('⏱️ Retrying connection in 5 seconds...');
+                        setTimeout(establishWhatsAppConnection, 5000);
+                        return;
+                    }
+                }
+                
+                logger.error('❌ Unable to recover session - manual re-pairing required');
+                console.log(chalk.red('Please provide a fresh SESSION_ID or scan QR code'));
+                
+                // Don't exit immediately, allow QR pairing
+                setTimeout(() => {
+                    logger.info('🔄 Starting fresh connection for QR pairing...');
+                    establishWhatsAppConnection();
+                }, 3000);
+                return;
+            } catch (error) {
+                logger.error('Failed to clear session:', error);
+                process.exit(1);
+            }
         }
         
         if (shouldReconnect && reconnectAttempts < MAX_RECONNECT) {
@@ -246,8 +292,8 @@ async function establishWhatsAppConnection() {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, logger)
             },
-            printQRInTerminal: false,
-            logger: P({ level: 'silent' }),
+            printQRInTerminal: true,
+            logger: P({ level: 'info' }),
             browser: Browsers.ubuntu('Chrome'),
             msgRetryCounterCache,
             generateHighQualityLinkPreview: true,
