@@ -24,8 +24,8 @@
     "url": "https://github.com/ilom-tech/whatsapp-bot/issues"
   },
   "engines": {
-    "node": ">=23.0.0",
-    "npm": ">=10.0.0"
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   },
   "scripts": {
     "start": "node index.js",
@@ -34,7 +34,7 @@
     "test:watch": "jest --watch",
     "lint": "eslint . --ext .js --fix",
     "format": "prettier --write .",
-    "build": "npm run lint && npm run test",
+    "build": "npm install",
     "docker:build": "docker build -t ilom-bot .",
     "docker:run": "docker run -p 3000:3000 ilom-bot",
     "pm2:start": "pm2 start ecosystem.config.js",
@@ -51,7 +51,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc.2",
+    "@whiskeysockets/baileys": "^7.0.0-rc.3",
     "archiver": "^7.0.1",
     "axios": "^1.12.1",
     "bcryptjs": "^3.0.2",

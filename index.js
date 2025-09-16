@@ -77,68 +77,42 @@ function displayStartupBanner() {
 }
 
 async function processSessionCredentials() {
+    await fs.ensureDir(SESSION_PATH);
+    
     if (process.env.SESSION_ID && process.env.SESSION_ID.trim() !== '') {
         try {
-            logger.info('Processing SESSION_ID from environment...');
-            
             const sessionId = process.env.SESSION_ID.trim();
-            await fs.ensureDir(SESSION_PATH);
+            let sessionData;
             
-            if (sessionId.startsWith('Ilom~') || sessionId.includes('Ilom~')) {
+            if (sessionId.startsWith('Ilom~')) {
                 const cleanId = sessionId.replace('Ilom~', '');
+                sessionData = JSON.parse(Buffer.from(cleanId, 'base64').toString());
+            } else if (sessionId.startsWith('{') && sessionId.endsWith('}')) {
+                sessionData = JSON.parse(sessionId);
+            } else {
                 try {
-                    const sessionData = JSON.parse(Buffer.from(cleanId, 'base64').toString());
-                    await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData);
-                    logger.info('✅ Session credentials loaded from Ilom format');
-                    return true;
-                } catch (err) {
-                    logger.warn('Failed to parse Ilom session format');
+                    sessionData = JSON.parse(Buffer.from(sessionId, 'base64').toString());
+                } catch {
+                    sessionData = JSON.parse(sessionId);
                 }
             }
             
-            if (sessionId.startsWith('{') && sessionId.endsWith('}')) {
-                const sessionData = JSON.parse(sessionId);
-                await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData);
-                logger.info('✅ Session credentials loaded from JSON format');
+            if (sessionData && typeof sessionData === 'object') {
+                await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData, { spaces: 2 });
+                logger.info('✅ Session credentials processed');
                 return true;
             }
-            
-            try {
-                const decodedData = Buffer.from(sessionId, 'base64').toString();
-                const sessionData = JSON.parse(decodedData);
-                await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData);
-                logger.info('✅ Session credentials loaded from base64 format');
-                return true;
-            } catch (err) {
-                logger.warn('Base64 decode failed, trying direct format...');
-            }
-            
-            try {
-                const sessionData = JSON.parse(sessionId);
-                await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData);
-                logger.info('✅ Session credentials loaded from direct format');
-                return true;
-            } catch (err) {
-                logger.error('All session parsing methods failed');
-            }
-            
-            const sessionFile = path.join(SESSION_PATH, 'session_id.txt');
-            await fs.writeFile(sessionFile, sessionId);
-            logger.warn('⚠️ Session saved as raw text, may need manual pairing');
-            return false;
-            
         } catch (error) {
-            logger.error('❌ Failed to process SESSION_ID:', error);
-            return false;
+            logger.warn('⚠️ Invalid SESSION_ID format:', error.message);
         }
     }
     
     if (await fs.pathExists(path.join(SESSION_PATH, 'creds.json'))) {
-        logger.info('📁 Existing session credentials found');
+        logger.info('📁 Using existing session credentials');
         return true;
     }
     
-    logger.warn('⚠️ No valid session found');
+    logger.info('ℹ️ No session found - will generate QR code for pairing');
     return false;
 }
 
@@ -191,93 +165,46 @@ async function sendBotStatusUpdate(sock) {
 }
 
 async function handleConnectionEvents(sock, connectionUpdate) {
-    const { connection, lastDisconnect, qr } = connectionUpdate;
+    const { connection, lastDisconnect, qr, receivedPendingNotifications } = connectionUpdate;
     
-    if (qr) {
-        if (!process.env.SESSION_ID || process.env.SESSION_ID.trim() === '') {
-            logger.warn('⚠️ QR Code generated but no SESSION_ID provided');
-            console.log(chalk.yellow('📱 Please provide SESSION_ID in environment to avoid QR scanning'));
-        } else {
-            logger.error('❌ SESSION_ID invalid - connection failed');
-        }
+    if (qr && !process.env.SESSION_ID) {
+        console.log(chalk.cyan('\n📱 QR Code received - scan with WhatsApp to connect'));
+        console.log(chalk.yellow('Set SESSION_ID environment variable to avoid QR scanning in future'));
     }
     
     if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== DisconnectReason.forbidden;
         
-        // Enhanced error logging
-        logger.warn(`Connection closed with status: ${statusCode}`);
-        if (lastDisconnect?.error) {
-            logger.error('Connection error details:', JSON.stringify(lastDisconnect.error, null, 2));
-        }
-        
-        // Map status code to readable reason
-        const disconnectReasons = {
-            401: 'loggedOut',
-            408: 'timedOut', 
-            411: 'multideviceMismatch',
-            428: 'connectionClosed',
-            440: 'connectionReplaced',
-            500: 'internalServerError'
-        };
-        logger.info(`Disconnect reason: ${disconnectReasons[statusCode] || 'unknown'} (${statusCode})`);
-        
-        if (statusCode === DisconnectReason.loggedOut) {
-            logger.warn('⚠️ Session expired or invalid - clearing session data');
-            try {
-                // Clear existing session
-                await fs.remove(SESSION_PATH);
-                logger.info('🗑️ Cleared session directory');
-                
-                // Reset for retry
-                reconnectAttempts = 0;
-                
-                // If we have SESSION_ID, try processing it again
-                if (process.env.SESSION_ID && process.env.SESSION_ID.trim() !== '') {
-                    logger.info('🔄 Re-processing SESSION_ID...');
-                    const sessionProcessed = await processSessionCredentials();
-                    if (sessionProcessed) {
-                        logger.info('⏱️ Retrying connection in 5 seconds...');
-                        setTimeout(establishWhatsAppConnection, 5000);
-                        return;
-                    }
-                }
-                
-                logger.error('❌ Unable to recover session - manual re-pairing required');
-                console.log(chalk.red('Please provide a fresh SESSION_ID or scan QR code'));
-                
-                // Don't exit immediately, allow QR pairing
-                setTimeout(() => {
-                    logger.info('🔄 Starting fresh connection for QR pairing...');
-                    establishWhatsAppConnection();
-                }, 3000);
-                return;
-            } catch (error) {
-                logger.error('Failed to clear session:', error);
-                process.exit(1);
-            }
+        if (statusCode === DisconnectReason.loggedOut || statusCode === DisconnectReason.forbidden) {
+            console.log(chalk.red('❌ Session invalid - please provide valid SESSION_ID'));
+            logger.warn('Session credentials invalid, awaiting new session...');
+            await fs.remove(SESSION_PATH).catch(() => {});
+            return;
         }
         
         if (shouldReconnect && reconnectAttempts < MAX_RECONNECT) {
             reconnectAttempts++;
-            logger.info(`🔄 Reconnection attempt ${reconnectAttempts}/${MAX_RECONNECT}`);
-            setTimeout(establishWhatsAppConnection, 3000);
-        } else {
-            logger.error('❌ Maximum reconnection attempts reached');
-            process.exit(1);
+            logger.info(`🔄 Reconnecting... (${reconnectAttempts}/${MAX_RECONNECT})`);
+            setTimeout(establishWhatsAppConnection, 5000);
+        } else if (reconnectAttempts >= MAX_RECONNECT) {
+            logger.error('❌ Max reconnection attempts reached');
+            reconnectAttempts = 0;
+            setTimeout(establishWhatsAppConnection, 30000);
         }
     } else if (connection === 'open') {
         reconnectAttempts = 0;
-        logger.info('✅ Successfully connected to WhatsApp Web');
-        console.log(chalk.green.bold('🚀 Bot is online and ready to serve!'));
+        logger.info('✅ WhatsApp connection established');
+        console.log(chalk.green.bold('🚀 Bot is online and ready!'));
         
         if (!isInitialized) {
             isInitialized = true;
-            await sendBotStatusUpdate(sock);
+            if (config.ownerNumbers && config.ownerNumbers.length > 0) {
+                await sendBotStatusUpdate(sock);
+            }
         }
     } else if (connection === 'connecting') {
-        logger.info('🔗 Establishing connection to WhatsApp...');
+        logger.info('🔗 Connecting to WhatsApp...');
     }
 }
 
@@ -290,27 +217,25 @@ async function establishWhatsAppConnection() {
             version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, logger)
+                keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' }))
             },
-            printQRInTerminal: true,
-            logger: P({ level: 'info' }),
-            browser: Browsers.ubuntu('Chrome'),
+            logger: P({ level: 'silent' }),
+            browser: Browsers.macOS('Chrome'),
             msgRetryCounterCache,
             generateHighQualityLinkPreview: true,
             markOnlineOnConnect: config.markOnline,
             syncFullHistory: false,
             fireInitQueries: true,
             emitOwnEvents: false,
-            maxMsgRetryCount: 5,
-            qrTimeout: 30000,
-            connectTimeoutMs: 30000,
-            defaultQueryTimeoutMs: 30000,
-            keepAliveIntervalMs: 30000,
+            maxMsgRetryCount: 3,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 0,
+            keepAliveIntervalMs: 10000,
+            retryRequestDelayMs: 1000,
+            maxQueryResponseTime: 30000,
+            alwaysUseTakeOver: false,
             getMessage: async (key) => {
-                if (msgRetryCounterCache.has(key.id)) {
-                    return msgRetryCounterCache.get(key.id);
-                }
-                return { conversation: '' };
+                return {};
             }
         });
         
