@@ -55,7 +55,7 @@
     "archiver": "^7.0.1",
     "axios": "^1.12.1",
     "bcryptjs": "^3.0.2",
-    "canvas": "^3.2.0",
+    "canvas": "2.11.2",
     "chalk": "4.1.2",
     "cheerio": "^1.1.2",
     "chokidar": "^3.5.3",

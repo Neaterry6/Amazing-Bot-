@@ -1,9 +1,10 @@
-modules = ["bun", "nodejs-20"]
+modules = ["nodejs-20"]
 [agent]
 expertMode = true
 
 [nix]
 channel = "stable-25_05"
+packages = ["cairo", "pango", "libjpeg", "giflib", "librsvg", "pixman", "python3", "pkg-config", "gnumake", "gcc"]
 
 [workflows]
 runButton = "Project"
