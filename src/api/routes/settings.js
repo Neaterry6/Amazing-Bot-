@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const logger = require('../../utils/logger');
-const authMiddleware = require('../../middleware/auth');
+const { authMiddleware } = require('../../middleware/auth');
 const config = require('../../config');
 
 // Mock settings service - in production, this would connect to your settings database

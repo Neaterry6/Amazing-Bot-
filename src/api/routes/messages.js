@@ -3,7 +3,7 @@ const router = express.Router();
 const { body, query, validationResult } = require('express-validator');
 const messageHandler = require('../../handlers/messageHandler');
 const logger = require('../../utils/logger');
-const authMiddleware = require('../../middleware/auth');
+const { authMiddleware } = require('../../middleware/auth');
 
 // Get recent messages (with pagination)
 router.get('/', authMiddleware, [

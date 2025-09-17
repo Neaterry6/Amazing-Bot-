@@ -3,7 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const commandHandler = require('../../handlers/commandHandler');
 const logger = require('../../utils/logger');
-const authMiddleware = require('../../middleware/auth');
+const { authMiddleware } = require('../../middleware/auth');
 
 // Get all available commands
 router.get('/', async (req, res) => {

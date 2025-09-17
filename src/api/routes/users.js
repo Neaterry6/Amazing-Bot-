@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { param, body, query, validationResult } = require('express-validator');
 const logger = require('../../utils/logger');
-const authMiddleware = require('../../middleware/auth');
+const { authMiddleware } = require('../../middleware/auth');
 
 // Mock user service - in production, this would connect to your user database
 const userService = {

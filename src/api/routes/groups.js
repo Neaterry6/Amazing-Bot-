@@ -3,7 +3,7 @@ const router = express.Router();
 const { param, body, validationResult } = require('express-validator');
 const groupHandler = require('../../handlers/groupHandler');
 const logger = require('../../utils/logger');
-const authMiddleware = require('../../middleware/auth');
+const { authMiddleware } = require('../../middleware/auth');
 
 // Get all groups bot is in
 router.get('/', authMiddleware, async (req, res) => {
