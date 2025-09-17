@@ -225,10 +225,10 @@ async function handleConnectionEvents(sock, connectionUpdate) {
                 await fs.remove(SESSION_PATH);
                 logger.info('🔄 Session cleared, ready for new authentication');
                 
-                // In cloud environments, we should exit and let the orchestrator restart
+                // In cloud environments, keep web server running even without WhatsApp session
                 if (process.env.RAILWAY_PROJECT_ID || process.env.REPL_ID || process.env.HEROKU_APP_NAME) {
-                    logger.info('🔄 Cloud deployment detected, restarting for fresh session...');
-                    setTimeout(() => process.exit(0), 3000);
+                    logger.info('🔄 Cloud deployment detected, keeping web server active without WhatsApp session...');
+                    logger.info('💡 To connect WhatsApp, set SESSION_ID environment variable and restart');
                     return;
                 }
             } catch (error) {
