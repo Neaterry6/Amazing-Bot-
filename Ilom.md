@@ -66,8 +66,9 @@ Preferred communication style: Simple, everyday language.
 # External Dependencies
 
 ## Core WhatsApp Integration
-- **@whiskeysockets/baileys**: WhatsApp Web API library for bot functionality
-- **qrcode-terminal**: QR code generation for WhatsApp authentication
+- **@whiskeysockets/baileys**: v6.17.16 - WhatsApp Web API library for bot functionality
+- **qrcode**: QR code generation for WhatsApp authentication (when no session provided)
+- **Session Management**: Supports multiple session formats including base64, JSON, and Ilom~ prefixed sessions
 
 ## Database and Caching
 - **mongoose**: MongoDB object modeling and database operations
