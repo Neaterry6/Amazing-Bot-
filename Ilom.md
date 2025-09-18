@@ -1,6 +1,14 @@
 # Overview
 
-Ilom WhatsApp Bot is a comprehensive Node.js application built using the Baileys library for WhatsApp automation. The bot features AI integration, media processing, economy systems, admin tools, and extensive command management. It's designed as a multi-purpose WhatsApp bot with modular architecture supporting plugins, scheduled tasks, and web-based administration.
+Ilom WhatsApp Bot is a comprehensive Node.js application built using the latest Baileys library for WhatsApp automation. The bot features AI integration, media processing, economy systems, admin tools, and extensive command management. It's designed as a multi-purpose WhatsApp bot with modular architecture supporting plugins, scheduled tasks, and web-based administration.
+
+**✅ Latest Updates (Sep 2025):**
+- Upgraded to Node.js 24.4.0 for optimal performance  
+- Updated @whiskeysockets/baileys to version 6.17.16 for better WhatsApp connectivity
+- Enhanced session management with multiple cloud platform support
+- Improved deployment configurations for Replit, Railway, Heroku, Render, and more
+- 120+ active commands with advanced error handling
+- Enhanced cloud environment detection and session persistence
 
 # User Preferences
 
@@ -9,10 +17,11 @@ Preferred communication style: Simple, everyday language.
 # System Architecture
 
 ## Core Framework
-- **WhatsApp Integration**: Built on @whiskeysockets/baileys for WhatsApp Web API communication
-- **Node.js Runtime**: ES6+ with modern JavaScript features and async/await patterns
-- **Express Web Server**: RESTful API and web dashboard for bot management
+- **WhatsApp Integration**: Built on @whiskeysockets/baileys v6.17.16 for WhatsApp Web API communication
+- **Node.js Runtime**: v24.4.0 with ES6+ and modern JavaScript features and async/await patterns
+- **Express Web Server**: RESTful API and web dashboard for bot management on port 5000
 - **Modular Plugin System**: Extensible architecture with hot-reloadable plugins
+- **Cloud Platform Support**: Enhanced deployment detection for Replit, Railway, Heroku, Render, Vercel, Netlify, Koyeb
 
 ## Command System
 - **Category-based Organization**: Commands organized into folders (admin, ai, downloader, economy, fun, games, general, media, owner, utility)
