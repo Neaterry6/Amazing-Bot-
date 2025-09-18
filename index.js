@@ -85,17 +85,23 @@ async function processSessionCredentials() {
             const sessionId = process.env.SESSION_ID.trim();
             let sessionData;
             
-            // Handle different session ID formats
+            logger.info('🔐 Processing session credentials from environment...');
+            
+            // Handle different session ID formats with improved error handling
             if (sessionId.startsWith('Ilom~')) {
                 const cleanId = sessionId.replace('Ilom~', '');
                 sessionData = JSON.parse(Buffer.from(cleanId, 'base64').toString());
+                logger.info('✅ Processed Ilom format session');
             } else if (sessionId.startsWith('{') && sessionId.endsWith('}')) {
                 sessionData = JSON.parse(sessionId);
+                logger.info('✅ Processed JSON format session');
             } else {
                 try {
                     sessionData = JSON.parse(Buffer.from(sessionId, 'base64').toString());
+                    logger.info('✅ Processed base64 format session');
                 } catch {
                     sessionData = JSON.parse(sessionId);
+                    logger.info('✅ Processed direct JSON format session');
                 }
             }
             
@@ -225,10 +231,23 @@ async function handleConnectionEvents(sock, connectionUpdate) {
                 await fs.remove(SESSION_PATH);
                 logger.info('🔄 Session cleared, ready for new authentication');
                 
-                // In cloud environments, keep web server running even without WhatsApp session
-                if (process.env.RAILWAY_PROJECT_ID || process.env.REPL_ID || process.env.HEROKU_APP_NAME) {
-                    logger.info('🔄 Cloud deployment detected, keeping web server active without WhatsApp session...');
-                    logger.info('💡 To connect WhatsApp, set SESSION_ID environment variable and restart');
+                // Enhanced cloud deployment detection and handling
+                const cloudProviders = {
+                    'RAILWAY_PROJECT_ID': 'Railway',
+                    'REPL_ID': 'Replit', 
+                    'HEROKU_APP_NAME': 'Heroku',
+                    'RENDER': 'Render',
+                    'VERCEL': 'Vercel',
+                    'NETLIFY': 'Netlify',
+                    'KOYEB_APP': 'Koyeb'
+                };
+                
+                const detectedProvider = Object.entries(cloudProviders).find(([key]) => process.env[key]);
+                
+                if (detectedProvider) {
+                    logger.info(`🔄 ${detectedProvider[1]} deployment detected, keeping web server active...`);
+                    logger.info('💡 To connect WhatsApp, set SESSION_ID in environment/secrets and restart');
+                    logger.info('📱 The bot will show QR code for initial setup if no valid session exists');
                     return;
                 }
             } catch (error) {
