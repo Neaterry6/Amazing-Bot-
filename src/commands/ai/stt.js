@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'stt',
     aliases: ['speechtotext', 'transcribe', 'voice'],
     category: 'ai',

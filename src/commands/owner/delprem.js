@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'delprem',
     aliases: ['removeprem', 'prem-', 'delpremium'],
     category: 'owner',

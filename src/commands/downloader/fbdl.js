@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'fbdl',
     description: 'Download Facebook videos',
     category: 'downloader',

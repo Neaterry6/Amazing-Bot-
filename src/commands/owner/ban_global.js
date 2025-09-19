@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'ban_global',
     aliases: ['gban', 'globalban', 'banall'],
     category: 'owner',

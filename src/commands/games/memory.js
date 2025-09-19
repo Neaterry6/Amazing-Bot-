@@ -1,6 +1,6 @@
 const memoryCache = new Map();
 
-module.exports = {
+export default {
     name: 'memory',
     aliases: ['memorygame', 'remember'],
     category: 'games',

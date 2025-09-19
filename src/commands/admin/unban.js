@@ -1,6 +1,8 @@
-const { updateUser } = require('../../models/User');
+import { updateUser  } from '../../models/User.js';
 
-module.exports = {
+
+
+export default {
     name: 'unban',
     aliases: ['unblock', 'unbanuser'],
     category: 'admin',

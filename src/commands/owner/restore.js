@@ -1,7 +1,10 @@
-const fs = require('fs').promises;
-const unzipper = require('unzipper');
+import fs from 'fs';
+import unzipper from 'unzipper';
 
-module.exports = {
+.promises;
+
+
+export default {
     name: 'restore',
     aliases: ['recover', 'import', 'load'],
     category: 'owner',

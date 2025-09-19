@@ -1,6 +1,8 @@
-const moment = require('moment');
+import moment from 'moment';
 
-module.exports = {
+
+
+export default {
     name: 'time',
     aliases: ['clock', 'datetime', 'date'],
     category: 'general',

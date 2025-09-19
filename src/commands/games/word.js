@@ -1,6 +1,6 @@
 const wordCache = new Map();
 
-module.exports = {
+export default {
     name: 'word',
     aliases: ['wordgame', 'letters'],
     category: 'games',

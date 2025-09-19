@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'leaderboard',
     aliases: ['lb', 'top', 'ranking'],
     category: 'general',

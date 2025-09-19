@@ -1,7 +1,10 @@
-const config = require('../../config');
-const { updateGroup } = require('../../models/Group');
+import config from '../../config.js';
+import { updateGroup  } from '../../models/Group.js';
 
-module.exports = {
+
+
+
+export default {
     name: 'antilink',
     aliases: ['anti-link', 'linkprotection'],
     category: 'admin',

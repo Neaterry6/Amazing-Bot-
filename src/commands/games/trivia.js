@@ -1,6 +1,6 @@
 const triviaCache = new Map();
 
-module.exports = {
+export default {
     name: 'trivia',
     aliases: ['quiz', 'question'],
     category: 'games',

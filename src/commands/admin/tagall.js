@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'tagall',
     aliases: ['mentionall', 'everyone'],
     category: 'admin',

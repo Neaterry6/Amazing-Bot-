@@ -73,11 +73,11 @@ class CommandManager {
     async loadCommand(category, filename) {
         try {
             const commandPath = path.join(__dirname, '..', 'commands', category, filename);
-            
-            delete require.cache[require.resolve(commandPath)];
-            const command = require(commandPath);
-            
-            if (!this.validateCommandStructure(command)) {
+            const commandUrl = `file://${commandPath}`;
+
+            const command = await import(commandUrl);
+
+            if (!this.validateCommandStructure(command.default)) {
                 logger.warn(`Invalid command structure: ${filename}`);
                 return false;
             }

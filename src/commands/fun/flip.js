@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'flip',
     aliases: ['coin', 'coinflip', 'heads'],
     category: 'fun',

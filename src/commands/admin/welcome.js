@@ -1,6 +1,8 @@
-const { updateGroup } = require('../../models/Group');
+import { updateGroup  } from '../../models/Group.js';
 
-module.exports = {
+
+
+export default {
     name: 'welcome',
     aliases: ['welcometext', 'setwelcome'],
     category: 'admin',

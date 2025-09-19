@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'twdl',
     description: 'Download Twitter/X videos and GIFs',
     category: 'downloader',

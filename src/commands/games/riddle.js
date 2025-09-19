@@ -1,6 +1,6 @@
 const riddleCache = new Map();
 
-module.exports = {
+export default {
     name: 'riddle',
     aliases: ['puzzle', 'brain'],
     category: 'games',

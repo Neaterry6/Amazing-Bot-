@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'youtube',
     aliases: ['ytdl', 'yt', 'yta'],
     category: 'downloader',

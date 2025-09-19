@@ -1,6 +1,6 @@
 const hangmanCache = new Map();
 
-module.exports = {
+export default {
     name: 'hangman',
     aliases: ['hang'],
     category: 'games',

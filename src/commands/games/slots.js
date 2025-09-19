@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'slots',
     aliases: ['slot', 'slotmachine'],
     category: 'games',

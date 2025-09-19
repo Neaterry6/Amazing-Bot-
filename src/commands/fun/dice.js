@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'dice',
     aliases: ['roll', 'd6'],
     category: 'fun',

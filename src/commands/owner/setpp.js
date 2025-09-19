@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'setpp',
     aliases: ['setprofilepic', 'changepfp', 'updatepfp'],
     category: 'owner',

@@ -1,6 +1,8 @@
-const ffmpeg = require('fluent-ffmpeg');
+import ffmpeg from 'fluent-ffmpeg';
 
-module.exports = {
+
+
+export default {
     name: 'tovideo',
     aliases: ['video', 'mp4', 'convert_video'],
     category: 'media',

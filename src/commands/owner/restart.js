@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'restart',
     aliases: ['reboot', 'reload'],
     category: 'owner',

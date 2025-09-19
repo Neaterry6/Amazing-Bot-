@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'broadcast',
     aliases: ['bc', 'announce', 'mass'],
     category: 'owner',

@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'hack',
     aliases: ['hacker', 'matrix'],
     category: 'fun',

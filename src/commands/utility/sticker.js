@@ -1,7 +1,10 @@
-const { Sticker, StickerTypes } = require('wa-sticker-formatter');
-const config = require('../../config');
+import config from '../../config.js';
+import { Sticker, StickerTypes  } from 'wa-sticker-formatter';
 
-module.exports = {
+
+
+
+export default {
     name: 'sticker',
     aliases: ['s', 'stiker'],
     category: 'utility',

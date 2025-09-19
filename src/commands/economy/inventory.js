@@ -1,7 +1,10 @@
-const { getUser } = require('../../models/User');
-const config = require('../../config');
+import config from '../../config.js';
+import { getUser  } from '../../models/User.js';
 
-module.exports = {
+
+
+
+export default {
     name: 'inventory',
     aliases: ['inv', 'items', 'bag'],
     category: 'economy',

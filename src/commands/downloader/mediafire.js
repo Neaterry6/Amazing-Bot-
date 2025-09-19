@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'mediafire',
     description: 'Download files from MediaFire',
     category: 'downloader',

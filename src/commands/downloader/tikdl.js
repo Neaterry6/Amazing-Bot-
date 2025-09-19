@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'tikdl',
     description: 'Download TikTok videos without watermark',
     category: 'downloader',

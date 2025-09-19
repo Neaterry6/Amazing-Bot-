@@ -1,7 +1,10 @@
-const { getUser, updateUser } = require('../../models/User');
-const config = require('../../config');
+import config from '../../config.js';
+import { getUser, updateUser  } from '../../models/User.js';
 
-module.exports = {
+
+
+
+export default {
     name: 'work',
     aliases: ['job', 'earn'],
     category: 'economy',

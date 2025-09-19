@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'groupinfo',
     aliases: ['groupdetails', 'ginfo', 'group'],
     category: 'admin',

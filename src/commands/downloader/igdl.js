@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'igdl',
     description: 'Download Instagram photos, videos, and reels',
     category: 'downloader',

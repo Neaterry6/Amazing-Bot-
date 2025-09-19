@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'rps',
     aliases: ['rockpaperscissors', 'rock'],
     category: 'games',

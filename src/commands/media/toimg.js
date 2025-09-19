@@ -1,6 +1,8 @@
-const sharp = require('sharp');
+import sharp from 'sharp';
 
-module.exports = {
+
+
+export default {
     name: 'toimg',
     aliases: ['toimage', 'convert', 'img'],
     category: 'media',

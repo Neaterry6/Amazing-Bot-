@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'weather',
     aliases: ['w', 'forecast', 'climate'],
     category: 'general',

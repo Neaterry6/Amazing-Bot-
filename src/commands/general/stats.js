@@ -1,7 +1,10 @@
-const config = require('../../config');
-const { commandHandler } = require('../../handlers/commandHandler');
+import config from '../../config.js';
+import { commandHandler  } from '../../handlers/commandHandler.js';
 
-module.exports = {
+
+
+
+export default {
     name: 'stats',
     aliases: ['stat', 'botstat'],
     category: 'general',

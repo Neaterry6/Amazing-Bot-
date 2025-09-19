@@ -1,6 +1,6 @@
 const gameCache = new Map();
 
-module.exports = {
+export default {
     name: 'guess',
     aliases: ['guessnum', 'guessnumber'],
     category: 'games',

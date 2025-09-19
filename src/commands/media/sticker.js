@@ -1,6 +1,8 @@
-const { Sticker, StickerTypes } = require('wa-sticker-formatter');
+import { Sticker, StickerTypes  } from 'wa-sticker-formatter';
 
-module.exports = {
+
+
+export default {
     name: 'sticker',
     aliases: ['s', 'stick', 'toSticker'],
     category: 'media',

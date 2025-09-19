@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'pickup',
     aliases: ['pickupline', 'flirt', 'rizz'],
     category: 'fun',

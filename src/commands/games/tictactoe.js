@@ -1,6 +1,6 @@
 const tictactoeCache = new Map();
 
-module.exports = {
+export default {
     name: 'tictactoe',
     aliases: ['ttt', 'tic'],
     category: 'games',

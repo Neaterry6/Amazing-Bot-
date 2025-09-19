@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'ytmp4',
     description: 'Download YouTube videos as MP4',
     category: 'downloader',

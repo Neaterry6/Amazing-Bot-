@@ -1,6 +1,6 @@
 const akinatorCache = new Map();
 
-module.exports = {
+export default {
     name: 'akinator',
     aliases: ['aki', 'genie'],
     category: 'games',

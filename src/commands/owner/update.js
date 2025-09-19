@@ -1,8 +1,13 @@
-const { exec } = require('child_process');
-const { promisify } = require('util');
+import currentVersion from '../../package.json.js';
+import newVersion from '../../package.json.js';
+import { exec  } from 'child_process';
+import { promisify  } from 'util';
+
+
+
 const execAsync = promisify(exec);
 
-module.exports = {
+export default {
     name: 'update',
     aliases: ['pull', 'upgrade', 'refresh'],
     category: 'owner',
@@ -15,7 +20,7 @@ module.exports = {
     async execute({ sock, message, args, from, sender }) {
         try {
             const branch = args[0] || 'main';
-            const currentVersion = require('../../package.json')?.version || 'Unknown';
+            ?.version || 'Unknown';
             
             await sock.sendMessage(from, {
                 text: `🔄 *Bot Update System Activated*\n\n👤 **Initiated by:** Owner (${sender.split('@')[0]})\n📂 **Branch:** ${branch}\n📦 **Current Version:** v${currentVersion}\n⏰ **Started:** ${new Date().toLocaleString()}\n\n⚠️ **Warning:** Bot will restart after update\n⏳ *Checking for updates...*`
@@ -152,7 +157,7 @@ module.exports = {
             }
             
             const duration = Date.now() - startTime;
-            const newVersion = require('../../package.json')?.version || 'Unknown';
+            ?.version || 'Unknown';
             
             return {
                 success: true,

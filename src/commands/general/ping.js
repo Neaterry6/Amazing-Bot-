@@ -1,4 +1,7 @@
-module.exports = {
+import config from '../../config.js';
+import constants from '../../constants.js';
+
+export default {
     name: 'ping',
     aliases: ['p', 'latency'],
     category: 'general',
@@ -17,24 +20,24 @@ module.exports = {
 
     async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
         const startTime = Date.now();
-        
+
         const pingMessage = await sock.sendMessage(from, {
             text: '🏓 Pinging...'
         });
-        
+
         const endTime = Date.now();
         const responseTime = endTime - startTime;
         const uptime = process.uptime();
-        
+
         const hours = Math.floor(uptime / 3600);
         const minutes = Math.floor((uptime % 3600) / 60);
         const seconds = Math.floor(uptime % 60);
-        
+
         const uptimeString = `${hours}h ${minutes}m ${seconds}s`;
-        
+
         const memoryUsage = process.memoryUsage();
         const memoryMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
-        
+
         const responseText = `🏓 *Pong!*
 
 📊 *Performance Stats:*
@@ -46,9 +49,9 @@ module.exports = {
 ╰ Status: Online ✅
 
 💻 *Bot Info:*
-├ Name: ${require('../../config').botName}
-├ Version: ${require('../../constants').BOT_VERSION}
-├ Creator: ${require('../../constants').BOT_AUTHOR}
+├ Name: ${config.botName}
+├ Version: ${constants.BOT_VERSION}
+├ Creator: ${constants.BOT_AUTHOR}
 ╰ Mode: ${isGroup ? 'Group' : 'Private'}
 
 _🧠 Amazing Bot 🧠 v1 created by Ilom_`;

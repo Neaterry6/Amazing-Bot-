@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'quote',
     aliases: ['quotes', 'inspiration', 'wisdom'],
     category: 'fun',

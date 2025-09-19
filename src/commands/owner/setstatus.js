@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'setstatus',
     aliases: ['setbio', 'changestatus', 'updatebio'],
     category: 'owner',

@@ -1,6 +1,8 @@
-const ffmpeg = require('fluent-ffmpeg');
+import ffmpeg from 'fluent-ffmpeg';
 
-module.exports = {
+
+
+export default {
     name: 'toaudio',
     aliases: ['extractaudio', 'audio', 'mp3'],
     category: 'media',

@@ -1,4 +1,7 @@
-module.exports = {
+import loadAverage from 'os';
+import os from 'os';
+
+export default {
     name: 'uptime',
     aliases: ['up', 'runtime'],
     category: 'general',
@@ -26,10 +29,10 @@ module.exports = {
         
         // CPU information
         const cpuUsage = process.cpuUsage();
-        const loadAverage = require('os').loadavg();
+        .loadavg();
         
         // System information
-        const os = require('os');
+        
         const totalSystemMemory = os.totalmem() / 1024 / 1024 / 1024; // GB
         const freeSystemMemory = os.freemem() / 1024 / 1024 / 1024; // GB
         const usedSystemMemory = totalSystemMemory - freeSystemMemory;

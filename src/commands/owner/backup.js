@@ -1,7 +1,10 @@
-const fs = require('fs').promises;
-const archiver = require('archiver');
+import fs from 'fs';
+import archiver from 'archiver';
 
-module.exports = {
+.promises;
+
+
+export default {
     name: 'backup',
     aliases: ['save', 'export'],
     category: 'owner',

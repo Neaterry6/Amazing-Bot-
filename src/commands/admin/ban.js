@@ -1,7 +1,10 @@
-const config = require('../../config');
-const { updateUser } = require('../../models/User');
+import config from '../../config.js';
+import { updateUser  } from '../../models/User.js';
 
-module.exports = {
+
+
+
+export default {
     name: 'ban',
     aliases: ['block'],
     category: 'admin',

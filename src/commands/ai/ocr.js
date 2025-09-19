@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'ocr',
     aliases: ['readtext', 'extract', 'scan'],
     category: 'ai',

@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'pinterest',
     description: 'Download images and videos from Pinterest',
     category: 'downloader',

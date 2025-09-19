@@ -1,6 +1,8 @@
-const math = require('mathjs');
+import math from 'mathjs';
 
-module.exports = {
+
+
+export default {
     name: 'calc',
     aliases: ['calculate', 'math', 'calculator'],
     category: 'general',

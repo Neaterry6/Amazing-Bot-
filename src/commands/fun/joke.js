@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'joke',
     aliases: ['j', 'funny'],
     category: 'fun',

@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'random',
     aliases: ['rand', 'rng', 'choose'],
     category: 'fun',

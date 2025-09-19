@@ -1,8 +1,12 @@
-const ytdl = require('ytdl-core');
-const fs = require('fs-extra');
-const path = require('path');
+import ytdl from 'ytdl-core';
+import fs from 'fs-extra';
+import path from 'path';
 
-module.exports = {
+
+
+
+
+export default {
     name: 'ytmp3',
     aliases: ['ytdl', 'youtube', 'yta'],
     category: 'downloader',

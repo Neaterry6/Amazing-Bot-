@@ -1,7 +1,10 @@
-const { User } = require('../../models/User');
-const config = require('../../config');
+import config from '../../config.js';
+import { User  } from '../../models/User.js';
 
-module.exports = {
+
+
+
+export default {
     name: 'leaderboard',
     aliases: ['lb', 'top', 'rich'],
     category: 'economy',

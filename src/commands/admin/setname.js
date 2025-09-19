@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'setname',
     aliases: ['groupname', 'setgroupname'],
     category: 'admin',

@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'gdrive',
     description: 'Download files from Google Drive',
     category: 'downloader',

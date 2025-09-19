@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'search',
     aliases: ['google', 'find', 'query'],
     category: 'general',

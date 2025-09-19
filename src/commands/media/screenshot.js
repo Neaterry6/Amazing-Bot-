@@ -1,6 +1,8 @@
-const puppeteer = require('puppeteer');
+import puppeteer from 'puppeteer';
 
-module.exports = {
+
+
+export default {
     name: 'screenshot',
     aliases: ['ss', 'capture', 'webpage'],
     category: 'media',

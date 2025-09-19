@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'demote',
     aliases: ['demoteuser', 'removeadmin'],
     category: 'admin',

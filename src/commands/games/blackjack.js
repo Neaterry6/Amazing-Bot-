@@ -1,6 +1,6 @@
 const blackjackCache = new Map();
 
-module.exports = {
+export default {
     name: 'blackjack',
     aliases: ['bj', '21'],
     category: 'games',

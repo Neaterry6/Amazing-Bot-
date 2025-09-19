@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'unblock',
     aliases: ['unban', 'whitelist'],
     category: 'owner',

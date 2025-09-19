@@ -1,6 +1,8 @@
-const config = require('../../config');
+import config from '../../config.js';
 
-module.exports = {
+
+
+export default {
     name: 'tts',
     aliases: ['texttospeech', 'speak', 'voice'],
     category: 'ai',

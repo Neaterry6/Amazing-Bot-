@@ -1,6 +1,8 @@
-const { updateUser, getUser } = require('../../models/User');
+import { updateUser, getUser  } from '../../models/User.js';
 
-module.exports = {
+
+
+export default {
     name: 'warn',
     aliases: ['warning', 'warnuser'],
     category: 'admin',

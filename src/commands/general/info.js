@@ -1,7 +1,10 @@
-const config = require('../../config');
-const os = require('os');
+import config from '../../config.js';
+import os from 'os';
 
-module.exports = {
+
+
+
+export default {
     name: 'info',
     aliases: ['about', 'botinfo'],
     category: 'general',

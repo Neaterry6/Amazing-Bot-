@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'meme',
     aliases: ['memes', 'funny'],
     category: 'fun',

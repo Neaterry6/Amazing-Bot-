@@ -1,6 +1,6 @@
 const mathCache = new Map();
 
-module.exports = {
+export default {
     name: 'math',
     aliases: ['mathquiz', 'calculate'],
     category: 'games',

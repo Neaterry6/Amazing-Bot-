@@ -1,6 +1,8 @@
-const sharp = require('sharp');
+import sharp from 'sharp';
 
-module.exports = {
+
+
+export default {
     name: 'filter',
     aliases: ['effect', 'fx'],
     category: 'media',

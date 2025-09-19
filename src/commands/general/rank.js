@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'rank',
     aliases: ['level', 'xp', 'exp'],
     category: 'general',

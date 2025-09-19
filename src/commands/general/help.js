@@ -1,6 +1,7 @@
-const config = require('../../config');
+import config from '../../config.js';
+import { commandHandler } from '../../handlers/commandHandler.js';
 
-module.exports = {
+export default {
     name: 'help',
     aliases: ['h', 'menu', 'commands'],
     category: 'general',
@@ -10,7 +11,6 @@ module.exports = {
     permissions: ['user'],
 
     async execute({ sock, message, args, from, prefix }) {
-        const { commandHandler } = require('../../handlers/commandHandler');
         
         if (args.length > 0) {
             const commandName = args[0].toLowerCase();

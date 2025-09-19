@@ -1,4 +1,4 @@
-module.exports = {
+export default {
     name: 'ytmp3',
     description: 'Download YouTube videos as MP3 audio',
     category: 'downloader',
