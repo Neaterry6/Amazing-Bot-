@@ -82,12 +82,16 @@ class CommandManager {
                 return false;
             }
 
-            command.category = category;
-            command.filename = filename;
-            command.filepath = commandPath;
-            command.lastModified = (await fs.stat(commandPath)).mtime;
+            // Create a new object to avoid modifying the frozen imported module
+            const commandData = {
+                ...command,
+                category,
+                filename,
+                filepath: commandPath,
+                lastModified: (await fs.stat(commandPath)).mtime
+            };
 
-            this.loadedCommands.set(command.name, command);
+            this.loadedCommands.set(command.name, commandData);
             this.commandCategories.get(category).push(command.name);
 
             if (command.aliases) {

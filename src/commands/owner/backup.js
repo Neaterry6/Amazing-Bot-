@@ -1,8 +1,6 @@
 import fs from 'fs';
 import archiver from 'archiver';
 
-.promises;
-
 
 export default {
     name: 'backup',

@@ -1,8 +1,6 @@
 import fs from 'fs';
 import unzipper from 'unzipper';
 
-.promises;
-
 
 export default {
     name: 'restore',

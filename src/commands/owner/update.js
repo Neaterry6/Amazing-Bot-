@@ -1,10 +1,11 @@
-import currentVersion from '../../package.json.js';
-import newVersion from '../../package.json.js';
-import { exec  } from 'child_process';
-import { promisify  } from 'util';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-
-
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const execAsync = promisify(exec);
 
 export default {
@@ -20,7 +21,8 @@ export default {
     async execute({ sock, message, args, from, sender }) {
         try {
             const branch = args[0] || 'main';
-            ?.version || 'Unknown';
+            const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
+            const currentVersion = packageJson.version || 'Unknown';
             
             await sock.sendMessage(from, {
                 text: `🔄 *Bot Update System Activated*\n\n👤 **Initiated by:** Owner (${sender.split('@')[0]})\n📂 **Branch:** ${branch}\n📦 **Current Version:** v${currentVersion}\n⏰ **Started:** ${new Date().toLocaleString()}\n\n⚠️ **Warning:** Bot will restart after update\n⏳ *Checking for updates...*`
@@ -157,7 +159,7 @@ export default {
             }
             
             const duration = Date.now() - startTime;
-            ?.version || 'Unknown';
+            const newVersion = packageJson.version || 'Unknown';
             
             return {
                 success: true,
