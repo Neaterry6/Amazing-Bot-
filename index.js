@@ -28,6 +28,7 @@ import { loadPlugins, getActiveCount } from './src/utils/pluginManager.js';
 import { startScheduler } from './src/utils/scheduler.js';
 import { initializeCache } from './src/utils/cache.js';
 import { startWebServer } from './src/utils/webServer.js';
+import qrService from './src/services/qrService.js';
 
 const msgRetryCounterCache = new NodeCache({ stdTTL: 600, checkperiod: 60 });
 const app = express();
@@ -210,10 +211,25 @@ async function sendBotStatusUpdate(sock) {
 async function handleConnectionEvents(sock, connectionUpdate) {
     const { DisconnectReason } = await import('@whiskeysockets/baileys');
     const { connection, lastDisconnect, qr, receivedPendingNotifications } = connectionUpdate;
-    
+
     if (qr && !process.env.SESSION_ID) {
         console.log(chalk.cyan('\n📱 QR Code received - scan with WhatsApp to connect'));
         console.log(chalk.yellow('Set SESSION_ID environment variable to avoid QR scanning in future'));
+
+        // Generate QR code if scanner is enabled
+        if (qrService.isQREnabled()) {
+            try {
+                const qrGenerated = await qrService.generateQR(qr);
+                if (qrGenerated) {
+                    console.log(chalk.green('✅ QR code generated and saved'));
+                    console.log(chalk.blue(`🌐 Access QR code at: http://localhost:${config.server.port}/qr`));
+                } else {
+                    console.log(chalk.red('❌ Failed to generate QR code'));
+                }
+            } catch (error) {
+                logger.error('Error generating QR code:', error);
+            }
+        }
     }
     
     if (connection === 'close') {
@@ -267,7 +283,12 @@ async function handleConnectionEvents(sock, connectionUpdate) {
         reconnectAttempts = 0;
         logger.info('✅ WhatsApp connection established');
         console.log(chalk.green.bold('🚀 Bot is online and ready!'));
-        
+
+        // Clear QR code when successfully connected
+        if (qrService.isQREnabled()) {
+            await qrService.clearQR();
+        }
+
         if (!isInitialized) {
             isInitialized = true;
             if (config.ownerNumbers && config.ownerNumbers.length > 0) {

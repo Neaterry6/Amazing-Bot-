@@ -135,10 +135,15 @@ class WebServer {
         this.app.get('/stats', this.handleStats.bind(this));
         this.app.get('/api/status', this.handleAPIStatus.bind(this));
 
+        // Add QR routes
+        this.app.get('/qr', this.handleQRPage.bind(this));
+        this.app.get('/qr/image', this.handleQRImage.bind(this));
+        this.app.get('/qr/data', this.handleQRData.bind(this));
+
         await this.loadAPIRoutes();
-        
+
         this.app.use(express.static(path.join(__dirname, '..', 'assets', 'public')));
-        
+
         this.app.use(this.handle404.bind(this));
 
         logger.info('Web server routes configured');
@@ -459,6 +464,174 @@ module.exports = router;`;
                 error: 'API status error',
                 message: error.message
             });
+        }
+    }
+
+    async handleQRPage(req, res) {
+        try {
+            const { qrService } = await import('../services/qrService.js');
+            const qrStatus = qrService.getQRStatus();
+
+            if (!qrStatus.enabled) {
+                return res.status(403).send(`
+                    <html>
+                        <head><title>QR Scanner Disabled</title></head>
+                        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                            <h1>QR Scanner is Disabled</h1>
+                            <p>Set <code>QR_SCANNER_ENABLED=true</code> in your environment variables to enable QR scanner.</p>
+                        </body>
+                    </html>
+                `);
+            }
+
+            if (!qrStatus.hasQR) {
+                return res.status(404).send(`
+                    <html>
+                        <head><title>No QR Code Available</title></head>
+                        <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                            <h1>No QR Code Available</h1>
+                            <p>QR code will be generated when WhatsApp connection requires authentication.</p>
+                            <p>Please wait for the connection process to start...</p>
+                        </body>
+                    </html>
+                `);
+            }
+
+            res.send(`
+                <html>
+                    <head>
+                        <title>WhatsApp QR Code</title>
+                        <style>
+                            body {
+                                font-family: Arial, sans-serif;
+                                text-align: center;
+                                padding: 20px;
+                                background-color: #f5f5f5;
+                            }
+                            .container {
+                                max-width: 400px;
+                                margin: 0 auto;
+                                background: white;
+                                padding: 30px;
+                                border-radius: 10px;
+                                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                            }
+                            h1 {
+                                color: #25d366;
+                                margin-bottom: 20px;
+                            }
+                            img {
+                                max-width: 100%;
+                                height: auto;
+                                border: 2px solid #25d366;
+                                border-radius: 5px;
+                            }
+                            p {
+                                color: #666;
+                                margin: 15px 0;
+                            }
+                            .refresh-btn {
+                                background: #25d366;
+                                color: white;
+                                border: none;
+                                padding: 10px 20px;
+                                border-radius: 5px;
+                                cursor: pointer;
+                                margin-top: 15px;
+                            }
+                            .refresh-btn:hover {
+                                background: #128c7e;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h1>📱 WhatsApp QR Code</h1>
+                            <p>Scan this QR code with WhatsApp to connect your bot</p>
+                            <img src="/qr/image" alt="WhatsApp QR Code" />
+                            <p><small>If the QR code doesn't work, refresh the page</small></p>
+                            <button class="refresh-btn" onclick="location.reload()">🔄 Refresh</button>
+                        </div>
+                    </body>
+                </html>
+            `);
+        } catch (error) {
+            logger.error('Error serving QR page:', error);
+            res.status(500).send(`
+                <html>
+                    <head><title>Error</title></head>
+                    <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                        <h1>Error Loading QR Code</h1>
+                        <p>${error.message}</p>
+                    </body>
+                </html>
+            `);
+        }
+    }
+
+    async handleQRImage(req, res) {
+        try {
+            const { qrService } = await import('../services/qrService.js');
+            const qrStatus = qrService.getQRStatus();
+
+            if (!qrStatus.enabled) {
+                return res.status(403).json({ error: 'QR scanner is not enabled' });
+            }
+
+            if (!qrStatus.hasQR || !qrStatus.exists) {
+                return res.status(404).json({ error: 'QR code image not found' });
+            }
+
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+
+            const fs = await import('fs-extra');
+            const qrStream = fs.createReadStream(qrStatus.path);
+            qrStream.pipe(res);
+
+            qrStream.on('error', (error) => {
+                logger.error('Error streaming QR image:', error);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Failed to stream QR image' });
+                }
+            });
+        } catch (error) {
+            logger.error('Error serving QR image:', error);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Failed to serve QR image' });
+            }
+        }
+    }
+
+    async handleQRData(req, res) {
+        try {
+            const { qrService } = await import('../services/qrService.js');
+            const qrStatus = qrService.getQRStatus();
+
+            if (!qrStatus.enabled) {
+                return res.status(403).json({ error: 'QR scanner is not enabled' });
+            }
+
+            if (!qrStatus.qrData) {
+                return res.status(404).json({ error: 'No QR data available' });
+            }
+
+            const qrDataURL = await qrService.generateQRDataURL(qrStatus.qrData);
+
+            if (!qrDataURL) {
+                return res.status(500).json({ error: 'Failed to generate QR data URL' });
+            }
+
+            res.json({
+                status: 'success',
+                qrDataURL: qrDataURL,
+                timestamp: new Date().toISOString()
+            });
+        } catch (error) {
+            logger.error('Error getting QR data:', error);
+            res.status(500).json({ error: 'Failed to get QR data' });
         }
     }
 

@@ -62,7 +62,8 @@ const config = {
         sessionId: process.env.SESSION_ID || null,
         sessionPath: process.env.SESSION_PATH || './session',
         qrTimeout: parseInt(process.env.QR_TIMEOUT) || 60000,
-        maxQrRetries: parseInt(process.env.MAX_QR_RETRIES) || 3
+        maxQrRetries: parseInt(process.env.MAX_QR_RETRIES) || 3,
+        qrScannerEnabled: process.env.QR_SCANNER_ENABLED === 'true'
     },
 
     features: {
