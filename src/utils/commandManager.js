@@ -1,8 +1,12 @@
-const fs = require('fs-extra');
-const path = require('path');
-const { Collection } = require('@whiskeysockets/baileys');
-const logger = require('./logger');
-const { commandHandler } = require('../handlers/commandHandler');
+import fs from 'fs-extra';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import logger from './logger.js';
+import { commandHandler } from '../handlers/commandHandler.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 class CommandManager {
     constructor() {
@@ -386,7 +390,7 @@ _Template command - Delete this file after creating real commands._\`,
     async setupCommandWatchers() {
         if (process.env.HOT_RELOAD !== 'true') return;
 
-        const chokidar = require('chokidar');
+        const { default: chokidar } = await import('chokidar');
         const commandsPath = path.join(__dirname, '..', 'commands');
 
         const watcher = chokidar.watch(commandsPath, {
@@ -476,25 +480,22 @@ _Template command - Delete this file after creating real commands._\`,
     }
 }
 
-const commandManager = new CommandManager();
+export const commandManager = new CommandManager();
 
-module.exports = {
-    commandManager,
-    initializeCommands: () => commandManager.initializeCommands(),
-    getCommand: (name) => commandManager.getCommand(name),
-    getAllCommands: () => commandManager.getAllCommands(),
-    getCommandsByCategory: (category) => commandManager.getCommandsByCategory(category),
-    getAllCategories: () => commandManager.getAllCategories(),
-    reloadCommand: (name) => commandManager.reloadCommand(name),
-    reloadCategory: (category) => commandManager.reloadCategory(category),
-    reloadAllCommands: () => commandManager.reloadAllCommands(),
-    enableCommand: (name) => commandManager.enableCommand(name),
-    disableCommand: (name) => commandManager.disableCommand(name),
-    isCommandEnabled: (name) => commandManager.isCommandEnabled(name),
-    searchCommands: (query) => commandManager.searchCommands(query),
-    getCommandInfo: (name) => commandManager.getCommandInfo(name),
-    getSystemStats: () => commandManager.getSystemStats(),
-    recordCommandUsage: (name, time, success) => commandManager.recordCommandUsage(name, time, success),
-    getTopCommands: (limit) => commandManager.getTopCommands(limit),
-    generateCommandHelp: (name) => commandManager.generateCommandHelp(name)
-};
+export const initializeCommands = () => commandManager.initializeCommands();
+export const getCommand = (name) => commandManager.getCommand(name);
+export const getAllCommands = () => commandManager.getAllCommands();
+export const getCommandsByCategory = (category) => commandManager.getCommandsByCategory(category);
+export const getAllCategories = () => commandManager.getAllCategories();
+export const reloadCommand = (name) => commandManager.reloadCommand(name);
+export const reloadCategory = (category) => commandManager.reloadCategory(category);
+export const reloadAllCommands = () => commandManager.reloadAllCommands();
+export const enableCommand = (name) => commandManager.enableCommand(name);
+export const disableCommand = (name) => commandManager.disableCommand(name);
+export const isCommandEnabled = (name) => commandManager.isCommandEnabled(name);
+export const searchCommands = (query) => commandManager.searchCommands(query);
+export const getCommandInfo = (name) => commandManager.getCommandInfo(name);
+export const getSystemStats = () => commandManager.getSystemStats();
+export const recordCommandUsage = (name, time, success) => commandManager.recordCommandUsage(name, time, success);
+export const getTopCommands = (limit) => commandManager.getTopCommands(limit);
+export const generateCommandHelp = (name) => commandManager.generateCommandHelp(name);

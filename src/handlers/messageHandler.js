@@ -1,15 +1,15 @@
-const { downloadMediaMessage } = require('@whiskeysockets/baileys');
-const { commandHandler } = require('./commandHandler');
-const config = require('../config');
-const logger = require('../utils/logger');
-const { getUser, createUser, updateUser } = require('../models/User');
-const { getGroup, createGroup, updateGroup } = require('../models/Group');
-const { createMessage } = require('../models/Message');
-const mediaHandler = require('./mediaHandler');
-const antiSpam = require('../utils/antiSpam');
-const cache = require('../utils/cache');
-const fs = require('fs-extra');
-const path = require('path');
+import { aiService } from '../services/aiService.js';
+import { commandHandler } from './commandHandler.js';
+import config from '../config.js';
+import logger from '../utils/logger.js';
+import { getUser, createUser, updateUser } from '../models/User.js';
+import { getGroup, createGroup, updateGroup } from '../models/Group.js';
+import { createMessage } from '../models/Message.js';
+import mediaHandler from './mediaHandler.js';
+import antiSpam from '../utils/antiSpam.js';
+import { cache } from '../utils/cache.js';
+import fs from 'fs-extra';
+import path from 'path';
 
 class MessageHandler {
     constructor() {
@@ -76,17 +76,18 @@ class MessageHandler {
 
     async downloadMedia(message, media) {
         try {
+            const { downloadMediaMessage } = await import('@whiskeysockets/baileys');
             const buffer = await downloadMediaMessage(message, 'buffer', {});
             const mediaType = media.mimetype?.split('/')[0] || 'unknown';
             const extension = media.mimetype?.split('/')[1] || 'bin';
-            
+
             const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${extension}`;
             const tempDir = path.join(process.cwd(), 'temp', mediaType);
             await fs.ensureDir(tempDir);
-            
+
             const filePath = path.join(tempDir, fileName);
             await fs.writeFile(filePath, buffer);
-            
+
             return {
                 buffer,
                 filePath,
@@ -191,7 +192,6 @@ class MessageHandler {
         if (isGroup && !text.includes('@' + sock.user.id.split(':')[0])) return;
 
         try {
-            const aiService = require('../services/aiService');
             const response = await aiService.generateResponse(text, user, isGroup);
             
             if (response) {
@@ -676,9 +676,9 @@ class MessageHandler {
     }
 }
 
-const messageHandler = new MessageHandler();
+export const messageHandler = new MessageHandler();
 
-module.exports = {
+export default {
     messageHandler,
     handleIncomingMessage: (sock, message) => messageHandler.handleIncomingMessage(sock, message),
     handleMessageUpdate: (sock, updates) => messageHandler.handleMessageUpdate(sock, updates),

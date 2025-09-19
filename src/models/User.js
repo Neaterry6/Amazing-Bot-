@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const UserSchema = new mongoose.Schema({
     jid: {
@@ -458,7 +458,7 @@ async function getUserStats() {
     }
 }
 
-module.exports = {
+export {
     User,
     getUser,
     createUser,

@@ -1,6 +1,6 @@
-const mongoose = require('mongoose');
-const config = require('../config');
-const logger = require('./logger');
+import mongoose from 'mongoose';
+import config from '../config.js';
+import logger from './logger.js';
 
 class DatabaseManager {
     constructor() {
@@ -354,14 +354,12 @@ class DatabaseManager {
 
 const databaseManager = new DatabaseManager();
 
-module.exports = {
-    connectToDatabase: () => databaseManager.connectToDatabase(),
-    getStats: () => databaseManager.getStats(),
-    healthCheck: () => databaseManager.healthCheck(),
-    backup: () => databaseManager.backup(),
-    restore: (file) => databaseManager.restore(file),
-    cleanup: () => databaseManager.cleanup(),
-    isHealthy: () => databaseManager.isHealthy(),
-    getConnectionState: () => databaseManager.getConnectionState(),
-    databaseManager
-};
+export const connectToDatabase = () => databaseManager.connectToDatabase();
+export const getStats = () => databaseManager.getStats();
+export const healthCheck = () => databaseManager.healthCheck();
+export const backup = () => databaseManager.backup();
+export const restore = (file) => databaseManager.restore(file);
+export const cleanup = () => databaseManager.cleanup();
+export const isHealthy = () => databaseManager.isHealthy();
+export const getConnectionState = () => databaseManager.getConnectionState();
+export const databaseManagerInstance = databaseManager;

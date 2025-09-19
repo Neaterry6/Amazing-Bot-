@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const GroupSchema = new mongoose.Schema({
     jid: {
@@ -188,7 +188,7 @@ async function getGroupStats() {
     }
 }
 
-module.exports = {
+export {
     Group,
     getGroup,
     createGroup,

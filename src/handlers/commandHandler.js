@@ -1,14 +1,13 @@
-const fs = require('fs-extra');
-const path = require('path');
-const { Collection } = require('@whiskeysockets/baileys');
-const config = require('../config');
-const logger = require('../utils/logger');
-const { getUser, updateUser } = require('../models/User');
-const { getGroup, updateGroup } = require('../models/Group');
-const { logCommand } = require('../models/Command');
-const rateLimiter = require('../utils/rateLimiter');
-const antiSpam = require('../utils/antiSpam');
-const cache = require('../utils/cache');
+import fs from 'fs-extra';
+import path from 'path';
+import config from '../config.js';
+import logger from '../utils/logger.js';
+import { getUser, updateUser } from '../models/User.js';
+import { getGroup, updateGroup } from '../models/Group.js';
+import { logCommand } from '../models/Command.js';
+import rateLimiter from '../utils/rateLimiter.js';
+import antiSpam from '../utils/antiSpam.js';
+import { cache } from '../utils/cache.js';
 
 class CommandHandler {
     constructor() {
@@ -42,8 +41,7 @@ class CommandHandler {
             for (const file of commandFiles) {
                 try {
                     const commandPath = path.join(categoryPath, file);
-                    delete require.cache[require.resolve(commandPath)];
-                    const command = require(commandPath);
+                    const command = (await import(commandPath)).default;
                     
                     if (!command.name || !command.execute) {
                         logger.warn(`Command ${file} is missing name or execute function`);
@@ -83,8 +81,7 @@ class CommandHandler {
         if (!command) return false;
         
         try {
-            delete require.cache[require.resolve(command.filePath)];
-            const newCommand = require(command.filePath);
+            const newCommand = (await import(command.filePath)).default;
             
             this.commands.delete(command.name);
             if (command.aliases) {
@@ -453,19 +450,16 @@ class CommandHandler {
     }
 }
 
-const commandHandler = new CommandHandler();
+export const commandHandler = new CommandHandler();
 
-module.exports = {
-    commandHandler,
-    loadCommands: () => commandHandler.loadCommands(),
-    getCommand: (name) => commandHandler.getCommand(name),
-    handleCommand: (sock, message, commandName, args) => 
-        commandHandler.handleCommand(sock, message, commandName, args),
-    getCommandCount: () => commandHandler.getCommandCount(),
-    reloadCommand: (name) => commandHandler.reloadCommand(name),
-    getHelpMessage: (category, user) => commandHandler.getHelpMessage(category, user),
-    searchCommands: (query, user) => commandHandler.searchCommands(query, user),
-    getTopCommands: (limit) => commandHandler.getTopCommands(limit),
-    getAllCategories: () => commandHandler.getAllCategories(),
-    getCommandsByCategory: (category) => commandHandler.getCommandsByCategory(category)
-};
+export const loadCommands = () => commandHandler.loadCommands();
+export const getCommand = (name) => commandHandler.getCommand(name);
+export const handleCommand = (sock, message, commandName, args) =>
+    commandHandler.handleCommand(sock, message, commandName, args);
+export const getCommandCount = () => commandHandler.getCommandCount();
+export const reloadCommand = (name) => commandHandler.reloadCommand(name);
+export const getHelpMessage = (category, user) => commandHandler.getHelpMessage(category, user);
+export const searchCommands = (query, user) => commandHandler.searchCommands(query, user);
+export const getTopCommands = (limit) => commandHandler.getTopCommands(limit);
+export const getAllCategories = () => commandHandler.getAllCategories();
+export const getCommandsByCategory = (category) => commandHandler.getCommandsByCategory(category);

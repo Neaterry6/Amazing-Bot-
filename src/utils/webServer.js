@@ -1,14 +1,19 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const compression = require('compression');
-const morgan = require('morgan');
-const path = require('path');
-const fs = require('fs-extra');
-const config = require('../config');
-const logger = require('./logger');
-const { cache } = require('./cache');
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import compression from 'compression';
+import morgan from 'morgan';
+import path from 'path';
+import fs from 'fs-extra';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import config from '../config.js';
+import logger from './logger.js';
+import { cache } from './cache.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 class WebServer {
     constructor() {
@@ -156,8 +161,7 @@ class WebServer {
                     const routePath = path.join(routesPath, file);
                     const routeName = path.basename(file, '.js');
                     
-                    delete require.cache[require.resolve(routePath)];
-                    const route = require(routePath);
+                    const route = await import(routePath);
                     
                     if (typeof route === 'function' || (route && typeof route.stack === 'object')) {
                         this.app.use(`/api/${routeName}`, route);
@@ -356,7 +360,7 @@ module.exports = router;`;
         try {
             const botInfo = {
                 name: config.botName,
-                version: require('../constants').BOT_VERSION,
+                version: (await import('../constants.js')).default.BOT_VERSION,
                 description: config.botDescription,
                 status: 'online',
                 uptime: process.uptime(),
@@ -379,7 +383,7 @@ module.exports = router;`;
 
     async handleHealth(req, res) {
         try {
-            const { databaseManager } = require('./database');
+            const { databaseManager } = await import('./database.js');
             
             const health = {
                 status: 'healthy',
@@ -406,14 +410,14 @@ module.exports = router;`;
 
     async handleStats(req, res) {
         try {
-            const { commandManager } = require('./commandManager');
-            const { pluginManager } = require('./pluginManager');
-            const { taskScheduler } = require('./scheduler');
+            const { commandManager } = await import('./commandManager.js');
+            const { pluginManager } = await import('./pluginManager.js');
+            const { taskScheduler } = await import('./scheduler.js');
 
             const stats = {
                 bot: {
                     name: config.botName,
-                    version: require('../constants').BOT_VERSION,
+                    version: (await import('../constants.js')).default.BOT_VERSION,
                     uptime: process.uptime(),
                     connected: global.sock?.user ? true : false
                 },
@@ -574,15 +578,12 @@ _Server running on http://localhost:${serverInfo.port}_`;
     }
 }
 
-const webServer = new WebServer();
+export const webServer = new WebServer();
 
-module.exports = {
-    webServer,
-    startWebServer: (app) => webServer.startWebServer(app),
-    stopWebServer: () => webServer.stopWebServer(),
-    addRoute: (path, router) => webServer.addRoute(path, router),
-    addMiddleware: (middleware) => webServer.addMiddleware(middleware),
-    createWebhook: (path, handler) => webServer.createWebhook(path, handler),
-    getStats: () => webServer.getStats(),
-    generateServerInfo: () => webServer.generateServerInfo()
-};
+export const startWebServer = (app) => webServer.startWebServer(app);
+export const stopWebServer = () => webServer.stopWebServer();
+export const addRoute = (path, router) => webServer.addRoute(path, router);
+export const addMiddleware = (middleware) => webServer.addMiddleware(middleware);
+export const createWebhook = (path, handler) => webServer.createWebhook(path, handler);
+export const getStats = () => webServer.getStats();
+export const generateServerInfo = () => webServer.generateServerInfo();

@@ -1,4 +1,4 @@
-const logger = require('../utils/logger');
+import logger from '../utils/logger.js';
 
 class GroupHandler {
     constructor() {
@@ -87,4 +87,4 @@ class GroupHandler {
     }
 }
 
-module.exports = new GroupHandler();
+export default new GroupHandler();

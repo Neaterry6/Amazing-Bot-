@@ -1,7 +1,9 @@
-const winston = require('winston');
-const path = require('path');
-const fs = require('fs-extra');
-const chalk = require('chalk');
+import winston from 'winston';
+import path from 'path';
+import fs from 'fs-extra';
+import chalk from 'chalk';
+import config from '../config.js';
+import archiver from 'archiver';
 
 class Logger {
     constructor() {
@@ -255,7 +257,6 @@ class Logger {
 
     async notifyError(message, meta) {
         try {
-            const config = require('../config');
             if (!config.notifications.errors) return;
 
             const errorData = {
@@ -358,7 +359,6 @@ ${errorData.meta.substring(0, 1000)}
 
     async archiveLogs() {
         try {
-            const archiver = require('archiver');
             const archiveDir = path.join(process.cwd(), 'backups', 'logs');
             await fs.ensureDir(archiveDir);
             
@@ -396,4 +396,4 @@ ${errorData.meta.substring(0, 1000)}
 
 const logger = new Logger();
 
-module.exports = logger;
+export default logger;

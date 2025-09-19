@@ -1,4 +1,4 @@
-const logger = require('../utils/logger');
+import logger from '../utils/logger.js';
 
 class EventHandler {
     constructor() {
@@ -48,4 +48,4 @@ class EventHandler {
     }
 }
 
-module.exports = new EventHandler();
+export default new EventHandler();

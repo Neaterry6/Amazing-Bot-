@@ -2,6 +2,7 @@
   "name": "ilom-whatsapp-bot",
   "version": "1.0.0",
   "description": "🧠 Amazing Bot 🧠 v1 created by Ilom - Advanced WhatsApp Bot with AI, Media Processing, and Comprehensive Features",
+  "type": "module",
   "main": "index.js",
   "author": "Ilom",
   "license": "MIT",
@@ -24,8 +25,7 @@
     "url": "https://github.com/ilom-tech/whatsapp-bot/issues"
   },
   "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=10.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "start": "node index.js",
@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
-    "@whiskeysockets/baileys": "^6.7.8",
+    "@whiskeysockets/baileys": "^7.0.0-rc.3",
     "archiver": "^7.0.1",
     "axios": "^1.12.1",
     "bcryptjs": "^3.0.2",

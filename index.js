@@ -1,37 +1,33 @@
-require('dotenv').config();
-const {
-    default: makeWASocket,
-    Browsers,
-    DisconnectReason,
-    useMultiFileAuthState,
-    fetchLatestBaileysVersion,
-    makeCacheableSignalKeyStore
-} = require('@whiskeysockets/baileys');
-const P = require('pino');
-const express = require('express');
-const fs = require('fs-extra');
-const path = require('path');
-const NodeCache = require('node-cache');
-const gradient = require('gradient-string');
-const figlet = require('figlet');
-const chalk = require('chalk');
+import 'dotenv/config';
+import P from 'pino';
+import express from 'express';
+import fs from 'fs-extra';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import NodeCache from 'node-cache';
+import figlet from 'figlet';
+import chalk from 'chalk';
 
-const { connectToDatabase } = require('./src/utils/database');
-const logger = require('./src/utils/logger');
-const messageHandler = require('./src/handlers/messageHandler');
-const commandHandler = require('./src/handlers/commandHandler');
-const eventHandler = require('./src/handlers/eventHandler');
-const callHandler = require('./src/handlers/callHandler');
-const groupHandler = require('./src/handlers/groupHandler');
-const mediaHandler = require('./src/handlers/mediaHandler');
-const errorHandler = require('./src/handlers/errorHandler');
-const config = require('./src/config');
-const constants = require('./src/constants');
-const { initializeCommands } = require('./src/utils/commandManager');
-const { loadPlugins, getActiveCount } = require('./src/utils/pluginManager');
-const { startScheduler } = require('./src/utils/scheduler');
-const { initializeCache } = require('./src/utils/cache');
-const { startWebServer } = require('./src/utils/webServer');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+import { connectToDatabase } from './src/utils/database.js';
+import logger from './src/utils/logger.js';
+import messageHandler from './src/handlers/messageHandler.js';
+import { commandHandler } from './src/handlers/commandHandler.js';
+import eventHandler from './src/handlers/eventHandler.js';
+import callHandler from './src/handlers/callHandler.js';
+import groupHandler from './src/handlers/groupHandler.js';
+import mediaHandler from './src/handlers/mediaHandler.js';
+import errorHandler from './src/handlers/errorHandler.js';
+import config from './src/config.js';
+import constants from './src/constants.js';
+import { initializeCommands } from './src/utils/commandManager.js';
+import { loadPlugins, getActiveCount } from './src/utils/pluginManager.js';
+import { startScheduler } from './src/utils/scheduler.js';
+import { initializeCache } from './src/utils/cache.js';
+import { startWebServer } from './src/utils/webServer.js';
 
 const msgRetryCounterCache = new NodeCache({ stdTTL: 600, checkperiod: 60 });
 const app = express();
@@ -60,15 +56,16 @@ async function createDirectoryStructure() {
     await Promise.all(directories.map(dir => fs.ensureDir(dir)));
 }
 
-function displayStartupBanner() {
+async function displayStartupBanner() {
     console.clear();
-    
+
     const banner = figlet.textSync('ILOM BOT', {
         font: 'ANSI Shadow',
         horizontalLayout: 'fitted',
         verticalLayout: 'default'
     });
-    
+
+    const gradient = (await import('gradient-string')).default;
     console.log(gradient.rainbow(banner));
     console.log(chalk.cyan.bold('\n🧠 Amazing Bot 🧠 v1 created by Ilom\n'));
     console.log(chalk.yellow('═'.repeat(65)));
@@ -211,6 +208,7 @@ async function sendBotStatusUpdate(sock) {
 }
 
 async function handleConnectionEvents(sock, connectionUpdate) {
+    const { DisconnectReason } = await import('@whiskeysockets/baileys');
     const { connection, lastDisconnect, qr, receivedPendingNotifications } = connectionUpdate;
     
     if (qr && !process.env.SESSION_ID) {
@@ -283,6 +281,7 @@ async function handleConnectionEvents(sock, connectionUpdate) {
 
 async function establishWhatsAppConnection() {
     try {
+        const { default: makeWASocket, Browsers, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = await import('@whiskeysockets/baileys');
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
         const { version } = await fetchLatestBaileysVersion();
         
@@ -516,7 +515,7 @@ async function createConfigurationFiles() {
 
 async function initializeBot() {
     try {
-        displayStartupBanner();
+        await displayStartupBanner();
         
         logger.info('Creating project directory structure...');
         await createDirectoryStructure();
