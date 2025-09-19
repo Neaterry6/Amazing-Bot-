@@ -3,8 +3,8 @@
 Ilom WhatsApp Bot is a comprehensive Node.js application built using the latest Baileys library for WhatsApp automation. The bot features AI integration, media processing, economy systems, admin tools, and extensive command management. It's designed as a multi-purpose WhatsApp bot with modular architecture supporting plugins, scheduled tasks, and web-based administration.
 
 **✅ Latest Updates (Sep 2025):**
-- Upgraded to Node.js 24.4.0 for optimal performance  
-- Updated @whiskeysockets/baileys to version 6.17.16 for better WhatsApp connectivity
+- Upgraded to Node.js 20+ for optimal performance
+- Updated @whiskeysockets/baileys to version 7.0.0-rc.3 for better WhatsApp connectivity
 - Enhanced session management with multiple cloud platform support
 - Improved deployment configurations for Replit, Railway, Heroku, Render, and more
 - 120+ active commands with advanced error handling
@@ -17,8 +17,8 @@ Preferred communication style: Simple, everyday language.
 # System Architecture
 
 ## Core Framework
-- **WhatsApp Integration**: Built on @whiskeysockets/baileys v6.17.16 for WhatsApp Web API communication
-- **Node.js Runtime**: v24.4.0 with ES6+ and modern JavaScript features and async/await patterns
+- **WhatsApp Integration**: Built on @whiskeysockets/baileys v7.0.0-rc.3 for WhatsApp Web API communication
+- **Node.js Runtime**: v20+ with ES6+ and modern JavaScript features and async/await patterns
 - **Express Web Server**: RESTful API and web dashboard for bot management on port 5000
 - **Modular Plugin System**: Extensible architecture with hot-reloadable plugins
 - **Cloud Platform Support**: Enhanced deployment detection for Replit, Railway, Heroku, Render, Vercel, Netlify, Koyeb
@@ -66,7 +66,7 @@ Preferred communication style: Simple, everyday language.
 # External Dependencies
 
 ## Core WhatsApp Integration
-- **@whiskeysockets/baileys**: v6.17.16 - WhatsApp Web API library for bot functionality
+- **@whiskeysockets/baileys**: v7.0.0-rc.3 - WhatsApp Web API library for bot functionality
 - **qrcode**: QR code generation for WhatsApp authentication (when no session provided)
 - **Session Management**: Supports multiple session formats including base64, JSON, and Ilom~ prefixed sessions
 
