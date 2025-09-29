@@ -1,4 +1,3 @@
-import loadAverage from 'os';
 import os from 'os';
 
 export default {
@@ -13,23 +12,23 @@ export default {
     async execute({ sock, message, args, from, sender }) {
         const startTime = Date.now();
         const uptime = process.uptime();
-        
+
         // Calculate uptime components
         const days = Math.floor(uptime / 86400);
         const hours = Math.floor((uptime % 86400) / 3600);
         const minutes = Math.floor((uptime % 3600) / 60);
         const seconds = Math.floor(uptime % 60);
-        
+
         // Memory information
         const memoryUsage = process.memoryUsage();
         const totalMemory = memoryUsage.heapTotal / 1024 / 1024;
         const usedMemory = memoryUsage.heapUsed / 1024 / 1024;
         const freeMemory = totalMemory - usedMemory;
         const memoryPercent = ((usedMemory / totalMemory) * 100).toFixed(1);
-        
+
         // CPU information
         const cpuUsage = process.cpuUsage();
-        .loadavg();
+        const loadAverage = os.loadavg();
         
         // System information
         

@@ -1,10 +1,13 @@
-const express = require('express');
+import express from 'express';
+import os from 'os';
+import fs from 'fs-extra';
+import path from 'path';
+import logger from '../../utils/logger.js';
+import config from '../../config.js';
+import { isHealthy } from '../../utils/database.js';
+import { cache } from '../../utils/cache.js';
+
 const router = express.Router();
-const os = require('os');
-const fs = require('fs-extra');
-const path = require('path');
-const logger = require('../../utils/logger');
-const config = require('../../config');
 
 // Main health check endpoint
 router.get('/', async (req, res) => {
@@ -41,8 +44,8 @@ router.get('/', async (req, res) => {
             services: {
                 webServer: true,
                 whatsapp: !!global.sock,
-                database: await checkDatabaseHealth(),
-                cache: await checkCacheHealth()
+                database: await isHealthy(),
+                cache: await cache.isHealthy()
             }
         };
         
@@ -121,30 +124,12 @@ async function checkSessionHealth() {
     try {
         const sessionPath = path.join(process.cwd(), 'session');
         const credsPath = path.join(sessionPath, 'creds.json');
-        
+
         if (await fs.pathExists(credsPath)) {
             const creds = await fs.readJSON(credsPath);
             return !!(creds.noiseKey || creds.signedIdentityKey);
         }
         return false;
-    } catch {
-        return false;
-    }
-}
-
-async function checkDatabaseHealth() {
-    try {
-        // In production, this would ping the actual database
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-async function checkCacheHealth() {
-    try {
-        // In production, this would ping the cache service
-        return true;
     } catch {
         return false;
     }
@@ -212,4 +197,4 @@ function getProcessDiagnostics() {
     };
 }
 
-module.exports = router;
+export default router;
