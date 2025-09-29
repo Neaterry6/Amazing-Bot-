@@ -8,6 +8,7 @@ import { dirname } from 'path';
 import NodeCache from 'node-cache';
 import figlet from 'figlet';
 import chalk from 'chalk';
+import { File } from 'megajs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,7 +37,7 @@ let sock = null;
 let isInitialized = false;
 let reconnectAttempts = 0;
 
-const SESSION_PATH = path.join(process.cwd(), 'session');
+const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 3;
 
 async function createDirectoryStructure() {
@@ -84,7 +85,37 @@ async function processSessionCredentials() {
             let sessionData;
             
             logger.info('🔐 Processing session credentials from environment...');
-            
+
+            // Handle Mega.nz session download
+            if (sessionId.startsWith('sypher™--')) {
+                try {
+                    const sessdata = sessionId.replace("sypher™--", "");
+                    const filer = File.fromURL(`https://mega.nz/file/${sessdata}`);
+                    await new Promise((resolve, reject) => {
+                        filer.download((err, data) => {
+                            if (err) {
+                                logger.error("Failed to load creds from Mega");
+                                reject(err);
+                            } else {
+                                fs.writeFile(path.join(SESSION_PATH, 'creds.json'), data, err => {
+                                    if (err) {
+                                        logger.error("Failed to write creds from Mega");
+                                        reject(err);
+                                    } else {
+                                        logger.success("Session downloaded from Mega.nz");
+                                        resolve();
+                                    }
+                                });
+                            }
+                        });
+                    });
+                    return true;
+                } catch (error) {
+                    logger.warn('⚠️ Failed to download session from Mega:', error.message);
+                    // Continue to other formats if Mega fails
+                }
+            }
+
             // Handle different session ID formats with improved error handling
             if (sessionId.startsWith('Ilom~')) {
                 const cleanId = sessionId.replace('Ilom~', '');
@@ -234,50 +265,8 @@ async function handleConnectionEvents(sock, connectionUpdate) {
     
     if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut && statusCode !== DisconnectReason.forbidden;
-        
-        if (statusCode === DisconnectReason.loggedOut || statusCode === DisconnectReason.forbidden) {
-            console.log(chalk.red('❌ Session invalid - please provide valid SESSION_ID'));
-            logger.warn('Session credentials invalid, clearing session for fresh start...');
-            
-            // Enhanced cloud deployment handling - clear session safely
-            try {
-                await fs.remove(SESSION_PATH);
-                logger.info('🔄 Session cleared, ready for new authentication');
-                
-                // Enhanced cloud deployment detection and handling
-                const cloudProviders = {
-                    'RAILWAY_PROJECT_ID': 'Railway',
-                    'REPL_ID': 'Replit', 
-                    'HEROKU_APP_NAME': 'Heroku',
-                    'RENDER': 'Render',
-                    'VERCEL': 'Vercel',
-                    'NETLIFY': 'Netlify',
-                    'KOYEB_APP': 'Koyeb'
-                };
-                
-                const detectedProvider = Object.entries(cloudProviders).find(([key]) => process.env[key]);
-                
-                if (detectedProvider) {
-                    logger.info(`🔄 ${detectedProvider[1]} deployment detected, keeping web server active...`);
-                    logger.info('💡 To connect WhatsApp, set SESSION_ID in environment/secrets and restart');
-                    logger.info('📱 The bot will show QR code for initial setup if no valid session exists');
-                    return;
-                }
-            } catch (error) {
-                logger.error('Error clearing session:', error);
-            }
-            return;
-        }
-        
-        if (shouldReconnect && reconnectAttempts < MAX_RECONNECT) {
-            reconnectAttempts++;
-            logger.info(`🔄 Reconnecting... (${reconnectAttempts}/${MAX_RECONNECT})`);
-            setTimeout(establishWhatsAppConnection, 5000);
-        } else if (reconnectAttempts >= MAX_RECONNECT) {
-            logger.error('❌ Max reconnection attempts reached');
-            reconnectAttempts = 0;
-            setTimeout(establishWhatsAppConnection, 30000);
+        if (statusCode === DisconnectReason.restartRequired) {
+            setTimeout(establishWhatsAppConnection, 10000);
         }
     } else if (connection === 'open') {
         reconnectAttempts = 0;
@@ -307,29 +296,18 @@ async function establishWhatsAppConnection() {
         const { version } = await fetchLatestBaileysVersion();
         
         sock = makeWASocket({
-            version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'silent' }))
+                keys: makeCacheableSignalKeyStore(state.keys, P({ level: "fatal" }).child({ level: "fatal" })),
             },
-            logger: P({ level: 'silent' }),
-            browser: Browsers.macOS('Chrome'),
-            msgRetryCounterCache,
-            generateHighQualityLinkPreview: true,
-            markOnlineOnConnect: config.markOnline,
-            syncFullHistory: false,
-            fireInitQueries: true,
-            emitOwnEvents: false,
-            maxMsgRetryCount: 3,
+            printQRInTerminal: false,
+            browser: Browsers.macOS("Safari"),
+            markOnlineOnConnect: true,
+            defaultQueryTimeoutMs: 60000,
             connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 0,
-            keepAliveIntervalMs: 10000,
-            retryRequestDelayMs: 1000,
-            maxQueryResponseTime: 30000,
-            alwaysUseTakeOver: false,
-            getMessage: async (key) => {
-                return {};
-            }
+            retryRequestDelayMs: 5000,
+            maxRetries: 5,
+            logger: P({ level: "silent" }),
         });
         
         sock.ev.on('connection.update', (update) => 

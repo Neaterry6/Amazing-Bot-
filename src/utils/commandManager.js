@@ -75,9 +75,10 @@ class CommandManager {
             const commandPath = path.join(__dirname, '..', 'commands', category, filename);
             const commandUrl = `file://${commandPath}`;
 
-            const command = await import(commandUrl);
+            const commandModule = await import(commandUrl);
+            const command = commandModule.default;
 
-            if (!this.validateCommandStructure(command.default)) {
+            if (!this.validateCommandStructure(command)) {
                 logger.warn(`Invalid command structure: ${filename}`);
                 return false;
             }
