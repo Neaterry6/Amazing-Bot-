@@ -1,10 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const path = require('path');
-const fs = require('fs-extra');
-const qrService = require('../../../src/services/qrService.js');
+import express from 'express';
+import path from 'path';
+import fs from 'fs-extra';
+import qrService from '../../services/qrService.js';
 
-// GET /api/qr - Get QR code status and data
+const router = express.Router();
+
 router.get('/', async (req, res) => {
     try {
         const qrStatus = qrService.getQRStatus();
@@ -38,7 +38,6 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET /api/qr/image - Serve QR code image
 router.get('/image', async (req, res) => {
     try {
         const qrStatus = qrService.getQRStatus();
@@ -56,13 +55,11 @@ router.get('/image', async (req, res) => {
             });
         }
 
-        // Set appropriate headers for image
         res.setHeader('Content-Type', 'image/png');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
 
-        // Stream the QR code image
         const qrStream = fs.createReadStream(qrStatus.path);
         qrStream.pipe(res);
 
@@ -86,7 +83,6 @@ router.get('/image', async (req, res) => {
     }
 });
 
-// GET /api/qr/data - Get QR code as base64 data URL
 router.get('/data', async (req, res) => {
     try {
         const qrStatus = qrService.getQRStatus();
@@ -103,7 +99,6 @@ router.get('/data', async (req, res) => {
             });
         }
 
-        // Generate data URL from QR data
         const qrDataURL = await qrService.generateQRDataURL(qrStatus.qrData);
 
         if (!qrDataURL) {
@@ -126,4 +121,4 @@ router.get('/data', async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;

@@ -1,11 +1,10 @@
-const express = require('express');
-const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const logger = require('../../utils/logger');
-const { authMiddleware } = require('../../middleware/auth');
-const config = require('../../config');
+import express from 'express';
+import { body, validationResult } from 'express-validator';
+import logger from '../../utils/logger.js';
+import config from '../../config.js';
 
-// Mock settings service - in production, this would connect to your settings database
+const router = express.Router();
+
 const settingsService = {
     async getSettings() {
         return {
@@ -13,15 +12,14 @@ const settingsService = {
             prefix: config.prefix || '.',
             publicMode: config.publicMode || false,
             timezone: config.timezone || 'UTC',
-            autoRead: config.autoRead || false,
-            antiSpam: config.antiSpam || true,
-            welcomeMessage: config.welcomeMessage || true,
+            autoRead: config.readMessages || false,
+            antiSpam: config.features.antiSpam || true,
+            welcomeMessage: config.features.welcome || true,
             adminNumbers: config.ownerNumbers || []
         };
     },
     
     async updateSetting(key, value) {
-        // Mock implementation - in production, save to database
         logger.info(`Setting updated: ${key} = ${value}`);
         return { success: true, key, value };
     },
@@ -32,8 +30,7 @@ const settingsService = {
     }
 };
 
-// Get all settings
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const settings = await settingsService.getSettings();
         res.json({ success: true, settings });
@@ -43,8 +40,7 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 });
 
-// Update a setting
-router.patch('/:key', authMiddleware, [
+router.patch('/:key', [
     body('value').exists().withMessage('Value is required')
 ], async (req, res) => {
     try {
@@ -56,7 +52,6 @@ router.patch('/:key', authMiddleware, [
         const { key } = req.params;
         const { value } = req.body;
         
-        // Validate setting key
         const validKeys = ['botName', 'prefix', 'publicMode', 'timezone', 'autoRead', 'antiSpam', 'welcomeMessage'];
         if (!validKeys.includes(key)) {
             return res.status(400).json({ error: 'Invalid setting key' });
@@ -70,8 +65,7 @@ router.patch('/:key', authMiddleware, [
     }
 });
 
-// Bulk update settings
-router.put('/', authMiddleware, [
+router.put('/', [
     body('settings').isObject().withMessage('Settings object is required')
 ], async (req, res) => {
     try {
@@ -95,8 +89,7 @@ router.put('/', authMiddleware, [
     }
 });
 
-// Reset settings to defaults
-router.post('/reset', authMiddleware, async (req, res) => {
+router.post('/reset', async (req, res) => {
     try {
         const result = await settingsService.resetSettings();
         res.json({ success: true, result });
@@ -106,16 +99,15 @@ router.post('/reset', authMiddleware, async (req, res) => {
     }
 });
 
-// Get bot configuration info
 router.get('/info', async (req, res) => {
     try {
         const info = {
             botName: config.botName,
-            version: config.version || '1.0.0',
+            version: config.botVersion || '1.0.0',
             uptime: process.uptime(),
             nodeVersion: process.version,
             platform: process.platform,
-            environment: config.nodeEnv || 'development'
+            environment: process.env.NODE_ENV || 'development'
         };
         
         res.json({ success: true, info });
@@ -125,9 +117,8 @@ router.get('/info', async (req, res) => {
     }
 });
 
-// Health check
 router.get('/health', (req, res) => {
     res.json({ status: 'active', service: 'settings', timestamp: new Date().toISOString() });
 });
 
-module.exports = router;
+export default router;

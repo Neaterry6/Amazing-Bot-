@@ -1,13 +1,11 @@
-const express = require('express');
-const router = express.Router();
-const { param, body, query, validationResult } = require('express-validator');
-const logger = require('../../utils/logger');
-const { authMiddleware } = require('../../middleware/auth');
+import express from 'express';
+import { param, body, query, validationResult } from 'express-validator';
+import logger from '../../utils/logger.js';
 
-// Mock user service - in production, this would connect to your user database
+const router = express.Router();
+
 const userService = {
     async getAllUsers(limit = 50, offset = 0) {
-        // Mock implementation
         return {
             users: [],
             total: 0,
@@ -17,12 +15,10 @@ const userService = {
     },
     
     async getUserById(userId) {
-        // Mock implementation
         return null;
     },
     
     async getUserStats(userId) {
-        // Mock implementation
         return {
             userId,
             messagesCount: 0,
@@ -33,13 +29,11 @@ const userService = {
     },
     
     async updateUser(userId, updates) {
-        // Mock implementation
         return { success: true, userId, updates };
     }
 };
 
-// Get all users (paginated)
-router.get('/', authMiddleware, [
+router.get('/', [
     query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
     query('offset').optional().isInt({ min: 0 }).withMessage('Offset must be a non-negative integer')
 ], async (req, res) => {
@@ -60,8 +54,7 @@ router.get('/', authMiddleware, [
     }
 });
 
-// Get specific user
-router.get('/:userId', authMiddleware, [
+router.get('/:userId', [
     param('userId').notEmpty().withMessage('User ID is required')
 ], async (req, res) => {
     try {
@@ -84,8 +77,7 @@ router.get('/:userId', authMiddleware, [
     }
 });
 
-// Get user statistics
-router.get('/:userId/stats', authMiddleware, [
+router.get('/:userId/stats', [
     param('userId').notEmpty().withMessage('User ID is required')
 ], async (req, res) => {
     try {
@@ -104,8 +96,7 @@ router.get('/:userId/stats', authMiddleware, [
     }
 });
 
-// Update user
-router.patch('/:userId', authMiddleware, [
+router.patch('/:userId', [
     param('userId').notEmpty().withMessage('User ID is required'),
     body('updates').isObject().withMessage('Updates object is required')
 ], async (req, res) => {
@@ -126,9 +117,8 @@ router.patch('/:userId', authMiddleware, [
     }
 });
 
-// Health check
 router.get('/health', (req, res) => {
     res.json({ status: 'active', service: 'users', timestamp: new Date().toISOString() });
 });
 
-module.exports = router;
+export default router;

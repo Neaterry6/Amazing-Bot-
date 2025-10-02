@@ -1,5 +1,6 @@
-const express = require('express');
-const config = require('../../config');
+import express from 'express';
+import config from '../../config.js';
+
 const router = express.Router();
 
 router.get('/', (req, res) => {
@@ -22,11 +23,11 @@ router.get('/', (req, res) => {
             nodeVersion: process.version
         },
         features: {
-            database: config.database ? 'enabled' : 'disabled',
-            redis: config.redis.enabled,
+            database: config.database.enabled ? 'enabled' : 'disabled',
+            redis: config.redis.enabled ? 'enabled' : 'disabled',
             ai: config.apis.openai.apiKey ? 'enabled' : 'disabled'
         }
     });
 });
 
-module.exports = router;
+export default router;

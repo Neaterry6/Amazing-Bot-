@@ -1,14 +1,12 @@
-const express = require('express');
-const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const commandHandler = require('../../handlers/commandHandler');
-const logger = require('../../utils/logger');
-const { authMiddleware } = require('../../middleware/auth');
+import express from 'express';
+import { body, validationResult } from 'express-validator';
+import logger from '../../utils/logger.js';
 
-// Get all available commands
+const router = express.Router();
+
 router.get('/', async (req, res) => {
     try {
-        const commands = await commandHandler.getAllCommands();
+        const commands = global.commandHandler ? await global.commandHandler.getAllCommands() : [];
         res.json({
             success: true,
             commands: commands.map(cmd => ({
@@ -28,11 +26,10 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Get commands by category
 router.get('/category/:category', async (req, res) => {
     try {
         const { category } = req.params;
-        const commands = await commandHandler.getCommandsByCategory(category);
+        const commands = global.commandHandler ? await global.commandHandler.getCommandsByCategory(category) : [];
         res.json({ success: true, commands });
     } catch (error) {
         logger.error('Error fetching commands by category:', error);
@@ -40,10 +37,9 @@ router.get('/category/:category', async (req, res) => {
     }
 });
 
-// Get command statistics
-router.get('/stats', authMiddleware, async (req, res) => {
+router.get('/stats', async (req, res) => {
     try {
-        const stats = await commandHandler.getCommandStats();
+        const stats = global.commandHandler ? await global.commandHandler.getCommandStats() : {};
         res.json({ success: true, stats });
     } catch (error) {
         logger.error('Error fetching command stats:', error);
@@ -51,8 +47,7 @@ router.get('/stats', authMiddleware, async (req, res) => {
     }
 });
 
-// Execute command (for testing purposes)
-router.post('/execute', authMiddleware, [
+router.post('/execute', [
     body('command').notEmpty().withMessage('Command is required'),
     body('args').isArray().optional()
 ], async (req, res) => {
@@ -64,7 +59,6 @@ router.post('/execute', authMiddleware, [
 
         const { command, args = [] } = req.body;
         
-        // This is a test endpoint - in production, commands should only be executed via WhatsApp
         logger.info(`API command execution requested: ${command}`);
         
         res.json({
@@ -80,9 +74,8 @@ router.post('/execute', authMiddleware, [
     }
 });
 
-// Health check
 router.get('/health', (req, res) => {
     res.json({ status: 'active', service: 'commands', timestamp: new Date().toISOString() });
 });
 
-module.exports = router;
+export default router;

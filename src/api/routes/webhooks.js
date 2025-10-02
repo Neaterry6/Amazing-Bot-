@@ -1,18 +1,16 @@
-const express = require('express');
-const router = express.Router();
-const { body, validationResult } = require('express-validator');
-const crypto = require('crypto');
-const logger = require('../../utils/logger');
-const webhookHandler = require('../../handlers/webhookHandler');
-const config = require('../../config');
+import express from 'express';
+import { body, validationResult } from 'express-validator';
+import crypto from 'crypto';
+import logger from '../../utils/logger.js';
+import config from '../../config.js';
 
-// Webhook signature verification middleware
+const router = express.Router();
+
 const verifyWebhookSignature = (req, res, next) => {
     const signature = req.headers['x-webhook-signature'];
-    const webhookSecret = config.webhookSecret;
+    const webhookSecret = config.security.webhookSecret;
     
     if (!webhookSecret) {
-        // If no webhook secret is configured, allow the request
         return next();
     }
     
@@ -32,7 +30,6 @@ const verifyWebhookSignature = (req, res, next) => {
     next();
 };
 
-// Incoming webhook endpoint
 router.post('/incoming', verifyWebhookSignature, [
     body('event').notEmpty().withMessage('Event type is required'),
     body('data').isObject().withMessage('Event data is required')
@@ -47,8 +44,7 @@ router.post('/incoming', verifyWebhookSignature, [
         
         logger.info(`Webhook received: ${event}`, { data });
         
-        // Process the webhook
-        const result = await webhookHandler.processWebhook(event, data, timestamp);
+        const result = global.webhookHandler ? await global.webhookHandler.processWebhook(event, data, timestamp) : null;
         
         res.json({ success: true, result });
     } catch (error) {
@@ -57,7 +53,6 @@ router.post('/incoming', verifyWebhookSignature, [
     }
 });
 
-// GitHub webhook for updates
 router.post('/github', (req, res) => {
     try {
         const event = req.headers['x-github-event'];
@@ -65,7 +60,6 @@ router.post('/github', (req, res) => {
         
         logger.info(`GitHub webhook: ${event}`, { action, repository: repository?.name, sender: sender?.login });
         
-        // Handle different GitHub events
         switch (event) {
             case 'push':
                 logger.info('Code pushed to repository');
@@ -87,7 +81,6 @@ router.post('/github', (req, res) => {
     }
 });
 
-// Bot status webhook for monitoring
 router.post('/status', verifyWebhookSignature, [
     body('status').isIn(['online', 'offline', 'error']).withMessage('Invalid status'),
     body('source').notEmpty().withMessage('Source is required')
@@ -102,8 +95,7 @@ router.post('/status', verifyWebhookSignature, [
         
         logger.info(`Status webhook: ${status} from ${source}`, { message });
         
-        // Process status update
-        await webhookHandler.processStatusUpdate(status, source, message, timestamp);
+        await global.webhookHandler?.processStatusUpdate(status, source, message, timestamp);
         
         res.json({ success: true, status, source });
     } catch (error) {
@@ -112,7 +104,6 @@ router.post('/status', verifyWebhookSignature, [
     }
 });
 
-// Test webhook endpoint
 router.post('/test', (req, res) => {
     logger.info('Test webhook received', req.body);
     res.json({
@@ -123,25 +114,23 @@ router.post('/test', (req, res) => {
     });
 });
 
-// Get webhook configuration
 router.get('/config', (req, res) => {
     const webhookConfig = {
-        enabled: !!config.webhookSecret,
+        enabled: !!config.security.webhookSecret,
         endpoints: {
             incoming: '/api/webhooks/incoming',
             github: '/api/webhooks/github',
             status: '/api/webhooks/status',
             test: '/api/webhooks/test'
         },
-        signatureRequired: !!config.webhookSecret
+        signatureRequired: !!config.security.webhookSecret
     };
     
     res.json({ success: true, config: webhookConfig });
 });
 
-// Health check
 router.get('/health', (req, res) => {
     res.json({ status: 'active', service: 'webhooks', timestamp: new Date().toISOString() });
 });
 
-module.exports = router;
+export default router;

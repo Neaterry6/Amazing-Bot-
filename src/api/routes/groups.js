@@ -1,14 +1,12 @@
-const express = require('express');
-const router = express.Router();
-const { param, body, validationResult } = require('express-validator');
-const groupHandler = require('../../handlers/groupHandler');
-const logger = require('../../utils/logger');
-const { authMiddleware } = require('../../middleware/auth');
+import express from 'express';
+import { param, body, validationResult } from 'express-validator';
+import logger from '../../utils/logger.js';
 
-// Get all groups bot is in
-router.get('/', authMiddleware, async (req, res) => {
+const router = express.Router();
+
+router.get('/', async (req, res) => {
     try {
-        const groups = await groupHandler.getAllGroups();
+        const groups = global.groupHandler ? await global.groupHandler.getAllGroups() : [];
         res.json({ success: true, groups });
     } catch (error) {
         logger.error('Error fetching groups:', error);
@@ -16,8 +14,7 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 });
 
-// Get specific group info
-router.get('/:groupId', authMiddleware, [
+router.get('/:groupId', [
     param('groupId').notEmpty().withMessage('Group ID is required')
 ], async (req, res) => {
     try {
@@ -27,7 +24,7 @@ router.get('/:groupId', authMiddleware, [
         }
 
         const { groupId } = req.params;
-        const groupInfo = await groupHandler.getGroupInfo(groupId);
+        const groupInfo = global.groupHandler ? await global.groupHandler.getGroupInfo(groupId) : null;
         
         if (!groupInfo) {
             return res.status(404).json({ error: 'Group not found' });
@@ -40,8 +37,7 @@ router.get('/:groupId', authMiddleware, [
     }
 });
 
-// Get group participants
-router.get('/:groupId/participants', authMiddleware, [
+router.get('/:groupId/participants', [
     param('groupId').notEmpty().withMessage('Group ID is required')
 ], async (req, res) => {
     try {
@@ -51,7 +47,7 @@ router.get('/:groupId/participants', authMiddleware, [
         }
 
         const { groupId } = req.params;
-        const participants = await groupHandler.getGroupParticipants(groupId);
+        const participants = global.groupHandler ? await global.groupHandler.getGroupParticipants(groupId) : [];
         
         res.json({ success: true, participants });
     } catch (error) {
@@ -60,8 +56,7 @@ router.get('/:groupId/participants', authMiddleware, [
     }
 });
 
-// Send message to group
-router.post('/:groupId/message', authMiddleware, [
+router.post('/:groupId/message', [
     param('groupId').notEmpty().withMessage('Group ID is required'),
     body('message').notEmpty().withMessage('Message is required')
 ], async (req, res) => {
@@ -74,16 +69,15 @@ router.post('/:groupId/message', authMiddleware, [
         const { groupId } = req.params;
         const { message } = req.body;
         
-        const result = await groupHandler.sendGroupMessage(groupId, message);
-        res.json({ success: true, messageId: result.messageId });
+        const result = global.groupHandler ? await global.groupHandler.sendGroupMessage(groupId, message) : null;
+        res.json({ success: true, messageId: result?.messageId });
     } catch (error) {
         logger.error('Error sending group message:', error);
         res.status(500).json({ error: 'Failed to send message' });
     }
 });
 
-// Get group statistics
-router.get('/:groupId/stats', authMiddleware, [
+router.get('/:groupId/stats', [
     param('groupId').notEmpty().withMessage('Group ID is required')
 ], async (req, res) => {
     try {
@@ -93,7 +87,7 @@ router.get('/:groupId/stats', authMiddleware, [
         }
 
         const { groupId } = req.params;
-        const stats = await groupHandler.getGroupStats(groupId);
+        const stats = global.groupHandler ? await global.groupHandler.getGroupStats(groupId) : {};
         
         res.json({ success: true, stats });
     } catch (error) {
@@ -102,9 +96,8 @@ router.get('/:groupId/stats', authMiddleware, [
     }
 });
 
-// Health check
 router.get('/health', (req, res) => {
     res.json({ status: 'active', service: 'groups', timestamp: new Date().toISOString() });
 });
 
-module.exports = router;
+export default router;

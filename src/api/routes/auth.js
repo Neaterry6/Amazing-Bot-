@@ -1,22 +1,21 @@
-const express = require('express');
-const router = express.Router();
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const rateLimit = require('express-rate-limit');
-const { body, validationResult } = require('express-validator');
-const logger = require('../../utils/logger');
-const config = require('../../config');
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import rateLimit from 'express-rate-limit';
+import { body, validationResult } from 'express-validator';
+import logger from '../../utils/logger.js';
+import config from '../../config.js';
 
-// Rate limiting for auth endpoints
+const router = express.Router();
+
 const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // limit each IP to 5 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 5,
     message: { error: 'Too many authentication attempts, please try again later' },
     standardHeaders: true,
     legacyHeaders: false
 });
 
-// Login endpoint
 router.post('/login', authLimiter, [
     body('username').notEmpty().withMessage('Username is required'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
@@ -29,11 +28,10 @@ router.post('/login', authLimiter, [
 
         const { username, password } = req.body;
 
-        // For demo purposes - in production, validate against database
         if (username === config.adminUsername && bcrypt.compareSync(password, config.adminPasswordHash)) {
             const token = jwt.sign(
                 { username, role: 'admin' },
-                config.jwtSecret || 'fallback-secret',
+                config.security.jwtSecret || 'fallback-secret',
                 { expiresIn: '24h' }
             );
 
@@ -53,7 +51,6 @@ router.post('/login', authLimiter, [
     }
 });
 
-// Token validation endpoint
 router.get('/validate', (req, res) => {
     const token = req.headers.authorization?.replace('Bearer ', '');
     
@@ -62,22 +59,19 @@ router.get('/validate', (req, res) => {
     }
 
     try {
-        const decoded = jwt.verify(token, config.jwtSecret || 'fallback-secret');
+        const decoded = jwt.verify(token, config.security.jwtSecret || 'fallback-secret');
         res.json({ valid: true, user: decoded });
     } catch (error) {
         res.status(401).json({ error: 'Invalid token' });
     }
 });
 
-// Logout endpoint
 router.post('/logout', (req, res) => {
-    // In a real implementation, you might blacklist the token
     res.json({ success: true, message: 'Logged out successfully' });
 });
 
-// Health check
 router.get('/health', (req, res) => {
     res.json({ status: 'active', service: 'auth', timestamp: new Date().toISOString() });
 });
 
-module.exports = router;
+export default router;
