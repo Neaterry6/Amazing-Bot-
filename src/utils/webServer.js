@@ -48,16 +48,35 @@ class WebServer {
             const port = config.server.port || 3000;
             const host = config.server.host || '0.0.0.0';
 
-            this.server = this.app.listen(port, host, () => {
-                this.isRunning = true;
-                logger.info(`🌐 Web server running on http://${host}:${port}`);
+            return new Promise((resolve, reject) => {
+                this.server = this.app.listen(port, host, () => {
+                    this.isRunning = true;
+                    logger.info(`🌐 Web server running on http://${host}:${port}`);
+                    resolve(this.server);
+                });
+
+                this.server.on('error', (error) => {
+                    if (error.code === 'EADDRINUSE') {
+                        logger.error(`Port ${port} is already in use. Trying alternative ports...`);
+                        
+                        const altPort = port + 1;
+                        this.server = this.app.listen(altPort, host, () => {
+                            this.isRunning = true;
+                            logger.info(`🌐 Web server running on http://${host}:${altPort}`);
+                            resolve(this.server);
+                        });
+                        
+                        this.server.on('error', (err) => {
+                            logger.error('Web server error on alternative port:', err);
+                            reject(err);
+                        });
+                    } else {
+                        logger.error('Web server error:', error);
+                        reject(error);
+                    }
+                });
             });
 
-            this.server.on('error', (error) => {
-                logger.error('Web server error:', error);
-            });
-
-            return this.server;
         } catch (error) {
             logger.error('Failed to start web server:', error);
             throw error;
@@ -166,12 +185,13 @@ class WebServer {
                     const routePath = path.join(routesPath, file);
                     const routeName = path.basename(file, '.js');
                     
-                    const route = await import(routePath);
+                    const routeModule = await import(routePath);
+                    const route = routeModule.default || routeModule;
                     
                     if (typeof route === 'function' || (route && typeof route.stack === 'object')) {
                         this.app.use(`/api/${routeName}`, route);
                         this.routes.set(routeName, route);
-                        logger.debug(`Loaded API route: /api/${routeName}`);
+                        logger.info(`✅ Loaded API route: /api/${routeName}`);
                     } else {
                         logger.warn(`Skipping invalid route ${file}: not a valid Express router or middleware function`);
                     }
