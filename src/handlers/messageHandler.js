@@ -336,6 +336,13 @@ class MessageHandler {
                 await this.handleQuotedMessage(sock, message, messageContent.quoted, user);
             }
 
+            const quotedMessageId = message.message?.extendedTextMessage?.contextInfo?.stanzaId;
+            if (quotedMessageId && global.replyHandlers && global.replyHandlers[quotedMessageId]) {
+                const replyHandler = global.replyHandlers[quotedMessageId];
+                await replyHandler.handler(messageContent.text, message);
+                return;
+            }
+
             await this.handleMentions(sock, message, messageContent.text, isGroup);
 
             const isCommand = await this.processCommand(
