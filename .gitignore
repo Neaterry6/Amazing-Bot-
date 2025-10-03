@@ -180,10 +180,6 @@ build/
 dist/
 out/
 
-# Package manager
-package-lock.json*
-yarn.lock*
-pnpm-lock.yaml*
 
 # Local configuration
 config/local.json

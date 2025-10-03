@@ -22,13 +22,12 @@ args = "WhatsApp Bot"
 name = "WhatsApp Bot"
 author = "agent"
 
-[workflows.workflow.metadata]
-outputType = "webview"
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "node index.js"
-waitForPort = 5000
+args = "npm start"
+
+[workflows.workflow.metadata]
+outputType = "console"
 
 [[ports]]
 localPort = 3000
