@@ -34,7 +34,9 @@ const config = {
             serverSelectionTimeoutMS: parseInt(process.env.DB_TIMEOUT) || 5000,
             socketTimeoutMS: parseInt(process.env.DB_SOCKET_TIMEOUT) || 45000,
             bufferMaxEntries: 0,
-            bufferCommands: false
+            bufferCommands: false,
+            autoCreate: false,
+            autoIndex: false
         }
     },
 
