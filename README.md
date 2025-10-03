@@ -4,85 +4,262 @@
 
 ### *The Ultimate WhatsApp Automation Experience*
 
-[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0-orange.svg)](package.json)
-[![Stars](https://img.shields.io/github/stars/NexusCoders-cyber/Amazing-Bot-.svg?style=social)](https://github.com/NexusCoders-cyber/Amazing-Bot-)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg?style=for-the-badge&logo=node.js)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.0.0-orange.svg?style=for-the-badge)](package.json)
+[![Stars](https://img.shields.io/github/stars/NexusCoders-cyber/Amazing-Bot-?style=for-the-badge&logo=github)](https://github.com/NexusCoders-cyber/Amazing-Bot-)
+[![Forks](https://img.shields.io/github/forks/NexusCoders-cyber/Amazing-Bot-?style=for-the-badge&logo=github)](https://github.com/NexusCoders-cyber/Amazing-Bot-)
 
 *A powerful, feature-rich WhatsApp bot built with modern technologies. Featuring AI integration, media processing, economy system, and comprehensive admin tools.*
 
-[🚀 Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [🎯 Features](#-features) • [🔧 Installation](#-installation)
+[🚀 Quick Deploy](#-quick-deploy) • [📚 Features](#-features) • [🔧 Installation](#-installation) • [📖 Commands](#-command-guide) • [🌐 API](#-api-reference)
 
 ---
 
 </div>
 
-## ✨ Features
+## 🌟 What's New
+
+<table>
+<tr>
+<td width="50%">
+
+### ✨ Latest Updates
+- ✅ **Universal Database Support** - Works with or without MongoDB on any platform
+- ✅ **Zero Timeout Errors** - Instant fallback when database unavailable
+- ✅ **Cross-Platform Ready** - Optimized for Koyeb, Heroku, Railway, Render, Replit
+- ✅ **Smart Session Management** - Multiple session format support
+- ✅ **121+ Commands** - Fully loaded and tested
+
+</td>
+<td width="50%">
+
+### 🔥 Key Highlights
+- ⚡ **Sub-100ms Response Time**
+- 🛡️ **Enterprise-Grade Security**
+- 🤖 **Multi-AI Integration** (GPT, Gemini)
+- 💾 **Optional Database** - Works without it!
+- 🌐 **10+ Languages Supported**
+- 📊 **Real-time Analytics**
+
+</td>
+</tr>
+</table>
+
+---
+
+## 🚀 Quick Deploy
 
 <div align="center">
 
-### 🎯 Core Capabilities
+### ⚡ One-Click Deployment
 
-| Category | Features | Commands |
-|----------|----------|----------|
-| 🤖 **AI & Chat** | OpenAI GPT, Gemini AI, Smart responses | `ai`, `chatgpt`, `gemini`, `analyze` |
-| 🎮 **Games & Fun** | 8-ball, Dice, RPS, Trivia, Blackjack | `8ball`, `dice`, `rps`, `trivia`, `blackjack` |
-| 💰 **Economy** | Virtual currency, Daily rewards, Gambling | `balance`, `daily`, `work`, `gamble`, `shop` |
-| 👑 **Admin Tools** | Group management, User control, Moderation | `kick`, `ban`, `promote`, `mute`, `warn` |
-| 📥 **Downloaders** | YouTube, Instagram, TikTok, Media processing | `ytdl`, `igdl`, `fbdl`, `tiktok` |
-| 🔧 **Utilities** | QR codes, Encryption, URL shortener | `qr`, `encrypt`, `decrypt`, `short` |
-| 🎨 **Media** | Stickers, Filters, Compress, Convert | `sticker`, `filter`, `compress`, `resize` |
-| 🌤️ **Information** | Weather, News, Dictionary, Search | `weather`, `news`, `define`, `search` |
+[![Deploy to Koyeb](https://img.shields.io/badge/Deploy%20to-Koyeb-121212?style=for-the-badge&logo=koyeb&logoColor=white)](https://app.koyeb.com/)
+[![Deploy to Railway](https://img.shields.io/badge/Deploy%20to-Railway-0B0D0E?style=for-the-badge&logo=railway&logoColor=white)](https://railway.app/new)
+[![Deploy to Render](https://img.shields.io/badge/Deploy%20to-Render-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://render.com)
+[![Deploy to Heroku](https://img.shields.io/badge/Deploy%20to-Heroku-430098?style=for-the-badge&logo=heroku&logoColor=white)](https://heroku.com)
+[![Deploy to Replit](https://img.shields.io/badge/Deploy%20to-Replit-667eea?style=for-the-badge&logo=replit&logoColor=white)](https://replit.com/github/NexusCoders-cyber/Amazing-Bot-)
 
 </div>
 
-### 🚀 Advanced Features
+### 📋 System Requirements
 
-- **🔐 Multi-Session Support** - JSON, Base64, and custom formats
-- **⚡ Real-time Processing** - Sub-100ms response times
-- **🛡️ Security First** - Rate limiting, input validation, encryption
-- **🌐 Multi-Language** - 10+ languages supported
-- **📊 Analytics** - Usage tracking, performance monitoring
-- **🔄 Auto Updates** - Self-updating system
-- **💾 Backup & Restore** - Complete data management
-- **🎨 Customizable** - Themes, commands, and plugins
+| Requirement | Version | Status |
+|------------|---------|--------|
+| **Node.js** | 20.0 or higher | ✅ Required |
+| **MongoDB** | 4.4 or higher | 🟡 Optional |
+| **WhatsApp Account** | Any | ✅ Required |
+| **Memory** | 512MB+ | ✅ Recommended |
+| **Storage** | 1GB+ | ✅ Recommended |
 
-## 🚀 Quick Start
+---
 
-### ⚡ One-Click Deploy
+## 🎯 Platform-Specific Deployment
 
-<div align="center">
+<details>
+<summary><b>🚀 Koyeb Deployment (Recommended)</b></summary>
 
-[![Deploy to Replit](https://img.shields.io/badge/Deploy%20to-Replit-667eea?style=for-the-badge&logo=replit)](https://replit.com/github/NexusCoders-cyber/Amazing-Bot-)
-[![Deploy to Railway](https://img.shields.io/badge/Deploy%20to-Railway-0B0D0E?style=for-the-badge&logo=railway)](https://railway.app)
-[![Deploy to Render](https://img.shields.io/badge/Deploy%20to-Render-46E3B7?style=for-the-badge&logo=render)](https://render.com)
+### Step-by-Step Guide
 
-</div>
+1. **Fork this repository** to your GitHub account
 
-### 📋 Prerequisites
+2. **Create Koyeb account** at [koyeb.com](https://www.koyeb.com)
 
-- **Node.js** 18.0 or higher
-- **MongoDB** (optional, for data persistence)
-- **WhatsApp Account** for bot connection
-- **Git** for cloning repository
+3. **Deploy from GitHub:**
+   - Click "Create App"
+   - Select "GitHub" as source
+   - Choose your forked repository
+   - Koyeb will auto-detect settings from `koyeb.yaml`
 
-### 🛠️ Installation
+4. **Set Environment Variables:**
+   ```env
+   SESSION_ID=your_session_id_here
+   OWNER_NUMBERS=your_phone_number
+   PREFIX=.
+   BOT_NAME=Amazing Bot
+   ```
 
-#### Option 1: Git Clone (Recommended)
+5. **Optional - Add MongoDB:**
+   ```env
+   MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/botdb
+   ```
+
+6. **Deploy** - Click "Deploy" and wait 2-3 minutes
+
+✅ **Done!** Your bot is now live 24/7
+
+**Note:** The bot works perfectly without MongoDB - it will use temporary data storage.
+
+</details>
+
+<details>
+<summary><b>🚂 Railway Deployment</b></summary>
+
+### Quick Setup
+
+1. **Deploy to Railway:**
+   - Click the Railway badge above
+   - Connect your GitHub account
+   - Select this repository
+
+2. **Environment Variables:**
+   - Railway will use settings from `railway.toml`
+   - Add required variables in Railway dashboard:
+   ```env
+   SESSION_ID=your_session_id
+   OWNER_NUMBERS=your_number
+   ```
+
+3. **Database (Optional):**
+   - Railway offers free PostgreSQL/MongoDB
+   - Add database plugin from Railway dashboard
+   - Connection URL is auto-injected
+
+4. **Deploy:**
+   - Railway auto-deploys on git push
+   - Check deployment logs for QR code
+
+✅ **Production Ready!**
+
+</details>
+
+<details>
+<summary><b>🎨 Render Deployment</b></summary>
+
+### Setup Process
+
+1. **Create Render Account** at [render.com](https://render.com)
+
+2. **New Web Service:**
+   - Connect GitHub repository
+   - Render auto-detects from `render.yaml`
+   - Set environment variables:
+   ```env
+   SESSION_ID=your_session_id
+   OWNER_NUMBERS=your_phone_number
+   ```
+
+3. **Free MongoDB (Optional):**
+   - Use MongoDB Atlas free tier
+   - Or Render's managed database
+
+4. **Deploy:**
+   - Click "Create Web Service"
+   - Wait for build to complete
+
+✅ **Live in minutes!**
+
+</details>
+
+<details>
+<summary><b>🟣 Heroku Deployment</b></summary>
+
+### Heroku Setup
+
+1. **Prerequisites:**
+   - Heroku CLI installed
+   - Git initialized in project
+
+2. **Deploy Commands:**
+   ```bash
+   heroku login
+   heroku create amazing-bot-app
+   git push heroku main
+   ```
+
+3. **Set Config Vars:**
+   ```bash
+   heroku config:set SESSION_ID="your_session_id"
+   heroku config:set OWNER_NUMBERS="your_number"
+   heroku config:set PREFIX="."
+   ```
+
+4. **Optional MongoDB:**
+   ```bash
+   heroku addons:create mongolab:sandbox
+   ```
+
+5. **Check Logs:**
+   ```bash
+   heroku logs --tail
+   ```
+
+✅ **Deployed!**
+
+</details>
+
+<details>
+<summary><b>💻 Replit Deployment (Development)</b></summary>
+
+### Replit Setup
+
+1. **Import to Replit:**
+   - Click "Import from GitHub"
+   - Paste repository URL
+   - Replit auto-configures from `replit.md`
+
+2. **Environment Secrets:**
+   - Click "Secrets" in sidebar
+   - Add:
+   ```
+   SESSION_ID = your_session_id
+   OWNER_NUMBERS = your_number
+   ```
+
+3. **Run:**
+   - Click "Run" button
+   - Bot starts automatically
+   - Scan QR if no SESSION_ID set
+
+✅ **Perfect for testing!**
+
+**Note:** Replit works great without database - data is temporary until you add MongoDB URL.
+
+</details>
+
+---
+
+## 🔧 Local Installation
+
+### Option 1: Quick Setup (Recommended)
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/NexusCoders-cyber/Amazing-Bot-.git
 cd Amazing-Bot-
 
 # Install dependencies
 npm install
 
-# Copy environment file
+# Setup environment
 cp .env.example .env
+nano .env  # Edit with your configuration
+
+# Start bot
+npm start
 ```
 
-#### Option 2: Direct Download
+### Option 2: Manual Setup
 
 ```bash
 # Download and extract
@@ -92,393 +269,412 @@ cd Amazing-Bot--main
 
 # Install dependencies
 npm install
+
+# Configure
+cp .env.example .env
+
+# Start
+npm start
 ```
 
-### ⚙️ Configuration
+---
 
-#### Required Environment Variables
+## ⚙️ Configuration
 
-Create a `.env` file in the root directory:
+### 🔑 Essential Variables
+
+Create `.env` file with these required settings:
 
 ```env
-# WhatsApp Session (Required)
-SESSION_ID={"noiseKey":{"private":{"type":"Buffer","data":"..."}},"pairingEphemeralKeyPair":{"private":{"type":"Buffer","data":"..."}},"signedIdentityKey":{"private":{"type":"Buffer","data":"..."}},"signedPreKey":{"keyPair":{"private":{"type":"Buffer","data":"..."},"public":{"type":"Buffer","data":"..."}},"signature":{"type":"Buffer","data":"..."},"keyId":1},"registrationId":82,"advSecretKey":"...","processedHistoryMessages":[],"nextPreKeyId":31,"firstUnuploadedPreKeyId":31,"accountSyncCounter":0,"accountSettings":{"unarchiveChats":false},"registered":true,"pairingCode":"...","me":{"id":"234xxxxxxxxx:18@s.whatsapp.net","lid":"908xxxxxxxxxx:18@lid"},"account":{"details":"..."},"signalIdentities":[{"identifier":{"name":"234xxxxxxxxx:18@s.whatsapp.net","deviceId":0},"identifierKey":{"type":"Buffer","data":"..."}}],"platform":"android","routingInfo":{"type":"Buffer","data":"..."},"lastAccountSyncTimestamp":1758152747,"lastPropHash":"...","myAppStateKeyId":"AAAAAGQI"}
-
-# Bot Configuration
-BOT_NAME=Amazing Bot
-OWNER_NUMBERS=234xxxxxxxxxx
+# ============================================
+# WhatsApp Configuration (Required)
+# ============================================
+SESSION_ID=Ilom~base64_encoded_session_here
+OWNER_NUMBERS=1234567890,9876543210
 PREFIX=.
+BOT_NAME=Amazing Bot
 
-# Database (Optional)
-MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/botdb
+# ============================================
+# Database Configuration (Optional)
+# ============================================
+MONGODB_URL=mongodb+srv://user:pass@cluster.mongodb.net/botdb
+DATABASE_ENABLED=true
 
+# ============================================
 # AI Integration (Optional)
-OPENAI_API_KEY=sk-your-openai-key
-GEMINI_API_KEY=your-gemini-key
+# ============================================
+OPENAI_API_KEY=sk-your-openai-api-key-here
+GEMINI_API_KEY=your-google-gemini-api-key
+OPENAI_MODEL=gpt-3.5-turbo
 
-# Security
-ENCRYPTION_KEY=your-encryption-key-here
-JWT_SECRET=your-jwt-secret-here
+# ============================================
+# Security (Recommended)
+# ============================================
+ENCRYPTION_KEY=your-secure-encryption-key-min-32-chars
+JWT_SECRET=your-jwt-secret-key-here
+SESSION_SECRET=your-session-secret-here
+
+# ============================================
+# Bot Behavior
+# ============================================
+PUBLIC_MODE=true
+SELF_MODE=false
+AUTO_READ=false
+AUTO_TYPING=true
+MARK_ONLINE=true
+
+# ============================================
+# Performance
+# ============================================
+MAX_CONCURRENT_COMMANDS=50
+COMMAND_COOLDOWN=3
+RATE_LIMIT_REQUESTS=20
+CACHE_SIZE=1000
 ```
 
-#### WhatsApp Connection Methods
+### 📱 Getting SESSION_ID
 
-##### Method 1: SESSION_ID (Recommended)
-1. Get SESSION_ID from a running bot instance
-2. Add it to your `.env` file
-3. Bot connects automatically on startup
-
-##### Method 2: QR Code
-1. Leave `SESSION_ID` empty in `.env`
-2. Start the bot: `npm start`
-3. Scan the QR code displayed in terminal
-4. SESSION_ID is automatically saved for future use
-
-### 🎯 Start the Bot
-
+#### Method 1: QR Code (Easiest)
 ```bash
-# Development mode
-npm run dev
-
-# Production mode
+# Start bot without SESSION_ID
 npm start
 
-# Build and start
-npm run build && npm start
+# Scan QR code with WhatsApp
+# SESSION_ID will be saved automatically
 ```
 
-### 🌐 Web Interface
+#### Method 2: From Running Bot
+```bash
+# Check logs after successful QR scan
+# Copy SESSION_ID from terminal/logs
+# Add to .env file
+```
 
-Once running, access the web interface at:
-- **Dashboard**: `http://localhost:5000`
-- **QR Code**: `http://localhost:5000/qr`
-- **API Docs**: `http://localhost:5000/api/docs`
+### 🗄️ Database Setup
 
-## ⚙️ Advanced Configuration
+#### Without Database (Quick Start)
+```env
+# Leave MONGODB_URL empty or use default
+MONGODB_URL=mongodb://localhost:27017/ilombot
 
-### 🔧 Core Settings
+# Bot will work with temporary data
+# Perfect for testing and Replit
+```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PREFIX` | `.` | Bot command prefix |
-| `BOT_NAME` | `Amazing Bot` | Bot display name |
-| `OWNER_NUMBERS` | `your_number` | Bot owner WhatsApp numbers |
-| `PUBLIC_MODE` | `true` | Allow public usage |
-| `SELF_MODE` | `false` | Bot only responds to owner |
-| `MARK_ONLINE` | `true` | Show online status |
-| `READ_MESSAGES` | `false` | Auto-read messages |
-| `AUTO_TYPING` | `true` | Show typing indicator |
+#### With MongoDB (Production)
 
-### 🤖 AI Configuration
+**Option 1: MongoDB Atlas (Free)**
+1. Create account at [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas)
+2. Create free cluster
+3. Get connection string
+4. Add to `.env`:
+```env
+MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/botdb
+```
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key for GPT | `sk-...` |
-| `GEMINI_API_KEY` | Google Gemini API key | `AIza...` |
-| `OPENAI_MODEL` | GPT model to use | `gpt-3.5-turbo` |
-| `AI_MAX_TOKENS` | Max tokens per response | `150` |
-| `AI_TEMPERATURE` | Response creativity (0-1) | `0.7` |
+**Option 2: Local MongoDB**
+```env
+MONGODB_URL=mongodb://localhost:27017/ilombot
+```
 
-### 🗄️ Database Settings
+**Option 3: Platform Managed**
+- Railway, Render, Heroku offer managed databases
+- Auto-inject connection strings
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MONGODB_URL` | `mongodb://localhost` | MongoDB connection URL |
-| `DATABASE_ENABLED` | `true` | Enable database features |
-| `DB_MAX_POOL_SIZE` | `10` | Connection pool size |
-| `DB_TIMEOUT` | `5000` | Connection timeout (ms) |
-| `REDIS_ENABLED` | `false` | Enable Redis caching |
-| `REDIS_URL` | `redis://localhost:6379` | Redis connection URL |
+---
 
-### 🔒 Security Settings
+## ✨ Features
 
-| Variable | Description | Importance |
-|----------|-------------|------------|
-| `ENCRYPTION_KEY` | Data encryption key | 🔴 Critical |
-| `JWT_SECRET` | JWT token secret | 🔴 Critical |
-| `SESSION_SECRET` | Session encryption | 🟡 High |
-| `MAX_LOGIN_ATTEMPTS` | Max failed logins | 🟡 Medium |
-| `LOCKOUT_DURATION` | Lockout time (ms) | 🟡 Medium |
+<div align="center">
 
-### 📊 Performance Tuning
+### 🎯 Core Capabilities
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MAX_CONCURRENT_COMMANDS` | `50` | Max simultaneous commands |
-| `COMMAND_COOLDOWN` | `3` | Global cooldown (seconds) |
-| `RATE_LIMIT_REQUESTS` | `20` | Requests per window |
-| `RATE_LIMIT_WINDOW` | `60000` | Rate limit window (ms) |
-| `MEMORY_THRESHOLD` | `0.8` | Memory usage alert threshold |
-| `CACHE_SIZE` | `1000` | Cache size limit |
-| `CACHE_TTL` | `3600` | Cache TTL (seconds) |
+| Category | Features | Count |
+|----------|----------|-------|
+| 🤖 **AI & Chat** | OpenAI GPT, Gemini, Smart Responses | 15+ |
+| 🎮 **Games** | 8-ball, Trivia, Blackjack, Hangman | 12+ |
+| 💰 **Economy** | Currency, Daily Rewards, Gambling, Shop | 18+ |
+| 👑 **Admin** | Group Management, Moderation, Bans | 20+ |
+| 📥 **Downloaders** | YouTube, Instagram, TikTok, Facebook | 10+ |
+| 🔧 **Utilities** | QR, Encryption, Translate, Weather | 15+ |
+| 🎨 **Media** | Stickers, Filters, Compress, Convert | 12+ |
+| 🌐 **Info** | News, Search, Dictionary, Time | 10+ |
+| 👤 **Owner** | System Control, Backup, Execute Code | 9+ |
 
-### 🌐 Server Configuration
+**Total: 121+ Commands** loaded and tested!
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `5000` | Web server port |
-| `HOST` | `0.0.0.0` | Server bind address |
-| `CORS_ENABLED` | `true` | Enable CORS |
-| `RATE_LIMIT_WINDOW` | `900000` | API rate limit window |
-| `RATE_LIMIT_MAX` | `100` | Max API requests |
+</div>
 
-### 🎨 Customization
+### 🚀 Advanced Capabilities
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BOT_THUMBNAIL` | `thumbnail_url` | Bot profile image |
-| `BOT_REPOSITORY` | `repo_url` | GitHub repository URL |
-| `DEFAULT_LANGUAGE` | `en` | Default bot language |
-| `TIMEZONE` | `UTC` | Bot timezone |
-| `DATE_FORMAT` | `YYYY-MM-DD HH:mm:ss` | Date format |
+<table>
+<tr>
+<td width="33%">
+
+#### 🔐 Security
+- Multi-level permissions
+- Rate limiting
+- Input validation
+- Session encryption
+- JWT authentication
+
+</td>
+<td width="33%">
+
+#### ⚡ Performance
+- Sub-100ms responses
+- Efficient caching
+- Database pooling
+- Async processing
+- Memory optimization
+
+</td>
+<td width="33%">
+
+#### 🌐 Platform Support
+- Universal compatibility
+- Cloud-native design
+- Auto-scaling ready
+- Zero-downtime updates
+- Health monitoring
+
+</td>
+</tr>
+</table>
+
+### 💡 Smart Features
+
+- **🔄 Auto-Recovery** - Reconnects automatically after errors
+- **📊 Real-time Stats** - Live performance monitoring
+- **🌍 Multi-Language** - 10+ languages with auto-detection
+- **🎨 Customizable** - Themes, commands, and responses
+- **💾 Smart Storage** - Works with or without database
+- **🔔 Notifications** - Owner alerts for important events
+- **📈 Analytics** - Usage tracking and insights
+- **🛡️ Anti-Spam** - Smart spam detection and prevention
+
+---
 
 ## 📖 Command Guide
 
 ### 🎯 Essential Commands
 
-| Command | Description | Usage |
-|---------|-------------|-------|
-| `.help` | Display all available commands | `.help [command]` |
-| `.menu` | Interactive command menu | `.menu` |
-| `.ping` | Check bot response time | `.ping` |
-| `.info` | Detailed bot information | `.info` |
-| `.status` | System performance stats | `.status` |
-| `.owner` | Contact bot owner | `.owner` |
+```bash
+.help              # Display all available commands
+.menu              # Interactive command menu
+.ping              # Check bot response time
+.info              # Detailed bot information
+.status            # System performance stats
+```
 
 ### 👑 Admin Commands
 
-#### Group Management
+<details>
+<summary><b>Group Management</b></summary>
+
 ```bash
 .kick @user          # Remove member from group
-.ban @user           # Ban user from group
-.unban @user         # Unban user from group
+.ban @user           # Ban user permanently
+.unban @user         # Remove ban
 .promote @user       # Promote to admin
-.demote @user        # Demote from admin
-.mute @user          # Mute user in group
-.unmute @user        # Unmute user in group
-.warn @user          # Warn user
+.demote @user        # Remove admin rights
+.mute @user [time]   # Mute user temporarily
+.unmute @user        # Unmute user
+.warn @user          # Issue warning
 .unwarn @user        # Remove warning
-```
-
-#### Group Settings
-```bash
-.setdesc <text>      # Change group description
+.tagall [message]    # Mention all members
+.hidetag [message]   # Hidden mention all
+.setdesc <text>      # Change description
 .setname <text>      # Change group name
-.groupinfo           # Get group information
-.tagall <message>    # Tag all members
-.hidetag <message>   # Send hidden tag message
+.groupinfo           # Get group details
 ```
 
-### 🎮 Fun & Games
-
-#### Entertainment
-```bash
-.8ball <question>    # Magic 8-ball predictions
-.dice [sides]        # Roll dice (default 6 sides)
-.coin               # Flip a coin
-.rps <choice>       # Rock, paper, scissors
-.joke               # Random jokes
-.quote              # Inspirational quotes
-.ship @user1 @user2  # Ship two users
-```
-
-#### Games
-```bash
-.trivia             # Start trivia game
-.blackjack          # Play blackjack
-.tictactoe          # Play tic-tac-toe
-.hangman            # Play hangman
-.math               # Math quiz
-.word               # Word game
-.memory             # Memory game
-```
+</details>
 
 ### 🧠 AI Integration
 
-#### Chat Commands
+<details>
+<summary><b>AI Commands</b></summary>
+
 ```bash
-.ai <message>       # Chat with AI assistant
-.chatgpt <message>  # OpenAI GPT chat
-.gemini <message>   # Google Gemini chat
-.analyze <text>     # Analyze text with AI
-.translate <text>   # Translate text
+.ai <message>        # Chat with AI assistant
+.chatgpt <message>   # OpenAI GPT chat
+.gemini <message>    # Google Gemini chat
+.analyze <text>      # Analyze content with AI
+.translate <text>    # Translate to any language
+.imagine <prompt>    # Generate AI images
+.stt [audio]         # Speech to text
+.tts <text>          # Text to speech
+.ocr [image]         # Extract text from image
 ```
 
-#### Creative AI
-```bash
-.imagine <prompt>   # Generate images with AI
-.stt <audio>        # Speech to text
-.tts <text>         # Text to speech
-.ocr <image>        # Extract text from image
-```
+</details>
 
 ### 💰 Economy System
 
-#### Money Management
+<details>
+<summary><b>Money & Shop</b></summary>
+
 ```bash
-.balance            # Check your balance
-.daily              # Claim daily reward
-.weekly             # Claim weekly reward
-.work               # Earn money by working
-.gamble <amount>    # Gamble your money
-.rob @user          # Rob another user
-.transfer @user <amount> # Transfer money
+.balance             # Check your balance
+.daily               # Claim daily reward ($100-500)
+.weekly              # Claim weekly reward ($1000-5000)
+.work                # Work to earn money
+.gamble <amount>     # Take your chances
+.rob @user           # Rob another user (risky!)
+.transfer @user <$>  # Send money to user
+.shop                # View available items
+.buy <item>          # Purchase item
+.inventory           # Check your inventory
+.sell <item>         # Sell item from inventory
+.leaderboard         # View richest users
 ```
 
-#### Shop & Items
+</details>
+
+### 🎮 Games & Fun
+
+<details>
+<summary><b>Entertainment</b></summary>
+
 ```bash
-.shop               # View available items
-.buy <item>         # Purchase item
-.inventory          # Check your inventory
-.sell <item>        # Sell item
-.leaderboard        # View richest users
+# Quick Games
+.8ball <question>    # Magic 8-ball predictions
+.dice [sides]        # Roll dice (default 6)
+.coin                # Flip a coin
+.rps <choice>        # Rock, paper, scissors
+.joke                # Random jokes
+.quote               # Inspirational quotes
+
+# Interactive Games
+.trivia              # Start trivia quiz
+.blackjack           # Play blackjack
+.tictactoe           # Play tic-tac-toe
+.hangman             # Play hangman
+.math                # Math quiz game
+.word                # Word puzzle game
+.memory              # Memory game
 ```
+
+</details>
 
 ### 📥 Downloaders
 
-#### Social Media
+<details>
+<summary><b>Social Media Downloads</b></summary>
+
 ```bash
-.ytdl <url>         # Download YouTube video/audio
-.ytmp3 <url>        # Download YouTube audio only
-.ytmp4 <url>        # Download YouTube video only
-.igdl <url>         # Download Instagram media
-.fbdl <url>         # Download Facebook video
-.tikdl <url>        # Download TikTok video
-.twdl <url>         # Download Twitter media
-.pinterest <url>    # Download Pinterest media
+# Video/Audio
+.ytdl <url>          # YouTube video/audio
+.ytmp3 <url>         # YouTube audio only
+.ytmp4 <url>         # YouTube video only
+
+# Social Media
+.igdl <url>          # Instagram media
+.fbdl <url>          # Facebook video
+.tikdl <url>         # TikTok video
+.twdl <url>          # Twitter media
+.pinterest <url>     # Pinterest media
+
+# File Hosting
+.mediafire <url>     # MediaFire files
+.gdrive <url>        # Google Drive files
 ```
 
-#### File Hosting
-```bash
-.mediafire <url>    # Download MediaFire file
-.gdrive <url>       # Download Google Drive file
-```
-
-### 🔧 Utilities
-
-#### Tools
-```bash
-.qr <text>          # Generate QR code
-.encrypt <text>     # Encrypt text
-.decrypt <text>     # Decrypt text
-.hash <text>        # Generate hash
-.base64 <text>      # Base64 encode/decode
-.short <url>        # Shorten URL
-.weather <city>     # Get weather info
-.news               # Get latest news
-.search <query>     # Search the web
-```
-
-#### Information
-```bash
-.time               # Get current time
-.uptime             # Bot uptime
-.stats              # Bot statistics
-.rank               # Your rank in group
-.profile [@user]    # View user profile
-```
+</details>
 
 ### 🎨 Media Processing
 
-#### Image Tools
+<details>
+<summary><b>Image & Video Tools</b></summary>
+
 ```bash
-.sticker            # Convert image to sticker
-.filter <type>      # Apply image filter
-.blur               # Blur image
-.compress           # Compress image
-.resize <size>      # Resize image
-.crop               # Crop image
-.watermark          # Add watermark
-.meme <text>        # Create meme
+# Image Processing
+.sticker             # Convert to sticker
+.filter <type>       # Apply image filter
+.blur                # Blur image
+.compress            # Compress image
+.resize <width>      # Resize image
+.crop                # Crop image
+.watermark           # Add watermark
+.meme <text>         # Create meme
+
+# Format Conversion
+.toaudio             # Video → Audio
+.toimg               # Sticker → Image
+.tovideo             # Image → Video
+.gif                 # Video → GIF
 ```
 
-#### Audio/Video
+</details>
+
+### 🔧 Utilities
+
+<details>
+<summary><b>Useful Tools</b></summary>
+
 ```bash
-.toaudio            # Convert video to audio
-.toimg              # Convert sticker to image
-.tovideo            # Convert image to video
-.gif                # Convert video to GIF
+# Tools
+.qr <text>           # Generate QR code
+.encrypt <text>      # Encrypt text
+.decrypt <text>      # Decrypt text
+.hash <text>         # Generate hash
+.base64 <text>       # Base64 encode/decode
+.short <url>         # Shorten URL
+
+# Information
+.weather <city>      # Weather forecast
+.news                # Latest news
+.search <query>      # Web search
+.time                # Current time
+.uptime              # Bot uptime
+.profile [@user]     # User profile
 ```
+
+</details>
 
 ### 🔒 Owner Commands
 
-#### System Management
+<details>
+<summary><b>System Management</b></summary>
+
 ```bash
-.restart            # Restart the bot
-.shutdown           # Shutdown the bot
-.update             # Update bot from repository
-.backup             # Create system backup
-.restore            # Restore from backup
-.eval <code>        # Execute JavaScript code
-.exec <command>     # Execute system command
+# Bot Control
+.restart             # Restart bot
+.shutdown            # Shutdown bot
+.update              # Update from GitHub
+.backup              # Create backup
+.restore             # Restore from backup
+
+# Code Execution
+.eval <code>         # Execute JavaScript
+.exec <command>      # Execute system command
+
+# Configuration
+.setprefix <prefix>  # Change command prefix
+.setstatus <text>    # Set bot status
+.setpp [image]       # Set profile picture
+.broadcast <msg>     # Broadcast to all chats
+.join <invite_link>  # Join group
+.leave               # Leave current group
+
+# User Management
+.addpremium @user    # Grant premium
+.removepremium @user # Remove premium
+.gban @user          # Global ban
+.gunban @user        # Global unban
 ```
 
-#### Configuration
-```bash
-.setprefix <prefix> # Change bot prefix
-.setstatus <text>   # Set bot status
-.setpp <image>      # Set bot profile picture
-.broadcast <message> # Send broadcast message
-.join <group_id>    # Join group
-.leave             # Leave current group
-```
+</details>
 
-### 📊 Advanced Usage
-
-#### Command Aliases
-Most commands have multiple aliases for convenience:
-- `.help` → `.h`, `.menu`, `.commands`
-- `.ping` → `.p`, `.latency`
-- `.info` → `.about`, `.botinfo`
-
-#### Permission Levels
-- **User**: Basic commands for all users
-- **Premium**: Enhanced features for premium users
-- **Admin**: Group administrative commands
-- **Owner**: System-level commands (bot owner only)
-
-#### Rate Limiting
-- Commands have cooldown periods to prevent spam
-- Rate limits vary by command type and user level
-- Premium users get higher limits
-
-## 🛡️ Security Features
-
-- **Permission System** - Multi-level access control
-- **Rate Limiting** - Anti-spam protection
-- **Input Validation** - Secure message processing
-- **Session Encryption** - Protected WhatsApp credentials
-- **Owner-only Commands** - Restricted administrative access
-
-## 🎨 Customization
-
-### Adding New Commands
-1. Create file in `src/commands/category/`
-2. Follow command structure:
-
-```javascript
-module.exports = {
-    name: 'command',
-    aliases: ['alias1', 'alias2'],
-    category: 'general',
-    description: 'Command description',
-    usage: 'command [arguments]',
-    cooldown: 3,
-    permissions: ['user'],
-    
-    async execute(sock, message, args) {
-        // Command logic here
-    }
-};
-```
-
-### Custom Plugins
-Add plugins in `src/plugins/` directory with auto-loading support.
-
-### Themes & Styling
-Customize message templates and response formats in command files.
+---
 
 ## 🌐 API Reference
+
+### Base URL
+```
+http://localhost:5000/api
+```
 
 ### 📊 Health & Monitoring
 
@@ -490,15 +686,19 @@ GET /api/health
 ```json
 {
   "status": "healthy",
-  "timestamp": "2025-01-19T19:30:00.000Z",
-  "uptime": "2h 15m 30s",
+  "timestamp": "2025-10-03T00:00:00.000Z",
+  "uptime": "5h 23m 15s",
   "memory": {
     "used": "45.2 MB",
-    "total": "512 MB",
-    "percentage": "8.8%"
+    "total": "512 MB"
   },
-  "cpu": {
-    "usage": "12.5%"
+  "whatsapp": {
+    "connected": true,
+    "qr_scanned": true
+  },
+  "database": {
+    "connected": true,
+    "type": "mongodb"
   }
 }
 ```
@@ -507,703 +707,256 @@ GET /api/health
 ```http
 GET /api/stats
 ```
-**Response:**
-```json
-{
-  "bot": {
-    "name": "Amazing Bot",
-    "version": "1.0.0",
-    "uptime": "2h 15m 30s",
-    "commands_loaded": 150,
-    "active_chats": 25
-  },
-  "system": {
-    "platform": "linux",
-    "node_version": "v18.17.0",
-    "memory_usage": "45.2 MB",
-    "cpu_usage": "12.5%"
-  },
-  "performance": {
-    "avg_response_time": "85ms",
-    "total_commands_executed": 15420,
-    "error_rate": "0.02%"
-  }
-}
-```
 
-#### QR Code Access
+#### QR Code
 ```http
 GET /api/qr
 ```
-Returns the current QR code for WhatsApp authentication.
+Returns current QR code image for WhatsApp pairing.
 
 ### 🤖 Bot Management
 
-#### Command Statistics
 ```http
-GET /api/commands/stats
-```
-**Response:**
-```json
-{
-  "total_commands": 150,
-  "categories": {
-    "general": 25,
-    "fun": 30,
-    "admin": 20,
-    "ai": 15,
-    "downloader": 12,
-    "utility": 18,
-    "media": 10,
-    "owner": 8,
-    "economy": 7,
-    "games": 5
-  },
-  "most_used": [
-    {
-      "command": "ping",
-      "usage_count": 1250,
-      "avg_execution_time": "45ms"
-    }
-  ]
-}
-```
-
-#### User Management
-```http
-GET /api/users
-POST /api/users
-PUT /api/users/:id
-DELETE /api/users/:id
-```
-
-#### Group Management
-```http
-GET /api/groups
-POST /api/groups
-PUT /api/groups/:id
-DELETE /api/groups/:id
-```
-
-### 📁 File Operations
-
-#### Upload Media
-```http
-POST /api/upload
-Content-Type: multipart/form-data
-
-Form Data:
-- file: [media file]
-- type: "image" | "video" | "audio" | "document"
-```
-
-#### Download Media
-```http
-GET /api/download/:fileId
+GET  /api/commands        # List all commands
+GET  /api/commands/stats  # Command statistics
+GET  /api/users           # User management
+GET  /api/groups          # Group management
+POST /api/messages        # Send messages
 ```
 
 ### 🔐 Authentication
 
-#### JWT Authentication
 ```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "username": "admin",
-  "password": "your_password"
-}
+POST /api/auth/login      # Login to dashboard
+POST /api/auth/refresh    # Refresh token
+GET  /api/auth/session    # Get session info
 ```
 
-#### Session Management
+### 📈 Analytics
+
 ```http
-GET /api/auth/session
-POST /api/auth/refresh
-DELETE /api/auth/logout
-```
-
-### 📊 Analytics
-
-#### Usage Analytics
-```http
-GET /api/analytics/usage
-GET /api/analytics/commands
-GET /api/analytics/users
-GET /api/analytics/performance
-```
-
-#### Error Monitoring
-```http
-GET /api/analytics/errors
-GET /api/analytics/logs
-```
-
-### 🎯 Webhook Integration
-
-#### Register Webhook
-```http
-POST /api/webhooks
-Content-Type: application/json
-
-{
-  "url": "https://your-app.com/webhook",
-  "events": ["message", "command", "error"],
-  "secret": "your_webhook_secret"
-}
-```
-
-#### Webhook Events
-- `message.received` - New message received
-- `command.executed` - Command executed
-- `user.joined` - User joined group
-- `error.occurred` - Error occurred
-- `bot.started` - Bot started
-- `bot.stopped` - Bot stopped
-
-## 🔧 Troubleshooting
-
-### 🚨 Common Issues & Solutions
-
-#### WhatsApp Connection Problems
-
-**❌ "Session invalid" Error**
-```bash
-# Solution 1: Clear session and restart
-rm -rf session/
-npm start
-
-# Solution 2: Check SESSION_ID format
-# Ensure it's a valid JSON object with proper structure
-
-# Solution 3: Regenerate session
-# Delete SESSION_ID from .env and scan QR code again
-```
-
-**❌ "Connection timeout" Error**
-```bash
-# Check internet connection
-ping google.com
-
-# Verify WhatsApp servers
-curl -I https://web.whatsapp.com
-
-# Check firewall settings
-sudo ufw status
-```
-
-**❌ QR Code not showing**
-```bash
-# Check web server port
-netstat -tlnp | grep :5000
-
-# Verify QR service configuration
-# Check logs for QR generation errors
-```
-
-#### Command Loading Issues
-
-**❌ "Command not found" Error**
-```bash
-# Check command file exists
-ls src/commands/general/ping.js
-
-# Verify command structure
-# Ensure export default is used (not module.exports)
-
-# Check for syntax errors
-node -c src/commands/general/ping.js
-```
-
-**❌ "Permission denied" Error**
-```bash
-# Check command permissions
-# Verify user has required permission level
-
-# Check bot owner numbers
-echo $OWNER_NUMBERS
-```
-
-#### Database Issues
-
-**❌ "Connection refused" Error**
-```bash
-# Check MongoDB status
-sudo systemctl status mongod
-
-# Verify connection URL
-mongosh "your_mongodb_url" --eval "db.adminCommand('ping')"
-
-# Check network connectivity
-telnet your-mongodb-host 27017
-```
-
-**❌ "Authentication failed" Error**
-```bash
-# Verify credentials
-# Check username/password in MONGODB_URL
-
-# Ensure user has proper permissions
-# Try connecting with mongo client first
-```
-
-#### Performance Issues
-
-**❌ High memory usage**
-```bash
-# Monitor memory usage
-htop
-free -h
-
-# Check for memory leaks
-# Restart bot periodically
-# Increase server memory if needed
-```
-
-**❌ Slow response times**
-```bash
-# Check system resources
-top
-iostat -x 1
-
-# Optimize database queries
-# Enable Redis caching
-# Check network latency
-```
-
-### 📊 Log Analysis
-
-#### Log Levels Configuration
-```env
-# Environment variables
-LOG_LEVEL=info          # debug, info, warn, error
-LOG_CONSOLE=true        # Console logging
-LOG_FILE=true          # File logging
-LOG_MAX_FILES=7        # Max log files to keep
-LOG_MAX_SIZE=10m       # Max size per log file
-```
-
-#### Reading Logs
-```bash
-# View recent logs
-tail -f logs/bot.log
-
-# Search for specific errors
-grep "ERROR" logs/bot.log
-
-# Filter by date
-grep "2025-01-19" logs/bot.log
-
-# PM2 logs (if using PM2)
-pm2 logs amazing-bot
-```
-
-#### Common Log Messages
-```
-✅ INFO: Bot initialization completed successfully
-✅ INFO: WhatsApp connection established
-✅ INFO: Command manager initialized with X commands
-
-⚠️ WARN: Using default encryption key
-⚠️ WARN: Database connection skipped
-
-❌ ERROR: Failed to load command
-❌ ERROR: Database connection failed
-❌ ERROR: Session invalid
-```
-
-### 🐛 Debug Mode
-
-#### Enable Debug Logging
-```env
-NODE_ENV=development
-LOG_LEVEL=debug
-VERBOSE=true
-```
-
-#### Debug Commands
-```bash
-# Test database connection
-npm run test:db
-
-# Test WhatsApp connection
-npm run test:wa
-
-# Run with inspector
-node --inspect index.js
-
-# Memory profiling
-node --inspect --expose-gc index.js
-```
-
-### 🔄 Recovery Procedures
-
-#### Emergency Restart
-```bash
-# Force restart
-pkill -f "node index.js"
-npm start
-
-# PM2 restart
-pm2 restart amazing-bot
-
-# Docker restart
-docker-compose restart bot
-```
-
-#### Data Recovery
-```bash
-# Restore from backup
-npm run restore
-
-# Clear corrupted data
-rm -rf session/
-rm -rf temp/
-rm -rf cache/
-
-# Reset database (CAUTION)
-# mongosh "your_db_url" --eval "db.dropDatabase()"
-```
-
-#### System Cleanup
-```bash
-# Clear logs
-pm2 flush amazing-bot
-rm -rf logs/*.log
-
-# Clear cache
-rm -rf temp/
-rm -rf media/cache/
-
-# Clear node modules and reinstall
-rm -rf node_modules/
-npm install
-```
-
-## 📊 Performance
-
-- **Response Time**: <100ms for basic commands
-- **Memory Usage**: ~50MB average
-- **Concurrent Users**: 100+ simultaneous
-- **Uptime**: 99.9% reliability
-- **Database**: MongoDB with connection pooling
-- **Caching**: Redis support for high performance
-
-## 🌍 Multi-Language Support
-
-Supports 10+ languages:
-- English (en)
-- Spanish (es)
-- French (fr)
-- German (de)
-- Portuguese (pt)
-- Arabic (ar)
-- Hindi (hi)
-- Chinese (zh)
-- Japanese (ja)
-- Korean (ko)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch
-3. Make your changes
-4. Add tests if needed
-5. Submit pull request
-
-## 📞 Support
-
-- **Developer**: Ilom
-- **Website**: https://ilom.tech
-- **Email**: contact@ilom.tech
-- **Issues**: Report bugs and request features
-
-## 📜 License
-
-MIT License - Feel free to use, modify, and distribute.
-
-## 🚀 Deployment Guide
-
-### ☁️ Cloud Platforms
-
-#### Replit (Easiest)
-<div align="center">
-
-[![Deploy to Replit](https://img.shields.io/badge/Deploy%20to-Replit-667eea?style=for-the-badge&logo=replit)](https://replit.com/github/NexusCoders-cyber/Amazing-Bot-)
-
-</div>
-
-1. **Fork & Import**
-   ```bash
-   # Click the button above or manually import
-   # Repository: https://github.com/NexusCoders-cyber/Amazing-Bot-
-   ```
-
-2. **Environment Setup**
-   ```bash
-   # Add these to Replit Secrets:
-   SESSION_ID=your_session_id
-   MONGODB_URL=your_mongodb_url
-   BOT_NAME=Amazing Bot
-   OWNER_NUMBERS=your_number
-   ```
-
-3. **Run the Bot**
-   ```bash
-   # Click the Run button or use:
-   npm start
-   ```
-
-#### Railway
-<div align="center">
-
-[![Deploy to Railway](https://img.shields.io/badge/Deploy%20to-Railway-0B0D0E?style=for-the-badge&logo=railway)](https://railway.app)
-
-</div>
-
-1. **Connect Repository**
-   ```bash
-   # Link your GitHub repository
-   # Railway auto-detects Node.js
-   ```
-
-2. **Environment Variables**
-   ```env
-   NODE_ENV=production
-   SESSION_ID=your_session_id
-   MONGODB_URL=${{ MONGODB_URL }}
-   PORT=${{ PORT }}
-   ```
-
-3. **Database Setup**
-   ```bash
-   # Add MongoDB plugin
-   # Railway provides connection URL
-   ```
-
-#### Render
-<div align="center">
-
-[![Deploy to Render](https://img.shields.io/badge/Deploy%20to-Render-46E3B7?style=for-the-badge&logo=render)](https://render.com)
-
-</div>
-
-1. **Connect Repository**
-   ```bash
-   # Link GitHub repository
-   # Set build command: npm install
-   # Set start command: npm start
-   ```
-
-2. **Environment**
-   ```env
-   NODE_ENV=production
-   SESSION_ID=your_session_id
-   MONGODB_URL=your_mongodb_url
-   ```
-
-#### Heroku
-<div align="center">
-
-[![Deploy to Heroku](https://img.shields.io/badge/Deploy%20to-Heroku-430098?style=for-the-badge&logo=heroku)](https://heroku.com)
-
-</div>
-
-1. **Create App**
-   ```bash
-   # Create new Heroku app
-   heroku create your-bot-name
-   ```
-
-2. **Configure Environment**
-   ```bash
-   heroku config:set SESSION_ID="your_session_id"
-   heroku config:set MONGODB_URL="your_mongodb_url"
-   heroku config:set BOT_NAME="Amazing Bot"
-   heroku config:set OWNER_NUMBERS="your_number"
-   ```
-
-3. **Deploy**
-   ```bash
-   git push heroku main
-   ```
-
-### 🐳 Docker Deployment
-
-#### Docker Compose (Recommended)
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  bot:
-    build: .
-    ports:
-      - "5000:5000"
-    environment:
-      - NODE_ENV=production
-      - SESSION_ID=your_session_id
-      - MONGODB_URL=mongodb://mongo:27017/bot
-      - BOT_NAME=Amazing Bot
-    depends_on:
-      - mongo
-    restart: unless-stopped
-
-  mongo:
-    image: mongo:6.0
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-    restart: unless-stopped
-
-volumes:
-  mongo_data:
-```
-
-#### Docker Commands
-```bash
-# Build and run
-docker-compose up -d
-
-# View logs
-docker-compose logs -f bot
-
-# Stop and remove
-docker-compose down
-```
-
-### 🖥️ Local Development
-
-#### Windows
-```powershell
-# Clone repository
-git clone https://github.com/NexusCoders-cyber/Amazing-Bot-.git
-cd Amazing-Bot-
-
-# Install dependencies
-npm install
-
-# Configure environment
-copy .env.example .env
-# Edit .env with your settings
-
-# Start development server
-npm run dev
-```
-
-#### Linux/macOS
-```bash
-# Clone repository
-git clone https://github.com/NexusCoders-cyber/Amazing-Bot-.git
-cd Amazing-Bot-
-
-# Install dependencies
-npm install
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your settings
-
-# Start development server
-npm run dev
-```
-
-### 🔧 Production Setup
-
-#### PM2 Process Manager
-```bash
-# Install PM2 globally
-npm install -g pm2
-
-# Start with PM2
-pm2 start index.js --name "amazing-bot"
-
-# Save PM2 configuration
-pm2 save
-pm2 startup
-
-# View logs
-pm2 logs amazing-bot
-
-# Monitor processes
-pm2 monit
-```
-
-#### Nginx Reverse Proxy
-```nginx
-# /etc/nginx/sites-available/amazing-bot
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location / {
-        proxy_pass http://localhost:5000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-#### SSL with Let's Encrypt
-```bash
-# Install Certbot
-sudo apt install certbot python3-certbot-nginx
-
-# Get SSL certificate
-sudo certbot --nginx -d your-domain.com
-
-# Auto-renewal
-sudo crontab -e
-# Add: 0 12 * * * /usr/bin/certbot renew --quiet
-```
-
-### 📊 Monitoring & Scaling
-
-#### Health Checks
-```bash
-# Check if bot is running
-curl http://localhost:5000/api/health
-
-# Monitor with PM2
-pm2 show amazing-bot
-
-# System monitoring
-htop
-iotop
-```
-
-#### Log Management
-```bash
-# View application logs
-pm2 logs amazing-bot
-
-# System logs
-journalctl -u amazing-bot -f
-
-# Log rotation
-pm2 install pm2-logrotate
-```
-
-#### Backup Strategy
-```bash
-# Database backup
-mongodump --db bot --out /backups/$(date +%Y%m%d)
-
-# File backup
-tar -czf /backups/bot-files-$(date +%Y%m%d).tar.gz /path/to/bot
-
-# Automated backup script
-crontab -e
-# Add: 0 2 * * * /path/to/backup-script.sh
+GET /api/analytics/usage       # Usage analytics
+GET /api/analytics/commands    # Command analytics
+GET /api/analytics/performance # Performance metrics
 ```
 
 ---
 
-**🚀 Ready to make your WhatsApp legendary? Deploy now and experience the power of Ilom Bot!**
+## 🔧 Troubleshooting
 
-*Built with ❤️ by Ilom - Making WhatsApp automation accessible to everyone*
+### Common Issues
+
+<details>
+<summary><b>❌ MongoDB Connection Timeout</b></summary>
+
+**Problem:** `Operation users.findOne() buffering timed out after 10000ms`
+
+**✅ Solution:** 
+This is now automatically handled! The bot will:
+- Use real database if connected
+- Use temporary data if database unavailable
+- No timeout errors sent to your WhatsApp
+
+**For production:**
+```env
+# Add valid MongoDB URL
+MONGODB_URL=mongodb+srv://username:password@cluster.mongodb.net/botdb
+```
+
+**For testing without database:**
+```env
+# Leave empty or use localhost
+MONGODB_URL=mongodb://localhost:27017/ilombot
+```
+
+</details>
+
+<details>
+<summary><b>❌ Deployment Failed - Missing Lockfile</b></summary>
+
+**Problem:** `Couldn't determine Node.js package manager. Package manager lockfile not found.`
+
+**✅ Solution:**
+This is fixed! The `package-lock.json` is now included in the repository.
+
+**If you forked before the fix:**
+```bash
+# In your local clone
+npm install          # Regenerate package-lock.json
+git add package-lock.json
+git commit -m "Add package-lock.json"
+git push origin main
+```
+
+</details>
+
+<details>
+<summary><b>❌ Session Invalid Error</b></summary>
+
+**Solution 1: Clear and restart**
+```bash
+rm -rf cache/auth_info_baileys
+npm start
+# Scan new QR code
+```
+
+**Solution 2: Check SESSION_ID format**
+- Must be valid JSON or Base64 string
+- Check for proper Ilom~ prefix if using Base64
+
+**Solution 3: Regenerate**
+- Delete SESSION_ID from .env
+- Restart bot
+- Scan QR code
+- Copy new SESSION_ID from logs
+
+</details>
+
+<details>
+<summary><b>❌ Commands Not Loading</b></summary>
+
+**Check command file structure:**
+```javascript
+// Correct format (ES Module)
+export default {
+    name: 'command',
+    aliases: ['alias'],
+    category: 'general',
+    // ... rest of command
+};
+```
+
+**Verify:**
+```bash
+# Check for syntax errors
+node -c src/commands/general/commandname.js
+
+# Check logs
+tail -f logs/bot.log | grep ERROR
+```
+
+</details>
+
+<details>
+<summary><b>❌ Bot Not Responding</b></summary>
+
+**Checklist:**
+- [ ] Is the bot online? Check logs/dashboard
+- [ ] Is WhatsApp connected? Look for "✅ WhatsApp connection established"
+- [ ] Is prefix correct? Default is `.`
+- [ ] Are you banned? Contact bot owner
+- [ ] Is group banned? Use `.groupinfo` to check
+
+**Debug:**
+```bash
+# Check process
+ps aux | grep node
+
+# Check logs
+tail -100 logs/bot.log
+
+# Test ping
+# Send: .ping in WhatsApp
+```
+
+</details>
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how:
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/AmazingFeature`)
+3. **Commit** changes (`git commit -m 'Add AmazingFeature'`)
+4. **Push** to branch (`git push origin feature/AmazingFeature`)
+5. **Open** a Pull Request
+
+### Development Setup
+
+```bash
+# Clone your fork
+git clone https://github.com/YOUR_USERNAME/Amazing-Bot-.git
+
+# Install dependencies
+npm install
+
+# Create dev environment
+cp .env.example .env.development
+
+# Run in dev mode
+npm run dev
+```
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+```
+MIT License - Copyright (c) 2025 Ilom
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software...
+```
+
+---
+
+## 🙏 Acknowledgments
+
+<div align="center">
+
+Built with ❤️ by [Ilom](https://github.com/NexusCoders-cyber)
+
+### Powered By
+
+[![Baileys](https://img.shields.io/badge/Baileys-WhatsApp_API-25D366?style=flat-square&logo=whatsapp)](https://github.com/WhiskeySockets/Baileys)
+[![OpenAI](https://img.shields.io/badge/OpenAI-GPT-412991?style=flat-square&logo=openai)](https://openai.com)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Database-47A248?style=flat-square&logo=mongodb)](https://www.mongodb.com)
+[![Node.js](https://img.shields.io/badge/Node.js-Runtime-339933?style=flat-square&logo=node.js)](https://nodejs.org)
+
+### Special Thanks
+
+- [@WhiskeySockets](https://github.com/WhiskeySockets) for Baileys library
+- OpenAI & Google for AI APIs
+- All contributors and users
+
+</div>
+
+---
+
+## 📞 Support
+
+<div align="center">
+
+Need help? Reach out!
+
+[![GitHub Issues](https://img.shields.io/badge/GitHub-Issues-181717?style=for-the-badge&logo=github)](https://github.com/NexusCoders-cyber/Amazing-Bot-/issues)
+[![WhatsApp](https://img.shields.io/badge/WhatsApp-Support-25D366?style=for-the-badge&logo=whatsapp)](https://wa.me/your_number)
+[![Telegram](https://img.shields.io/badge/Telegram-Channel-26A5E4?style=for-the-badge&logo=telegram)](https://t.me/your_channel)
+[![Discord](https://img.shields.io/badge/Discord-Community-5865F2?style=for-the-badge&logo=discord)](https://discord.gg/your_server)
+
+### 📧 Contact
+
+- **Email:** support@ilom.tech
+- **Website:** [ilom.tech](https://ilom.tech)
+- **GitHub:** [@NexusCoders-cyber](https://github.com/NexusCoders-cyber)
+
+</div>
+
+---
+
+<div align="center">
+
+### ⭐ Star this repo if you found it helpful!
+
+Made with 💙 by the **NexusCoders** team
+
+**[⬆ Back to Top](#-amazing-bot-)**
+
+</div>
