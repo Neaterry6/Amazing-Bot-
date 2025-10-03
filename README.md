@@ -457,14 +457,45 @@ MONGODB_URL=mongodb://localhost:27017/ilombot
 
 ## 📖 Command Guide
 
+### ✨ Enhanced Help Command
+
+The bot now features a **stylish, user-personalized help menu** with:
+
+- **🎯 User Information Display** - Shows your name, ID, status, credits, and more
+- **⚡ Real-time Stats** - Current date, time, and bot status
+- **📱 Interactive Buttons** - Quick access to owner, support, and stats
+- **💬 Reply Support** - Reply to command help for detailed assistance
+- **🎨 Beautiful Formatting** - Clean, organized command categories
+- **🌐 Global Image Support** - Thumbnails for enhanced visual appeal
+
+#### Example Help Menu Output:
+```
+╭──⦿【 ⚡ ILOM BOT 】
+│ 🎯 𝗨𝘀𝗲𝗿: Your Name
+│ 🔰 𝗜𝗗: @your_id
+│ 👑 𝗦𝘁𝗮𝘁𝘂𝘀: PREMIUM ELITE / FREE USER
+│ ⚡ 𝗣𝗼𝘄𝗲𝗿: UNLIMITED ACCESS / LIMITED ACCESS
+│ 💎 𝗖𝗿𝗲𝗱𝗶𝘁𝘀: ∞ INFINITE / Balance
+│ 🌐 𝗣𝗿𝗲𝗳𝗶𝘅: .
+│ 🤖 𝗦𝘆𝘀𝘁𝗲𝗺: Bot Name v1.0.0
+│ 👨‍💻 𝗖𝗿𝗲𝗮𝘁𝗼𝗿: Ilom
+│ 🔄 𝗦𝘁𝗮𝘁𝘂𝘀: ONLINE & ACTIVE
+│ 📅 𝗗𝗮𝘁𝗲: DD/MM/YYYY
+│ 📆 𝗗𝗮𝘆: Day Name
+│ ⏰ 𝗧𝗶𝗺𝗲: HH:MM:SS AM/PM UTC
+╰────────⦿
+```
+
 ### 🎯 Essential Commands
 
 ```bash
-.help              # Display all available commands
+.help              # Display all available commands with user info
+.help <command>    # Get detailed info about a specific command
 .menu              # Interactive command menu
 .ping              # Check bot response time
 .info              # Detailed bot information
 .status            # System performance stats
+.support           # Join support group
 ```
 
 ### 👑 Admin Commands
@@ -779,14 +810,26 @@ MONGODB_URL=mongodb://localhost:27017/ilombot
 **✅ Solution:**
 This is fixed! The `package-lock.json` is now included in the repository.
 
-**If you forked before the fix:**
+**IMPORTANT FOR GITHUB USERS:**
+The `package-lock.json` file exists locally but may not be in your GitHub repository. To fix deployment on Koyeb/Railway/Render:
+
 ```bash
-# In your local clone
-npm install          # Regenerate package-lock.json
+# 1. Ensure package-lock.json exists locally
+npm install
+
+# 2. Commit and push to GitHub
 git add package-lock.json
-git commit -m "Add package-lock.json"
+git commit -m "Add package-lock.json for deployment"
 git push origin main
+
+# 3. Redeploy on your platform
+# The deployment should now succeed
 ```
+
+**Why this happens:**
+- Build platforms need `package-lock.json` to install exact dependency versions
+- Without it, npm cannot determine which package manager was used
+- This file must be in your GitHub repository, not just locally
 
 </details>
 
