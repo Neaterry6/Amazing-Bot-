@@ -410,10 +410,8 @@ UserSchema.pre('save', function(next) {
 
 const User = mongoose.model('User', UserSchema);
 
-const isSimulatedMode = () => {
-    return process.env.NODE_ENV === 'development' || 
-           process.env.REPLIT_ENVIRONMENT ||
-           mongoose.connection.readyState !== 1;
+const isDatabaseConnected = () => {
+    return mongoose.connection.readyState === 1;
 };
 
 const mockUser = (jid, userData = {}) => ({
@@ -441,21 +439,21 @@ const mockUser = (jid, userData = {}) => ({
 });
 
 async function getUser(jid) {
+    if (!isDatabaseConnected()) {
+        return mockUser(jid);
+    }
     try {
-        if (isSimulatedMode()) {
-            return mockUser(jid);
-        }
-        return await User.findOne({ jid });
+        return await User.findOne({ jid }).maxTimeMS(5000);
     } catch (error) {
         return mockUser(jid);
     }
 }
 
 async function createUser(userData) {
+    if (!isDatabaseConnected()) {
+        return mockUser(userData.jid, userData);
+    }
     try {
-        if (isSimulatedMode()) {
-            return mockUser(userData.jid, userData);
-        }
         const user = new User(userData);
         return await user.save();
     } catch (error) {
@@ -464,21 +462,21 @@ async function createUser(userData) {
 }
 
 async function updateUser(jid, updateData) {
+    if (!isDatabaseConnected()) {
+        return mockUser(jid, updateData);
+    }
     try {
-        if (isSimulatedMode()) {
-            return mockUser(jid, updateData);
-        }
-        return await User.findOneAndUpdate({ jid }, updateData, { new: true, upsert: true });
+        return await User.findOneAndUpdate({ jid }, updateData, { new: true, upsert: true, maxTimeMS: 5000 });
     } catch (error) {
         return mockUser(jid, updateData);
     }
 }
 
 async function deleteUser(jid) {
+    if (!isDatabaseConnected()) {
+        return { deletedCount: 1 };
+    }
     try {
-        if (isSimulatedMode()) {
-            return { deletedCount: 1 };
-        }
         return await User.findOneAndDelete({ jid });
     } catch (error) {
         return { deletedCount: 0 };
@@ -486,10 +484,10 @@ async function deleteUser(jid) {
 }
 
 async function getUserStats() {
+    if (!isDatabaseConnected()) {
+        return { total: 100, premium: 10, banned: 5, active: 50 };
+    }
     try {
-        if (isSimulatedMode()) {
-            return { total: 100, premium: 10, banned: 5, active: 50 };
-        }
         const total = await User.countDocuments();
         const premium = await User.countDocuments({ isPremium: true });
         const banned = await User.countDocuments({ isBanned: true });

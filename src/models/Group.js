@@ -139,10 +139,8 @@ GroupSchema.methods.unban = function() {
 
 const Group = mongoose.model('Group', GroupSchema);
 
-const isSimulatedMode = () => {
-    return process.env.NODE_ENV === 'development' || 
-           process.env.REPLIT_ENVIRONMENT ||
-           mongoose.connection.readyState !== 1;
+const isDatabaseConnected = () => {
+    return mongoose.connection.readyState === 1;
 };
 
 const mockGroup = (jid, groupData = {}) => ({
@@ -167,21 +165,21 @@ const mockGroup = (jid, groupData = {}) => ({
 });
 
 async function getGroup(jid) {
+    if (!isDatabaseConnected()) {
+        return mockGroup(jid);
+    }
     try {
-        if (isSimulatedMode()) {
-            return mockGroup(jid);
-        }
-        return await Group.findOne({ jid });
+        return await Group.findOne({ jid }).maxTimeMS(5000);
     } catch (error) {
         return mockGroup(jid);
     }
 }
 
 async function createGroup(groupData) {
+    if (!isDatabaseConnected()) {
+        return mockGroup(groupData.jid, groupData);
+    }
     try {
-        if (isSimulatedMode()) {
-            return mockGroup(groupData.jid, groupData);
-        }
         const group = new Group(groupData);
         return await group.save();
     } catch (error) {
@@ -190,21 +188,21 @@ async function createGroup(groupData) {
 }
 
 async function updateGroup(jid, updateData) {
+    if (!isDatabaseConnected()) {
+        return mockGroup(jid, updateData);
+    }
     try {
-        if (isSimulatedMode()) {
-            return mockGroup(jid, updateData);
-        }
-        return await Group.findOneAndUpdate({ jid }, updateData, { new: true, upsert: true });
+        return await Group.findOneAndUpdate({ jid }, updateData, { new: true, upsert: true, maxTimeMS: 5000 });
     } catch (error) {
         return mockGroup(jid, updateData);
     }
 }
 
 async function deleteGroup(jid) {
+    if (!isDatabaseConnected()) {
+        return { deletedCount: 1 };
+    }
     try {
-        if (isSimulatedMode()) {
-            return { deletedCount: 1 };
-        }
         return await Group.findOneAndDelete({ jid });
     } catch (error) {
         return { deletedCount: 0 };
@@ -212,10 +210,10 @@ async function deleteGroup(jid) {
 }
 
 async function getGroupStats() {
+    if (!isDatabaseConnected()) {
+        return { total: 50, active: 45, banned: 5 };
+    }
     try {
-        if (isSimulatedMode()) {
-            return { total: 50, active: 45, banned: 5 };
-        }
         const totalGroups = await Group.countDocuments();
         const bannedGroups = await Group.countDocuments({ isBanned: true });
         const activeGroups = totalGroups - bannedGroups;
