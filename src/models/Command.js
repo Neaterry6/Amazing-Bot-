@@ -40,6 +40,9 @@ const Command = mongoose.model('Command', CommandSchema);
 
 async function logCommand(user, command, group, isGroup, executionTime) {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return null;
+        }
         const commandLog = new Command({
             user,
             command,
@@ -49,12 +52,15 @@ async function logCommand(user, command, group, isGroup, executionTime) {
         });
         return await commandLog.save();
     } catch (error) {
-        throw error;
+        return null;
     }
 }
 
 async function getCommandStats(command = null, user = null, timeRange = null) {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return [];
+        }
         let match = {};
 
         if (command) {
@@ -85,17 +91,20 @@ async function getCommandStats(command = null, user = null, timeRange = null) {
 
         return stats;
     } catch (error) {
-        throw error;
+        return [];
     }
 }
 
 async function getUserCommandHistory(user, limit = 50) {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return [];
+        }
         return await Command.find({ user })
             .sort({ timestamp: -1 })
             .limit(limit);
     } catch (error) {
-        throw error;
+        return [];
     }
 }
 

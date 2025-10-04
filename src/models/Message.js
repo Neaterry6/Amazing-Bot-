@@ -65,43 +65,65 @@ const Message = mongoose.model('Message', MessageSchema);
 
 async function createMessage(messageData) {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return null;
+        }
         const message = new Message(messageData);
         return await message.save();
     } catch (error) {
-        throw error;
+        return null;
     }
 }
 
 async function getMessage(messageId) {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return null;
+        }
         return await Message.findOne({ messageId });
     } catch (error) {
-        throw error;
+        return null;
     }
 }
 
 async function getMessagesByUser(user, limit = 100) {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return [];
+        }
         return await Message.find({ sender: user })
             .sort({ timestamp: -1 })
             .limit(limit);
     } catch (error) {
-        throw error;
+        return [];
     }
 }
 
 async function getMessagesByGroup(group, limit = 100) {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return [];
+        }
         return await Message.find({ from: group })
             .sort({ timestamp: -1 })
             .limit(limit);
     } catch (error) {
-        throw error;
+        return [];
     }
 }
 
 async function getMessageStats(timeRange = null) {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return {
+                totalMessages: 0,
+                textMessages: 0,
+                mediaMessages: 0,
+                commandMessages: 0,
+                groupMessages: 0,
+                privateMessages: 0
+            };
+        }
         let match = {};
 
         if (timeRange) {
@@ -132,15 +154,25 @@ async function getMessageStats(timeRange = null) {
             privateMessages: 0
         };
     } catch (error) {
-        throw error;
+        return {
+            totalMessages: 0,
+            textMessages: 0,
+            mediaMessages: 0,
+            commandMessages: 0,
+            groupMessages: 0,
+            privateMessages: 0
+        };
     }
 }
 
 async function deleteMessage(messageId) {
     try {
+        if (mongoose.connection.readyState !== 1) {
+            return null;
+        }
         return await Message.findOneAndDelete({ messageId });
     } catch (error) {
-        throw error;
+        return null;
     }
 }
 
