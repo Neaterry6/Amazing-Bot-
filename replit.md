@@ -6,7 +6,18 @@ This is a powerful WhatsApp bot built with Baileys, featuring AI integration, me
 **Bot Name:** Ilom Bot  
 **Version:** 1.0.0  
 **Creator:** Ilom  
-**Total Commands:** 122+
+**Total Commands:** 126
+
+## Recent Changes (October 4, 2025)
+
+### ✅ Fixed Command Recognition Issue
+- **Issue**: Bot was loading commands but not recognizing them (e.g., "ping is not a valid command")
+- **Root Cause**: Two separate command loading systems were not synchronized - `CommandManager` loaded commands but `CommandHandler` (used by message handler) was never initialized
+- **Solution**: 
+  - Fixed `commandHandler.loadCommands()` to properly use ES modules (`__dirname` not available in ES modules)
+  - Updated initialization to call `commandHandler.loadCommands()` instead of `commandManager.initializeCommands()`
+  - Added proper `fileURLToPath` and `dirname` imports for ES module compatibility
+- **Result**: All 126 commands now load and function correctly
 
 ## Recent Changes (October 3, 2025)
 

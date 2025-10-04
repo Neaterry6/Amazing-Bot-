@@ -1,5 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 import config from '../config.js';
 import logger from '../utils/logger.js';
 import { getUser, updateUser } from '../models/User.js';
@@ -8,6 +10,9 @@ import { logCommand } from '../models/Command.js';
 import rateLimiter from '../utils/rateLimiter.js';
 import antiSpam from '../utils/antiSpam.js';
 import { cache } from '../utils/cache.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 class CommandHandler {
     constructor() {

@@ -24,7 +24,6 @@ import mediaHandler from './src/handlers/mediaHandler.js';
 import errorHandler from './src/handlers/errorHandler.js';
 import config from './src/config.js';
 import constants from './src/constants.js';
-import { initializeCommands } from './src/utils/commandManager.js';
 import { loadPlugins, getActiveCount } from './src/utils/pluginManager.js';
 import { startScheduler } from './src/utils/scheduler.js';
 import { initializeCache } from './src/utils/cache.js';
@@ -544,7 +543,7 @@ async function initializeBot() {
         await initializeCache();
         
         logger.info('Loading command modules...');
-        await initializeCommands();
+        await commandHandler.loadCommands();
         
         logger.info('Loading plugin system...');
         await loadPlugins();
