@@ -149,6 +149,9 @@ class CommandHandler {
                 case 'premium':
                     if (user.isPremium || config.ownerNumbers.includes(user.jid)) return true;
                     break;
+                case 'user':
+                    if (config.publicMode || config.ownerNumbers.includes(user.jid)) return true;
+                    break;
                 case 'group':
                     if (group) return true;
                     break;
