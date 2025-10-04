@@ -10,7 +10,16 @@ This is a powerful WhatsApp bot built with Baileys, featuring AI integration, me
 
 ## Recent Changes (October 4, 2025)
 
-### ✅ Fixed Permission System and Replit Setup
+### ✅ Fixed Database Timeout Errors (Latest)
+- **Issue**: Commands throwing "Operation `commands.insertOne()` buffering timed out" and "Operation `messages.insertOne()` buffering timed out" errors
+- **Root Cause**: Database models attempted MongoDB operations even when database was unavailable in development mode, causing 10-second timeout errors
+- **Solutions**:
+  - Added `mongoose.connection.readyState !== 1` checks to all database operations in `src/models/Command.js` and `src/models/Message.js`
+  - Modified functions to return safe defaults (null or empty arrays) instead of throwing errors when database is unavailable
+  - Functions fixed: logCommand, getCommandStats, getUserCommandHistory, createMessage, getMessage, getMessagesByUser, getMessagesByGroup, getMessageStats, deleteMessage
+- **Result**: All commands now work perfectly without database errors, help command displays all 126 commands correctly from src/commands directory
+
+### ✅ Fixed Permission System and Replit Setup (Earlier)
 - **Issue**: Commands not responding, "Access Denied" errors, and MongoDB connection timeout
 - **Root Causes**: 
   1. Permission system missing 'user' permission handler - all user commands were denied
@@ -218,4 +227,4 @@ None. Bot is fully operational and ready for use in Replit environment.
 - Maintainable codebase
 
 ## Last Updated
-October 4, 2025 - Fixed permission system, configured Replit environment, enabled public mode
+October 4, 2025 - Fixed database timeout errors in Command and Message models, all 126 commands working perfectly
