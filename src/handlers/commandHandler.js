@@ -258,17 +258,16 @@ class CommandHandler {
                 (await sock.groupMetadata(from)).participants
                     .find(p => p.id === sock.user.id)?.admin !== undefined : false;
             
+            const isOwner = config.ownerNumbers.some(num => {
+                const cleanNum = num.replace('@s.whatsapp.net', '');
+                const cleanUserJid = sender.replace('@s.whatsapp.net', '');
+                return cleanNum === cleanUserJid || num === sender;
+            });
+            
             const hasPermission = await this.checkPermissions(command, user, group, isGroupAdmin, isBotAdmin);
             if (!hasPermission) {
                 await sock.sendMessage(from, {
                     text: `❌ *Access Denied*\n\nYou don't have permission to use this command.\n\n*Required:* ${command.permissions?.join(', ') || 'None'}`
-                });
-                return true;
-            }
-            
-            if (isGroup && command.category === 'owner' && !config.ownerNumbers.includes(sender)) {
-                await sock.sendMessage(from, {
-                    text: `❌ *Owner Command*\n\nThis command can only be used by the bot owner in private chat.`
                 });
                 return true;
             }

@@ -376,4 +376,46 @@ export default {
                                     info += `│ 📁 𝗖𝗮𝘁𝗲𝗴𝗼𝗿𝘆: ${category}\n`;
                                     info += `│ 📄 𝗙𝗶𝗹𝗲: ${file}\n`;
                                     info += `│ 📖 𝗗𝗲𝘀𝗰: ${cmd.description || 'No description'}\n`;
-                                    info += `│ 💡 𝗨𝘀𝗮𝗴𝗲: $
+                                    info += `│ 💡 𝗨𝘀𝗮𝗴𝗲: ${prefix}${cmd.usage || cmd.name}\n`;
+                                    info += `│ ⏱️ 𝗖𝗼𝗼𝗹𝗱𝗼𝘄𝗻: ${cmd.cooldown || 0}s\n`;
+                                    info += `│ 🔒 𝗣𝗲𝗿𝗺𝗶𝘀𝘀𝗶𝗼𝗻𝘀: ${cmd.permissions?.join(', ') || 'All'}\n`;
+                                    info += `│ 💎 𝗣𝗿𝗲𝗺𝗶𝘂𝗺: ${cmd.premium ? 'Yes' : 'No'}\n`;
+                                    info += `│ 👁️ 𝗛𝗶𝗱𝗱𝗲𝗻: ${cmd.hidden ? 'Yes' : 'No'}\n`;
+                                    if (cmd.example) {
+                                        info += `│\n│ 📝 𝗘𝘅𝗮𝗺𝗽𝗹𝗲:\n${cmd.example.split('\n').map(line => `│    ${line}`).join('\n')}\n`;
+                                    }
+                                    info += '╰────────⦿\n\n╭─────────────⦿\n│💫 | [ Ilom Bot 🍀 ]\n╰────────────⦿';
+
+                                    await sock.sendMessage(from, { text: info }, { quoted: message });
+                                    return;
+                                }
+                            } catch (error) {
+                                continue;
+                            }
+                        }
+                    }
+
+                    if (!found) {
+                        await sock.sendMessage(from, {
+                            text: `╭──⦿【 ❌ ERROR 】\n│ 𝗠𝗲𝘀𝘀𝗮𝗴𝗲: Command not found\n│\n│ 🔍 𝗡𝗮𝗺𝗲: ${cmdName}\n╰────────⦿`
+                        }, { quoted: message });
+                    }
+                    break;
+                }
+
+                default: {
+                    const helpText = `╭──⦿【 🛠️ CMD MANAGEMENT 】\n│\n│ 📋 𝗔𝘃𝗮𝗶𝗹𝗮𝗯𝗹𝗲 𝗔𝗰𝘁𝗶𝗼𝗻𝘀:\n│\n│ 📂 list [category] - List commands\n│ 🔍 find <name> - Search commands\n│ 📥 get <path> - Download command\n│ 📦 install <url> [category] - Install from URL\n│ 📤 upload [category] - Upload from file\n│ 🗑️ delete <path> - Remove command\n│ 🔄 reload <name> - Reload command\n│ ℹ️ info <name> - Show details\n│\n│ 📝 𝗘𝘅𝗮𝗺𝗽𝗹𝗲𝘀:\n│ • ${prefix}cmd list fun\n│ • ${prefix}cmd find ping\n│ • ${prefix}cmd get general/ping.js\n│ • ${prefix}cmd info help\n│ • ${prefix}cmd reload menu\n│\n╰────────⦿\n\n╭─────────────⦿\n│💫 | [ Ilom Bot 🍀 ]\n╰────────────⦿`;
+                    
+                    await sock.sendMessage(from, { text: helpText }, { quoted: message });
+                    break;
+                }
+            }
+
+        } catch (error) {
+            console.error('CMD command error:', error);
+            await sock.sendMessage(from, {
+                text: `╭──⦿【 ❌ SYSTEM ERROR 】\n│ 𝗠𝗲𝘀𝘀𝗮𝗴𝗲: ${error.message}\n│\n│ ⚠️ Command system error\n│ 🔄 Please try again\n╰────────⦿`
+            }, { quoted: message });
+        }
+    }
+};
