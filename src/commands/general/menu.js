@@ -1,206 +1,338 @@
 import config from '../../config.js';
-
-
+import { commandHandler } from '../../handlers/commandHandler.js';
+import { getUser } from '../../models/User.js';
+import moment from 'moment';
+import fetch from 'node-fetch';
 
 export default {
     name: 'menu',
     aliases: ['commands', 'list'],
     category: 'general',
-    description: 'Interactive command menu with categories',
+    description: 'Enhanced interactive command menu with Dragon Ball theme',
     usage: 'menu [category]',
     cooldown: 3,
     permissions: ['user'],
+    supportsButtons: true,
 
-    async execute({ sock, message, args, from, prefix }) {
+    async execute({ sock, message, args, from, prefix, sender }) {
         const category = args[0]?.toLowerCase();
         
         if (category) {
-            return this.showCategoryCommands(sock, from, category, prefix);
+            return this.showCategoryCommands(sock, message, from, category, prefix);
         }
+
+        const user = await getUser(sender) || {
+            name: 'Warrior',
+            isPremium: false,
+            xp: 0,
+            economy: { balance: 0 }
+        };
         
-        const menuText = `🎮 *${config.botName || 'WhatsApp Bot'} - Command Menu*
+        const categories = commandHandler.getAllCategories();
+        const totalCommands = commandHandler.getCommandCount();
+        
+        const now = moment();
+        const day = now.format('dddd');
+        const date = now.format('DD/MM/YYYY');
+        const time = now.format('hh:mm:ss A');
+        
+        const userStatus = user.isPremium ? '⚡ PREMIUM WARRIOR' : '🌟 FREE SAIYAN';
+        const userPower = user.isPremium ? '♾️ ULTRA INSTINCT' : '⚔️ BASE FORM';
+        const userCredits = user.isPremium ? '∞ ZENI' : `${user.economy?.balance ?? 0} ZENI`;
+        const userName = user.name || 'Warrior';
+        const userId = sender.split('@')[0];
+        const userLevel = Math.floor((user.xp ?? 0) / 1000) + 1;
 
-━━━━━━━━━━━━━━━━━━━━━
+        const dragonBallImage = await this.getRandomDragonBallImage();
+        
+        const categoryMap = {
+            'admin': { emoji: '🛡️', title: 'ADMIN', count: 0 },
+            'ai': { emoji: '🤖', title: 'AI', count: 0 },
+            'downloader': { emoji: '📥', title: 'DOWNLOADER', count: 0 },
+            'economy': { emoji: '💰', title: 'ECONOMY', count: 0 },
+            'fun': { emoji: '🎭', title: 'FUN', count: 0 },
+            'games': { emoji: '🎮', title: 'GAMES', count: 0 },
+            'general': { emoji: '📱', title: 'GENERAL', count: 0 },
+            'media': { emoji: '🎨', title: 'MEDIA', count: 0 },
+            'owner': { emoji: '👑', title: 'OWNER', count: 0 },
+            'utility': { emoji: '🔧', title: 'UTILITY', count: 0 }
+        };
 
-🎯 **COMMAND CATEGORIES** (128+ Commands)
+        for (const cat of categories) {
+            const commands = commandHandler.getCommandsByCategory(cat);
+            if (categoryMap[cat]) {
+                categoryMap[cat].count = commands.length;
+            }
+        }
 
-🎮 **GAMES** (12 commands)
-├ Interactive games and challenges
-├ 🎲 akinator, blackjack, guess, hangman
-├ 🧮 math, memory, riddle, rps, slots
-╰ 🎯 tictactoe, trivia, word
+        let menuText = `╔════════════════════╗
+║   🐉 ${config.botName.toUpperCase()} MENU 🐉   
+╚════════════════════╝
 
-🤖 **AI & SMART** (9 commands)
-├ AI-powered features  
-├ 🧠 chatgpt, gemini, analyze, ocr
-├ 🗣️ stt, tts, translate
-╰ 🎨 imagine
+╭─⦿「 ⚡ WARRIOR PROFILE 」
+│ ╭───────────────────╮
+│ │ 👤 𝗡𝗮𝗺𝗲: ${userName}
+│ │ 🆔 𝗜𝗗: @${userId}
+│ │ 🎯 𝗟𝗲𝘃𝗲𝗹: ${userLevel}
+│ │ 👑 𝗦𝘁𝗮𝘁𝘂𝘀: ${userStatus}
+│ │ 💪 𝗣𝗼𝘄𝗲𝗿: ${userPower}
+│ │ 💎 𝗖𝗿𝗲𝗱𝗶𝘁𝘀: ${userCredits}
+│ ╰───────────────────╯
+╰────────⦿
 
-📥 **DOWNLOADERS** (10 commands)
-├ Media downloaders from social platforms
-├ 📱 tikdl, igdl, fbdl, twdl, pinterest
-├ 🎵 youtube, ytmp3, ytmp4
-╰ 📁 gdrive, mediafire
+╭─⦿「 🤖 BOT STATUS 」
+│ ╭───────────────────╮
+│ │ 🌐 𝗣𝗿𝗲𝗳𝗶𝘅: ${prefix}
+│ │ 🤖 𝗕𝗼𝘁: ${config.botName}
+│ │ 📦 𝗩𝗲𝗿𝘀𝗶𝗼𝗻: ${config.botVersion}
+│ │ 👨‍💻 𝗢𝘄𝗻𝗲𝗿: ${config.ownerName}
+│ │ 🔄 𝗠𝗼𝗱𝗲: ONLINE 🟢
+│ │ 📅 𝗗𝗮𝘁𝗲: ${date}
+│ │ 📆 𝗗𝗮𝘆: ${day}
+│ │ ⏰ 𝗧𝗶𝗺𝗲: ${time}
+│ ╰───────────────────╯
+╰────────⦿
 
-💰 **ECONOMY** (12 commands)
-├ Virtual economy and gambling
-├ 💳 balance, daily, weekly, work
-├ 🛒 shop, buy, sell, inventory
-╰ 🎰 gamble, rob, transfer
+`;
 
-🎨 **MEDIA** (14 commands)
-├ Image and video processing
-├ 🖼️ sticker, blur, crop, resize, filter
-├ 🎬 gif, merge, compress, watermark
-╰ 🔄 toimg, toaudio, tovideo
+        for (const category of categories.sort()) {
+            const commands = commandHandler.getCommandsByCategory(category);
+            if (commands.length === 0) continue;
+            
+            const categoryInfo = categoryMap[category] || { emoji: '⭐', title: category.toUpperCase(), count: commands.length };
+            
+            menuText += `╭─⦿「 ${categoryInfo.emoji} ${categoryInfo.title} 」
+│ ╭───────────────────╮\n`;
+            
+            const commandList = commands.map(cmd => `✧${cmd.name}`).join(' ');
+            const words = commandList.split(' ');
+            let currentLine = '│ │';
+            
+            for (const word of words) {
+                if ((currentLine + ' ' + word).length > 60) {
+                    menuText += currentLine + '\n';
+                    currentLine = '│ │' + word;
+                } else {
+                    currentLine += (currentLine === '│ │' ? '' : ' ') + word;
+                }
+            }
+            
+            if (currentLine !== '│ │') {
+                menuText += currentLine + '\n';
+            }
+            
+            menuText += `│ ╰───────────────────╯
+│ 📊 Total: ${categoryInfo.count} commands
+╰────────⦿
 
-🛡️ **ADMIN** (15 commands)
-├ Group management and moderation
-├ 👮 ban, kick, mute, warn, promote
-├ 👥 tagall, hidetag, welcome
-╰ ⚙️ antilink, setdesc, setname
+`;
+        }
 
-👑 **OWNER** (18 commands)
-├ Bot owner exclusive commands
-├ 🔧 eval, exec, restart, shutdown
-├ 📢 broadcast, join, leave
-╰ 🎖️ addprem, delprem, backup
+        menuText += `╭─⦿「 📊 STATISTICS 」
+│ ╭───────────────────╮
+│ │ 🎯 𝗧𝗼𝘁𝗮𝗹 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀: ${totalCommands}
+│ │ 📂 𝗖𝗮𝘁𝗲𝗴𝗼𝗿𝗶𝗲𝘀: ${categories.length}
+│ │ 🌟 𝗣𝗿𝗲𝗺𝗶𝘂𝗺: ${user.isPremium ? 'YES ✅' : 'NO ❌'}
+│ ╰───────────────────╯
+╰────────⦿
 
-🔧 **UTILITY** (15 commands)
-├ Developer and power user tools
-├ 🔐 encrypt, decrypt, hash, base64
-├ 📊 qr, uuid, password, poll
-╰ 📝 note, todo, reminder
+╭─⦿「 💡 HOW TO USE 」
+│ ╭───────────────────╮
+│ │ Type: ${prefix}menu <category>
+│ │ Example: ${prefix}menu games
+│ │ 
+│ │ Type: ${prefix}help <command>
+│ │ Example: ${prefix}help ping
+│ ╰───────────────────╯
+╰────────⦿
 
-ℹ️ **GENERAL** (11 commands)
-├ Information and utility functions
-├ 📊 about, ping, help, info, stats
-├ ⏰ time, uptime, weather
-╰ 🧮 calc, search
+╭─⦿「 🚀 QUICK START 」
+│ ╭───────────────────╮
+│ │ ${prefix}ping - Test speed
+│ │ ${prefix}rank - Your rank card
+│ │ ${prefix}chatgpt - AI chat
+│ │ ${prefix}sticker - Make sticker
+│ ╰───────────────────╯
+╰────────⦿
 
-━━━━━━━━━━━━━━━━━━━━━
+╔════════════════════╗
+║ 🐉 ${config.botName} - Power Level ∞
+╚════════════════════╝
 
-💡 **How to explore:**
-• \`${prefix}menu games\` - View games commands
-• \`${prefix}menu ai\` - View AI commands  
-• \`${prefix}help <command>\` - Get command details
+✨ Type ${prefix}support to join our Warrior Group!`;
 
-🚀 **Quick start:**
-• \`${prefix}ping\` - Test bot response
-• \`${prefix}rps rock\` - Play rock-paper-scissors
-• \`${prefix}calc 2+2\` - Calculator
-• \`${prefix}weather London\` - Weather info
+        const buttons = [
+            { buttonId: `${prefix}owner`, buttonText: { displayText: '👨‍💻 Owner' }, type: 1 },
+            { buttonId: `${prefix}support`, buttonText: { displayText: '🆘 Support Group' }, type: 1 },
+            { buttonId: `${prefix}stats`, buttonText: { displayText: '📊 Bot Stats' }, type: 1 }
+        ];
 
-*✨ Type category name after menu to see specific commands! ✨*`;
-
-        await sock.sendMessage(from, { text: menuText });
+        try {
+            await sock.sendMessage(from, {
+                image: { url: dragonBallImage },
+                caption: menuText,
+                footer: `© ${config.botName} - Powered by ${config.ownerName} | 🐉 Dragon Ball Theme`,
+                buttons: buttons,
+                headerType: 4
+            }, { quoted: message });
+        } catch (error) {
+            await sock.sendMessage(from, {
+                text: menuText,
+                contextInfo: {
+                    externalAdReply: {
+                        title: `🐉 ${config.botName} - Ultimate Menu`,
+                        body: `Total Commands: ${totalCommands} | Power Level: ${userLevel}`,
+                        thumbnailUrl: dragonBallImage,
+                        sourceUrl: config.botRepository,
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
+            }, { quoted: message });
+        }
     },
     
-    async showCategoryCommands(sock, from, category, prefix) {
+    async showCategoryCommands(sock, message, from, category, prefix) {
         const categories = {
             games: {
                 title: '🎮 GAMES COMMANDS',
                 description: 'Interactive games and challenges',
-                commands: [
-                    { name: 'akinator', desc: 'Mind reading guessing game' },
-                    { name: 'blackjack', desc: 'Play 21 card game against dealer' },
-                    { name: 'guess', desc: 'Number guessing challenge' },
-                    { name: 'hangman', desc: 'Word guessing with hangman' },
-                    { name: 'math', desc: 'Mathematical challenges' },
-                    { name: 'memory', desc: 'Sequence memory game' },
-                    { name: 'riddle', desc: 'Brain teasing riddles' },
-                    { name: 'rps', desc: 'Rock Paper Scissors' },
-                    { name: 'slots', desc: 'Slot machine gambling' },
-                    { name: 'tictactoe', desc: 'Tic-tac-toe against AI' },
-                    { name: 'trivia', desc: 'Knowledge quiz challenges' },
-                    { name: 'word', desc: 'Word games and puzzles' }
-                ]
+                emoji: '🎮',
+                commands: []
             },
             ai: {
                 title: '🤖 AI & SMART COMMANDS', 
                 description: 'AI-powered intelligent features',
-                commands: [
-                    { name: 'chatgpt', desc: 'Chat with AI assistant' },
-                    { name: 'gemini', desc: 'Google Gemini AI' },
-                    { name: 'analyze', desc: 'Analyze images with AI' },
-                    { name: 'ocr', desc: 'Extract text from images' },
-                    { name: 'stt', desc: 'Speech to text conversion' },
-                    { name: 'tts', desc: 'Text to speech synthesis' },
-                    { name: 'translate', desc: 'Multi-language translation' },
-                    { name: 'imagine', desc: 'AI image generation' }
-                ]
+                emoji: '🤖',
+                commands: []
             },
             general: {
-                title: 'ℹ️ GENERAL COMMANDS',
+                title: '📱 GENERAL COMMANDS',
                 description: 'Information and utility functions',
-                commands: [
-                    { name: 'about', desc: 'Bot information and stats' },
-                    { name: 'calc', desc: 'Advanced calculator' },
-                    { name: 'help', desc: 'Command help and usage' },
-                    { name: 'info', desc: 'Bot details and version' },
-                    { name: 'menu', desc: 'Interactive command menu' },
-                    { name: 'ping', desc: 'Check bot response time' },
-                    { name: 'search', desc: 'Search functionality' },
-                    { name: 'stats', desc: 'Bot usage statistics' },
-                    { name: 'time', desc: 'World clock and timezones' },
-                    { name: 'uptime', desc: 'System uptime info' },
-                    { name: 'weather', desc: 'Weather information' }
-                ]
+                emoji: '📱',
+                commands: []
             },
             media: {
                 title: '🎨 MEDIA COMMANDS',
                 description: 'Image and video processing',
-                commands: [
-                    { name: 'sticker', desc: 'Create stickers from images' },
-                    { name: 'blur', desc: 'Blur images' },
-                    { name: 'crop', desc: 'Crop images to size' },
-                    { name: 'resize', desc: 'Resize image dimensions' },
-                    { name: 'filter', desc: 'Apply image filters' },
-                    { name: 'watermark', desc: 'Add watermarks' },
-                    { name: 'compress', desc: 'Compress file size' },
-                    { name: 'gif', desc: 'Create GIF animations' },
-                    { name: 'merge', desc: 'Merge multiple images' },
-                    { name: 'toimg', desc: 'Convert to image format' },
-                    { name: 'toaudio', desc: 'Extract/convert audio' },
-                    { name: 'tovideo', desc: 'Convert to video format' }
-                ]
+                emoji: '🎨',
+                commands: []
             },
             utility: {
                 title: '🔧 UTILITY COMMANDS',
                 description: 'Developer and power user tools',
-                commands: [
-                    { name: 'base64', desc: 'Base64 encode/decode' },
-                    { name: 'encrypt', desc: 'Encrypt sensitive text' },
-                    { name: 'decrypt', desc: 'Decrypt encrypted text' },
-                    { name: 'hash', desc: 'Generate hash values' },
-                    { name: 'qr', desc: 'Generate QR codes' },
-                    { name: 'uuid', desc: 'Generate unique IDs' },
-                    { name: 'password', desc: 'Generate secure passwords' },
-                    { name: 'color', desc: 'Color tools and conversion' },
-                    { name: 'converter', desc: 'Unit conversions' },
-                    { name: 'poll', desc: 'Create polls and surveys' },
-                    { name: 'note', desc: 'Save and manage notes' },
-                    { name: 'todo', desc: 'Todo list manager' },
-                    { name: 'reminder', desc: 'Set reminders' }
-                ]
+                emoji: '🔧',
+                commands: []
+            },
+            admin: {
+                title: '🛡️ ADMIN COMMANDS',
+                description: 'Group management and moderation',
+                emoji: '🛡️',
+                commands: []
+            },
+            owner: {
+                title: '👑 OWNER COMMANDS',
+                description: 'Bot owner exclusive commands',
+                emoji: '👑',
+                commands: []
+            },
+            economy: {
+                title: '💰 ECONOMY COMMANDS',
+                description: 'Virtual economy and gambling',
+                emoji: '💰',
+                commands: []
+            },
+            downloader: {
+                title: '📥 DOWNLOADER COMMANDS',
+                description: 'Media downloaders from social platforms',
+                emoji: '📥',
+                commands: []
+            },
+            fun: {
+                title: '🎭 FUN COMMANDS',
+                description: 'Entertainment and fun features',
+                emoji: '🎭',
+                commands: []
             }
         };
         
         const cat = categories[category];
         if (!cat) {
             return sock.sendMessage(from, {
-                text: `❌ *Unknown category "${category}"*\n\nValid categories: ${Object.keys(categories).join(', ')}`
-            });
+                text: `❌ *Unknown category "${category}"*\n\nValid categories:\n${Object.keys(categories).map(c => `• ${c}`).join('\n')}`
+            }, { quoted: message });
         }
+
+        const commands = commandHandler.getCommandsByCategory(category);
         
-        let commandList = `${cat.title}\n${cat.description}\n\n━━━━━━━━━━━━━━━━━━━━━\n\n`;
+        let commandList = `╔════════════════════╗
+║ ${cat.emoji} ${cat.title}
+╚════════════════════╝
+
+📝 ${cat.description}
+
+╭─⦿「 📜 COMMAND LIST 」
+│ ╭───────────────────╮
+`;
         
-        cat.commands.forEach((cmd, index) => {
-            commandList += `${index + 1}. \`${prefix}${cmd.name}\`\n   ${cmd.desc}\n\n`;
+        commands.forEach((cmd, index) => {
+            commandList += `│ │ ${index + 1}. ✧${prefix}${cmd.name}\n│ │    └ ${cmd.description || 'No description'}\n`;
         });
         
-        commandList += `━━━━━━━━━━━━━━━━━━━━━\n\n💡 Use \`${prefix}help <command>\` for detailed info\n📋 Total: ${cat.commands.length} commands in this category`;
+        commandList += `│ ╰───────────────────╯
+╰────────⦿
+
+╭─⦿「 💡 TIP 」
+│ Use ${prefix}help <command>
+│ for detailed information
+╰────────⦿
+
+📊 Total: ${commands.length} commands in ${cat.title}`;
+
+        const dragonBallImage = await this.getRandomDragonBallImage();
         
-        await sock.sendMessage(from, { text: commandList });
+        try {
+            await sock.sendMessage(from, {
+                image: { url: dragonBallImage },
+                caption: commandList,
+                footer: `© ${config.botName} - ${cat.title}`,
+                buttons: [
+                    { buttonId: `${prefix}menu`, buttonText: { displayText: '🏠 Main Menu' }, type: 1 },
+                    { buttonId: `${prefix}support`, buttonText: { displayText: '🆘 Support' }, type: 1 }
+                ],
+                headerType: 4
+            }, { quoted: message });
+        } catch (error) {
+            await sock.sendMessage(from, {
+                text: commandList,
+                contextInfo: {
+                    externalAdReply: {
+                        title: cat.title,
+                        body: cat.description,
+                        thumbnailUrl: dragonBallImage,
+                        sourceUrl: config.botRepository,
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
+            }, { quoted: message });
+        }
+    },
+
+    async getRandomDragonBallImage() {
+        try {
+            const response = await fetch('https://web.dragonball-api.com/api/characters?limit=50');
+            const data = await response.json();
+            
+            if (data.items && data.items.length > 0) {
+                const randomIndex = Math.floor(Math.random() * data.items.length);
+                const character = data.items[randomIndex];
+                return character.image || config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
+            }
+        } catch (error) {
+            console.error('Error fetching Dragon Ball image:', error);
+        }
+        
+        return config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
     }
 };
