@@ -6,7 +6,23 @@ This is a powerful WhatsApp bot built with Baileys, featuring AI integration, me
 **Bot Name:** Ilom Bot  
 **Version:** 1.0.0  
 **Creator:** Ilom  
-**Total Commands:** 126
+**Total Commands:** 129
+
+## Recent Changes (October 5, 2025)
+
+### ✅ Enhanced Menu Command with Dragon Ball Theme (Latest)
+- **Dragon Ball API Integration**: Integrated web.dragonball-api.com API to fetch random Goku and Dragon Ball character images
+- **Advanced Design**: Completely redesigned menu with Dragon Ball themed ASCII borders and decorative elements, more advanced than help command
+- **User Profile Section**: Displays warrior stats including name, ID, level, status (Premium Warrior/Free Saiyan), power level, and credits (Zeni)
+- **Bot Status Section**: Shows detailed bot information including prefix, version, owner, mode, date, day, and time
+- **Enhanced Category Display**: Improved formatting with command counts and better organization
+- **Statistics Section**: Shows total commands, categories, and premium status
+- **Interactive Buttons**: Added support group button along with owner and stats buttons for quick access
+- **Quoted Message Support**: All menu responses quote the user's message for better context
+- **Null User Handling**: Added defensive fallback for missing user data to prevent crashes for new users
+- **Error Handling**: Robust API error handling with fallback to default images if Dragon Ball API is unavailable
+- **Category View Enhancement**: Category-specific views also display Dragon Ball images with improved formatting
+- **Result**: Beautiful Dragon Ball themed menu with random character images, interactive buttons, and flawless user experience
 
 ## Recent Changes (October 4, 2025)
 
@@ -227,4 +243,4 @@ None. Bot is fully operational and ready for use in Replit environment.
 - Maintainable codebase
 
 ## Last Updated
-October 4, 2025 - Fixed database timeout errors in Command and Message models, all 126 commands working perfectly
+October 5, 2025 - Enhanced menu command with Dragon Ball theme, random character images, interactive buttons, and advanced design - all 129 commands working perfectly
