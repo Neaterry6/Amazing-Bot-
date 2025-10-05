@@ -7,13 +7,15 @@ export default {
     cooldown: 2,
     permissions: ['user'],
 
-    async execute(sock, message, args) {
+    async execute({ sock, message, args, from }) {
         const sides = parseInt(args[0]) || 6;
         
         if (sides < 2 || sides > 100) {
-            return sock.sendMessage(message.key.remoteJid, {
-                text: '❌ Please enter a valid number of sides (2-100)'
-            });
+            return sock.sendMessage(from, {
+                text: `╭──⦿【 ❌ INVALID INPUT 】
+│ Please enter 2-100 sides
+╰────────⦿`
+            }, { quoted: message });
         }
 
         const result = Math.floor(Math.random() * sides) + 1;
@@ -28,12 +30,23 @@ export default {
         };
 
         const emoji = diceEmojis[result] || '🎲';
+        const percentage = ((result / sides) * 100).toFixed(1);
         
-        const responseText = `🎲 *Dice Roll*
+        const responseText = `╭──⦿【 🎲 DICE ROLL 】
+╰────────⦿
 
-${emoji} You rolled: *${result}*
-🎯 Out of ${sides} sides`;
+╭──⦿【 ${emoji} RESULT 】
+│ 🎯 𝗥𝗼𝗹𝗹𝗲𝗱: ${result}
+│ 🎲 𝗦𝗶𝗱𝗲𝘀: ${sides}
+│ 📊 𝗣𝗲𝗿𝗰𝗲𝗻𝘁: ${percentage}%
+╰────────⦿
 
-        await sock.sendMessage(message.key.remoteJid, { text: responseText });
+╭─────────────⦿
+│ 🔄 Roll again for new luck!
+╰────────────⦿`;
+
+        await sock.sendMessage(from, { 
+            text: responseText 
+        }, { quoted: message });
     }
 };

@@ -16,25 +16,34 @@ export default {
         const bank = Math.floor(Math.random() * 10000);
         const total = balance + bank;
 
-        const balanceText = `💰 *Your Balance*
+        const balanceText = `╭──⦿【 💰 YOUR BALANCE 】
+╰────────⦿
 
-💵 *Cash:* $${balance.toLocaleString()}
-🏦 *Bank:* $${bank.toLocaleString()}
-💎 *Total:* $${total.toLocaleString()}
+╭──⦿【 💵 WALLET 】
+│ 💵 𝗖𝗮𝘀𝗵: $${balance.toLocaleString()}
+│ 🏦 𝗕𝗮𝗻𝗸: $${bank.toLocaleString()}
+│ 💎 𝗧𝗼𝘁𝗮𝗹: $${total.toLocaleString()}
+╰────────⦿
 
-📊 *Quick Stats:*
-• Daily claimed: ✅
-• Weekly claimed: ❌
-• Last work: 2 hours ago
+╭──⦿【 📊 QUICK STATS 】
+│ ✅ 𝗗𝗮𝗶𝗹𝘆: Claimed
+│ ❌ 𝗪𝗲𝗲𝗸𝗹𝘆: Available
+│ ⏰ 𝗪𝗼𝗿𝗸: 2h ago
+╰────────⦿
 
-💡 *Commands:*
-• ${prefix}daily - Get daily bonus
-• ${prefix}work - Earn money
-• ${prefix}shop - Buy items
-• ${prefix}transfer - Send money
+╭──⦿【 💡 EARN MORE 】
+│ ✧ ${prefix}daily - Daily bonus
+│ ✧ ${prefix}work - Earn cash
+│ ✧ ${prefix}gamble - Risk it
+│ ✧ ${prefix}shop - Buy items
+╰────────⦿
 
-⚠️ Note: Economy features require database setup`;
+╭─────────────⦿
+│ ⚠️ Economy in demo mode
+╰────────────⦿`;
 
-        await sock.sendMessage(from, { text: balanceText });
+        await sock.sendMessage(from, { 
+            text: balanceText 
+        }, { quoted: message });
     }
 };

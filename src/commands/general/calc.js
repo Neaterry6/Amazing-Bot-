@@ -48,20 +48,32 @@ export default {
                 formattedResult = result.toString();
             }
             
-            const response = `🧮 *Calculator*
+            const response = `╭──⦿【 🧮 CALCULATOR 】
+╰────────⦿
 
-📝 **Expression:** \`${expression}\`
-✅ **Result:** \`${formattedResult}\`
+╭──⦿【 📝 EXPRESSION 】
+│ ${expression}
+╰────────⦿
 
-💡 **Supported Operations:**
-• Basic: + - × ÷ ( )
-• Powers: ^ or **
-• Functions: sin, cos, tan, log, sqrt
-• Constants: pi, e, phi, tau
+╭──⦿【 ✅ RESULT 】
+│ ${formattedResult}
+╰────────⦿
 
-*Example:* calc 2^3 + sqrt(16)`;
+╭──⦿【 💡 OPERATIONS 】
+│ ✧ Basic: + - × ÷ ( )
+│ ✧ Powers: ^ or **
+│ ✧ Functions: sin, cos, tan
+│ ✧ Functions: log, sqrt, abs
+│ ✧ Constants: pi, e, phi, tau
+╰────────⦿
 
-            await sock.sendMessage(from, { text: response });
+╭─────────────⦿
+│ Example: calc 2^3 + sqrt(16)
+╰────────────⦿`;
+
+            await sock.sendMessage(from, { 
+                text: response 
+            }, { quoted: message });
             
         } catch (error) {
             let errorMessage = 'Invalid mathematical expression';
@@ -74,21 +86,32 @@ export default {
                 errorMessage = 'Incorrect number of arguments for function';
             }
             
-            const response = `❌ *Calculation Error*
+            const response = `╭──⦿【 ❌ CALC ERROR 】
+╰────────⦿
 
-📝 **Expression:** \`${expression}\`
-❌ **Error:** ${errorMessage}
+╭──⦿【 📝 EXPRESSION 】
+│ ${expression}
+╰────────⦿
 
-💡 **Examples:**
-• \`calc 2 + 2\`
-• \`calc sqrt(25)\`  
-• \`calc sin(pi/2)\`
-• \`calc log(100, 10)\`
-• \`calc (5 + 3) * 2\`
+╭──⦿【 ❌ ERROR 】
+│ ${errorMessage}
+╰────────⦿
 
-🔗 Use parentheses for complex expressions!`;
+╭──⦿【 💡 EXAMPLES 】
+│ ✧ calc 2 + 2
+│ ✧ calc sqrt(25)
+│ ✧ calc sin(pi/2)
+│ ✧ calc log(100, 10)
+│ ✧ calc (5 + 3) * 2
+╰────────⦿
 
-            await sock.sendMessage(from, { text: response });
+╭─────────────⦿
+│ Use parentheses for complex!
+╰────────────⦿`;
+
+            await sock.sendMessage(from, { 
+                text: response 
+            }, { quoted: message });
         }
     }
 };

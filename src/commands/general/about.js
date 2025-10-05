@@ -1,6 +1,5 @@
 import config from '../../config.js';
-
-
+import moment from 'moment';
 
 export default {
     name: 'about',
@@ -20,49 +19,48 @@ export default {
         const memoryUsage = process.memoryUsage();
         const memoryMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
         
-        const aboutText = `🤖 *ABOUT ${config.botName || 'WhatsApp Bot'}*
+        const aboutText = `╭──⦿【 🤖 ABOUT BOT 】
+│ 🎯 𝗕𝗼𝘁 𝗡𝗮𝗺𝗲: ${config.botName || 'Ilom Bot'}
+│ 📌 𝗩𝗲𝗿𝘀𝗶𝗼𝗻: ${config.botVersion || '1.0.0'}
+│ 👨‍💻 𝗗𝗲𝘃𝗲𝗹𝗼𝗽𝗲𝗿: ${config.ownerName || 'Ilom'}
+│ 🌐 𝗣𝗹𝗮𝘁𝗳𝗼𝗿𝗺: ${process.platform}
+│ 📦 𝗡𝗼𝗱𝗲: ${process.version}
+│ 📚 𝗟𝗶𝗯𝗿𝗮𝗿𝘆: Baileys
+╰────────⦿
 
-━━━━━━━━━━━━━━━━━━━━━
+╭──⦿【 📊 PERFORMANCE 】
+│ ⏰ 𝗨𝗽𝘁𝗶𝗺𝗲: ${uptimeString}
+│ 🧠 𝗠𝗲𝗺𝗼𝗿𝘆: ${memoryMB} MB
+│ 🎮 𝗖𝗼𝗺𝗺𝗮𝗻𝗱𝘀: 120+ Commands
+│ 📂 𝗖𝗮𝘁𝗲𝗴𝗼𝗿𝗶𝗲𝘀: 10 Categories
+│ 🔋 𝗦𝘁𝗮𝘁𝘂𝘀: Online ✅
+╰────────⦿
 
-📋 **BOT INFORMATION:**
-├ Name: ${config.botName || 'WhatsApp Bot'}
-├ Version: ${config.botVersion || '1.0.0'}
-├ Developer: ${config.developerName || 'Bot Developer'}
-├ Language: JavaScript (Node.js)
-├ Library: @whiskeysockets/baileys
-├ Platform: ${process.platform}
-╰ Node.js: ${process.version}
+╭──⦿【 🌟 FEATURES 】
+│ ✧ 🎮 Interactive Games
+│ ✧ 🤖 AI Integration
+│ ✧ 📥 Media Downloader
+│ ✧ 🎨 Media Processing
+│ ✧ 🛡️ Admin Tools
+│ ✧ 💰 Economy System
+│ ✧ 🔧 Utility Tools
+│ ✧ 📊 Analytics
+╰────────⦿
 
-📊 **PERFORMANCE STATS:**
-├ Uptime: ${uptimeString}
-├ Memory Usage: ${memoryMB} MB
-├ Commands: 100+ available
-├ Categories: 8 categories
-╰ Status: Online ✅
+╭──⦿【 📞 SUPPORT 】
+│ 👑 𝗢𝘄𝗻𝗲𝗿: ${config.ownerName || 'Ilom'}
+│ 🔗 𝗚𝗿𝗼𝘂𝗽: ${config.supportGroup || 'Available'}
+│ 📡 𝗖𝗵𝗮𝗻𝗻𝗲𝗹: ${config.updatesChannel || 'Coming Soon'}
+│ 🌐 𝗥𝗲𝗽𝗼: ${config.repoUrl || 'Private'}
+╰────────⦿
 
-🌟 **FEATURES:**
-├ 🎮 Interactive Games (12 games)
-├ 🤖 AI Integration (ChatGPT/Gemini)
-├ 📥 Media Downloader (YouTube/TikTok)
-├ 🎨 Media Processing (Stickers/Effects)
-├ 🛡️ Admin Tools (Moderation/Security)
-├ 💰 Economy System (Coins/Gambling)
-├ 🔧 Utility Tools (QR/Base64/Hash)
-╰ 📊 Analytics & Statistics
+╭─────────────⦿
+│💫 | [ ${config.botName || 'Ilom Bot'} 🍀 ]
+│ Built with ❤️ by ${config.ownerName || 'Ilom'}
+╰────────────⦿`;
 
-📞 **SUPPORT:**
-├ Support Group: ${config.supportGroup || 'Contact Owner'}
-├ Updates Channel: ${config.updatesChannel || 'Not Available'}
-├ Owner: ${config.ownerName || 'Bot Owner'}
-╰ Repository: ${config.repoUrl || 'Private'}
-
-━━━━━━━━━━━━━━━━━━━━━
-
-💡 *Type \`help\` to see all available commands*
-🚀 *Join our support group for updates and help*
-
-*✨ Built with ❤️ for the WhatsApp community ✨*`;
-
-        await sock.sendMessage(from, { text: aboutText });
+        await sock.sendMessage(from, { 
+            text: aboutText 
+        }, { quoted: message });
     }
 };

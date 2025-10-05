@@ -9,34 +9,46 @@ export default {
     args: true,
     minArgs: 1,
 
-    async execute({ sock, message, args, from, sender }) {
+    async execute({ sock, message, args, from, sender, prefix }) {
         const choices = ['rock', 'paper', 'scissors'];
         const userChoice = args[0].toLowerCase();
         
         if (!choices.includes(userChoice)) {
             return sock.sendMessage(from, {
-                text: `❌ *Invalid Choice*\n\nPlease choose one of:\n🪨 rock\n📄 paper\n✂️ scissors\n\n*Example:* rps rock`
-            });
+                text: `╭──⦿【 ❌ INVALID CHOICE 】
+│ 
+│ 𝗣𝗹𝗲𝗮𝘀𝗲 𝗰𝗵𝗼𝗼𝘀𝗲 𝗼𝗻𝗲:
+│ ✧ 🪨 rock
+│ ✧ 📄 paper
+│ ✧ ✂️ scissors
+│ 
+│ 𝗘𝘅𝗮𝗺𝗽𝗹𝗲: ${prefix}rps rock
+╰────────⦿`
+            }, { quoted: message });
         }
         
         const botChoice = choices[Math.floor(Math.random() * choices.length)];
         
         let result;
         let resultEmoji;
+        let points;
         
         if (userChoice === botChoice) {
-            result = "It's a tie!";
+            result = "IT'S A TIE!";
             resultEmoji = "🤝";
+            points = 0;
         } else if (
             (userChoice === 'rock' && botChoice === 'scissors') ||
             (userChoice === 'paper' && botChoice === 'rock') ||
             (userChoice === 'scissors' && botChoice === 'paper')
         ) {
-            result = "You win!";
+            result = "YOU WIN!";
             resultEmoji = "🎉";
+            points = 10;
         } else {
-            result = "Bot wins!";
+            result = "BOT WINS!";
             resultEmoji = "🤖";
+            points = -5;
         }
         
         const choiceEmojis = {
@@ -45,18 +57,31 @@ export default {
             scissors: '✂️'
         };
         
-        const response = `🎮 *Rock Paper Scissors*
+        const response = `╭──⦿【 🎮 ROCK PAPER SCISSORS 】
+╰────────⦿
 
-👤 **Your choice:** ${choiceEmojis[userChoice]} ${userChoice}
-🤖 **Bot choice:** ${choiceEmojis[botChoice]} ${botChoice}
+╭──⦿【 ⚔️ BATTLE RESULT 】
+│ 👤 𝗬𝗼𝘂𝗿 𝗖𝗵𝗼𝗶𝗰𝗲: ${choiceEmojis[userChoice]} ${userChoice.toUpperCase()}
+│ 🤖 𝗕𝗼𝘁 𝗖𝗵𝗼𝗶𝗰𝗲: ${choiceEmojis[botChoice]} ${botChoice.toUpperCase()}
+╰────────⦿
 
-${resultEmoji} **Result:** ${result}
+╭──⦿【 ${resultEmoji} OUTCOME 】
+│ 🏆 𝗥𝗲𝘀𝘂𝗹𝘁: ${result}
+│ 💎 𝗣𝗼𝗶𝗻𝘁𝘀: ${points > 0 ? '+' : ''}${points}
+╰────────⦿
 
-📊 *Game Rules:*
-• Rock beats Scissors
-• Paper beats Rock  
-• Scissors beats Paper`;
+╭──⦿【 📖 GAME RULES 】
+│ ✧ 🪨 Rock beats Scissors
+│ ✧ 📄 Paper beats Rock
+│ ✧ ✂️ Scissors beats Paper
+╰────────⦿
 
-        await sock.sendMessage(from, { text: response });
+╭─────────────⦿
+│💫 | [ Play Again! 🎮 ]
+╰────────────⦿`;
+
+        await sock.sendMessage(from, { 
+            text: response 
+        }, { quoted: message });
     }
 };
