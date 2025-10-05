@@ -355,18 +355,6 @@ class MessageHandler {
                 sock, message, messageContent.text, user, group, isGroup
             );
 
-            if (!isCommand && messageContent.text) {
-                const autoReplyHandled = await this.handleAutoReply(
-                    sock, message, messageContent.text, user, isGroup
-                );
-
-                if (!autoReplyHandled) {
-                    await this.handleChatBot(
-                        sock, message, messageContent.text, user, isGroup
-                    );
-                }
-            }
-
             cache.set(`lastMessage_${sender}`, {
                 content: messageContent.text,
                 timestamp: Date.now(),

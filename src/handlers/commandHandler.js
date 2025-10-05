@@ -138,19 +138,25 @@ class CommandHandler {
     async checkPermissions(command, user, group, isGroupAdmin, isBotAdmin) {
         if (!command.permissions || command.permissions.length === 0) return true;
         
+        const isOwner = config.ownerNumbers.some(num => {
+            const cleanNum = num.replace('@s.whatsapp.net', '');
+            const cleanUserJid = user.jid.replace('@s.whatsapp.net', '');
+            return cleanNum === cleanUserJid || num === user.jid;
+        });
+        
         for (const permission of command.permissions) {
             switch (permission) {
                 case 'owner':
-                    if (config.ownerNumbers.includes(user.jid)) return true;
+                    if (isOwner) return true;
                     break;
                 case 'admin':
-                    if (config.ownerNumbers.includes(user.jid) || isGroupAdmin) return true;
+                    if (isOwner || isGroupAdmin) return true;
                     break;
                 case 'premium':
-                    if (user.isPremium || config.ownerNumbers.includes(user.jid)) return true;
+                    if (user.isPremium || isOwner) return true;
                     break;
                 case 'user':
-                    if (config.publicMode || config.ownerNumbers.includes(user.jid)) return true;
+                    if (config.publicMode || isOwner) return true;
                     break;
                 case 'group':
                     if (group) return true;

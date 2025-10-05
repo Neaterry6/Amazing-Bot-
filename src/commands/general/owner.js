@@ -11,14 +11,14 @@ export default {
     cooldown: 5,
     permissions: ['user'],
 
-    async execute(sock, message) {
+    async execute({ sock, message, from }) {
         const ownerText = `╭──⦿【 👑 BOT OWNER 】
 ╰────────⦿
 
 ╭──⦿【 👨‍💻 DEVELOPER INFO 】
 │ 🎯 𝗡𝗮𝗺𝗲: Ilom
 │ 📱 𝗖𝗼𝗻𝘁𝗮𝗰𝘁: ${config.ownerNumbers?.[0] || 'Not set'}
-│ 🌐 𝗪𝗲𝗯: ${config.website || 'https://ilom.tech'}
+│ 🌐 𝗪𝗲𝗯: ${config.botWebsite || 'https://ilom.tech'}
 │ 📧 𝗦𝘂𝗽𝗽𝗼𝗿𝘁: Contact via WhatsApp
 ╰────────⦿
 
@@ -43,7 +43,7 @@ export default {
 │ 💫 Contact info sent below
 ╰────────────⦿`;
 
-        const ownerNumber = config.ownerNumbers?.[0];
+        const ownerNumber = config.ownerNumbers?.[0]?.replace('@s.whatsapp.net', '');
         if (ownerNumber) {
             const ownerVcard = `BEGIN:VCARD
 VERSION:3.0
@@ -51,16 +51,18 @@ FN:Ilom - Bot Developer
 TEL;type=CELL;type=VOICE;waid=${ownerNumber}:+${ownerNumber}
 END:VCARD`;
 
-            await sock.sendMessage(message.key.remoteJid, {
+            await sock.sendMessage(from, {
                 contacts: {
                     displayName: 'Ilom - Bot Developer',
                     contacts: [{
                         vcard: ownerVcard
                     }]
                 }
-            });
+            }, { quoted: message });
         }
 
-        await sock.sendMessage(message.key.remoteJid, { text: ownerText });
+        await sock.sendMessage(from, { 
+            text: ownerText 
+        }, { quoted: message });
     }
 };

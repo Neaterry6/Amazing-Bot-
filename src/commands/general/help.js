@@ -18,7 +18,7 @@ export default {
         const user = await getUser(sender);
         
         if (args.length > 0) {
-            return this.showCommandDetails({ sock, from, commandName: args[0], prefix, user });
+            return this.showCommandDetails({ sock, message, from, commandName: args[0], prefix, user });
         }
         
         const categories = commandHandler.getAllCategories();
@@ -119,7 +119,7 @@ export default {
                 footer: `© ${config.botName} - Powered by ${config.ownerName}`,
                 buttons: buttons,
                 headerType: 4
-            });
+            }, { quoted: message });
         } catch (error) {
             await sock.sendMessage(from, {
                 text: helpText,
@@ -133,17 +133,17 @@ export default {
                         renderLargerThumbnail: true
                     }
                 }
-            });
+            }, { quoted: message });
         }
     },
 
-    async showCommandDetails({ sock, from, commandName, prefix, user }) {
+    async showCommandDetails({ sock, message, from, commandName, prefix, user }) {
         const command = commandHandler.getCommand(commandName);
         
         if (!command) {
             return sock.sendMessage(from, {
                 text: `❌ Command "${commandName}" not found.\n\n💡 Use ${prefix}help to see all commands.`
-            });
+            }, { quoted: message });
         }
         
         const categoryInfo = {
@@ -192,7 +192,7 @@ ${command.aliases && command.aliases.length > 0 ? `│\n│ 🔗 𝗔𝗹𝗶�
                     renderLargerThumbnail: true
                 }
             }
-        });
+        }, { quoted: message });
         
         if (command.supportsReply && sentMsg) {
             this.setupReplyHandler(sock, from, sentMsg.key.id, command, prefix);

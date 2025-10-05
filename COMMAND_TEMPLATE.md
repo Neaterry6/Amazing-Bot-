@@ -36,6 +36,9 @@ export default {
     supportsButtons: false,
 
     async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        await sock.sendMessage(from, {
+            text: 'Your response here'
+        }, { quoted: message });
     }
 };
 ```
@@ -78,7 +81,17 @@ export default {
 
 ## 🎨 Advanced Features
 
-### 1. Reply Handler (supportsReply: true)
+### 1. Quoted Messages (REQUIRED)
+
+**ALL COMMANDS MUST USE QUOTED MESSAGES:**
+
+```javascript
+await sock.sendMessage(from, {
+    text: 'Your response'
+}, { quoted: message });
+```
+
+### 2. Reply Handler (supportsReply: true)
 
 Allow users to reply to command output for follow-up interactions:
 
@@ -90,7 +103,7 @@ export default {
     async execute({ sock, message, from, sender }) {
         const sentMsg = await sock.sendMessage(from, {
             text: '❓ What is 2 + 2?\n\n💡 Reply to this message with your answer!'
-        });
+        }, { quoted: message });
         
         if (sentMsg) {
             this.setupReplyHandler(sock, from, sentMsg.key.id, sender);
@@ -128,7 +141,7 @@ export default {
 };
 ```
 
-### 2. Chat Context Handler (supportsChat: true)
+### 3. Chat Context Handler (supportsChat: true)
 
 Maintain conversation context for multi-turn interactions:
 
@@ -137,12 +150,12 @@ export default {
     name: 'story',
     supportsChat: true,
     
-    async execute({ sock, from, sender }) {
+    async execute({ sock, message, from, sender }) {
         this.setupChatHandler(sock, from, sender);
         
         await sock.sendMessage(from, {
             text: '📖 Story Mode Activated!\n\nTell me a genre (fantasy, sci-fi, horror):'
-        });
+        }, { quoted: message });
     },
     
     setupChatHandler(sock, from, sender) {
@@ -169,69 +182,17 @@ export default {
                     handler.step = 'character';
                     await sock.sendMessage(from, {
                         text: `Great! ${text} story it is! Now give me a character name:`
-                    });
+                    }, { quoted: message });
                 } else if (handler.step === 'character') {
                     handler.data.character = text;
                     
                     await sock.sendMessage(from, {
                         text: `📚 Story:\n\nOnce upon a time, ${handler.data.character} lived in a ${handler.data.genre} world...`
-                    });
+                    }, { quoted: message });
                     
                     clearTimeout(chatTimeout);
                     delete global.chatHandlers[sender];
                 }
-            }
-        };
-    }
-};
-```
-
-### 3. Reaction Handler (supportsReact: true)
-
-Respond to user reactions on command output:
-
-```javascript
-export default {
-    name: 'vote',
-    supportsReact: true,
-    
-    async execute({ sock, from }) {
-        const sentMsg = await sock.sendMessage(from, {
-            text: '🗳️ Vote: Should we add new features?\n\n👍 = Yes\n👎 = No\n\nReact to this message!'
-        });
-        
-        if (sentMsg) {
-            this.setupReactHandler(sock, from, sentMsg.key.id);
-        }
-    },
-    
-    setupReactHandler(sock, from, messageId) {
-        if (!global.reactHandlers) {
-            global.reactHandlers = {};
-        }
-        
-        global.reactHandlers[messageId] = {
-            command: this.name,
-            votes: { yes: 0, no: 0 },
-            voters: new Set(),
-            handler: async (reaction, userId) => {
-                const handler = global.reactHandlers[messageId];
-                
-                if (handler.voters.has(userId)) {
-                    return;
-                }
-                
-                handler.voters.add(userId);
-                
-                if (reaction === '👍') {
-                    handler.votes.yes++;
-                } else if (reaction === '👎') {
-                    handler.votes.no++;
-                }
-                
-                await sock.sendMessage(from, {
-                    text: `📊 Current Results:\n👍 Yes: ${handler.votes.yes}\n👎 No: ${handler.votes.no}`
-                });
             }
         };
     }
@@ -247,7 +208,7 @@ export default {
     name: 'settings',
     supportsButtons: true,
     
-    async execute({ sock, from, prefix }) {
+    async execute({ sock, message, from, prefix }) {
         const buttons = [
             { buttonId: `${prefix}settings language`, buttonText: { displayText: '🌐 Language' }, type: 1 },
             { buttonId: `${prefix}settings theme`, buttonText: { displayText: '🎨 Theme' }, type: 1 },
@@ -259,7 +220,7 @@ export default {
             footer: '© Ilom Bot',
             buttons: buttons,
             headerType: 1
-        });
+        }, { quoted: message });
     }
 };
 ```
@@ -268,7 +229,7 @@ export default {
 
 ## 📚 Complete Examples
 
-### Example 1: Simple Command
+### Example 1: Simple Command (WITH QUOTED MESSAGE)
 
 ```javascript
 export default {
@@ -280,17 +241,17 @@ export default {
     cooldown: 3,
     permissions: ['user'],
     
-    async execute({ sock, from }) {
+    async execute({ sock, message, from }) {
         const start = Date.now();
         
         await sock.sendMessage(from, {
             text: `🏓 Pong! Response time: ${Date.now() - start}ms`
-        });
+        }, { quoted: message });
     }
 };
 ```
 
-### Example 2: Command with Arguments
+### Example 2: Command with Arguments (WITH QUOTED MESSAGE)
 
 ```javascript
 export default {
@@ -305,24 +266,24 @@ export default {
     args: true,
     minArgs: 1,
     
-    async execute({ sock, from, args }) {
+    async execute({ sock, message, from, args }) {
         try {
             const expression = args.join(' ');
             const result = eval(expression);
             
             await sock.sendMessage(from, {
                 text: `🧮 Calculation:\n\n${expression} = ${result}`
-            });
+            }, { quoted: message });
         } catch (error) {
             await sock.sendMessage(from, {
                 text: '❌ Invalid mathematical expression!'
-            });
+            }, { quoted: message });
         }
     }
 };
 ```
 
-### Example 3: Admin Command
+### Example 3: Admin Command (WITH QUOTED MESSAGE)
 
 ```javascript
 export default {
@@ -335,23 +296,23 @@ export default {
     permissions: ['admin', 'botAdmin'],
     minArgs: 1,
     
-    async execute({ sock, from, message, isGroup, isGroupAdmin, isBotAdmin, sender }) {
+    async execute({ sock, message, from, isGroup, isGroupAdmin, isBotAdmin, sender }) {
         if (!isGroup) {
             return sock.sendMessage(from, {
                 text: '❌ This command can only be used in groups!'
-            });
+            }, { quoted: message });
         }
         
         if (!isGroupAdmin) {
             return sock.sendMessage(from, {
                 text: '❌ You need to be a group admin to use this command!'
-            });
+            }, { quoted: message });
         }
         
         if (!isBotAdmin) {
             return sock.sendMessage(from, {
                 text: '❌ Bot needs to be admin to ban users!'
-            });
+            }, { quoted: message });
         }
         
         const mentioned = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
@@ -359,7 +320,7 @@ export default {
         if (!mentioned) {
             return sock.sendMessage(from, {
                 text: '❌ Please mention a user to ban!'
-            });
+            }, { quoted: message });
         }
         
         await sock.groupParticipantsUpdate(from, [mentioned], 'remove');
@@ -367,45 +328,36 @@ export default {
         await sock.sendMessage(from, {
             text: `✅ User banned successfully!`,
             mentions: [mentioned, sender]
-        });
+        }, { quoted: message });
     }
 };
 ```
 
-### Example 4: Premium Command with Media
+### Example 4: Owner Command (CMD)
 
 ```javascript
 export default {
-    name: 'imagine',
-    aliases: ['generate', 'ai-image'],
-    category: 'ai',
-    description: 'Generate AI images from text',
-    usage: 'imagine <prompt>',
-    example: 'imagine beautiful sunset over mountains',
-    cooldown: 30,
-    permissions: ['premium'],
-    premium: true,
+    name: 'cmd',
+    aliases: ['exec', 'shell'],
+    category: 'owner',
+    description: 'Execute shell commands or install packages',
+    usage: 'cmd <command|install|get> [args]',
+    example: 'cmd ls -la',
+    cooldown: 0,
+    permissions: ['owner'],
+    ownerOnly: true,
     minArgs: 1,
     
-    async execute({ sock, from, args, sender }) {
-        const prompt = args.join(' ');
+    async execute({ sock, message, from, args }) {
+        const action = args[0];
         
-        await sock.sendMessage(from, {
-            text: '🎨 Generating your image... This may take a moment.'
-        });
-        
-        try {
-            const imageUrl = 'https://example.com/generated-image.jpg';
+        if (action === 'install') {
+            const packageName = args.slice(1).join(' ');
             
             await sock.sendMessage(from, {
-                image: { url: imageUrl },
-                caption: `✨ Generated Image\n\n📝 Prompt: ${prompt}\n👤 Requested by: @${sender.split('@')[0]}`,
-                mentions: [sender]
-            });
-        } catch (error) {
-            await sock.sendMessage(from, {
-                text: '❌ Failed to generate image. Please try again later.'
-            });
+                text: `📦 Installing: ${packageName}\n⏳ Please wait...`
+            }, { quoted: message });
+            
         }
     }
 };
@@ -415,16 +367,18 @@ export default {
 
 ## ✅ Best Practices
 
-1. **Error Handling**: Always wrap your code in try-catch blocks
-2. **User Feedback**: Provide clear success/error messages
-3. **Performance**: Use async/await properly and avoid blocking operations
-4. **Security**: Validate all user inputs before processing
-5. **Permissions**: Check permissions before executing sensitive operations
-6. **Cooldowns**: Set appropriate cooldowns to prevent spam
-7. **Documentation**: Write clear descriptions and usage examples
-8. **Testing**: Test commands in both group and private chats
-9. **Cleanup**: Clear timeouts and handlers when done
-10. **Mentions**: Use mentions for user-specific responses
+1. **Quoted Messages**: ALWAYS use `{ quoted: message }` when sending messages
+2. **Error Handling**: Always wrap your code in try-catch blocks
+3. **User Feedback**: Provide clear success/error messages
+4. **Performance**: Use async/await properly and avoid blocking operations
+5. **Security**: Validate all user inputs before processing
+6. **Permissions**: Check permissions before executing sensitive operations
+7. **Cooldowns**: Set appropriate cooldowns to prevent spam
+8. **Documentation**: Write clear descriptions and usage examples
+9. **Testing**: Test commands in both group and private chats
+10. **Cleanup**: Clear timeouts and handlers when done
+11. **Mentions**: Use mentions for user-specific responses
+12. **No Comments**: Never add comments to code unless explicitly requested
 
 ---
 
@@ -460,13 +414,24 @@ export default {
     cooldown: 3,
     permissions: ['user'],
     
-    async execute({ sock, from, args, sender }) {
+    async execute({ sock, message, from, args, sender }) {
         await sock.sendMessage(from, {
             text: 'Hello from my command!'
-        });
+        }, { quoted: message });
     }
 };
 ```
+
+---
+
+## 🔑 Key Updates
+
+1. **ALL commands MUST use quoted messages** - `{ quoted: message }`
+2. **Owner recognition** - Bot recognizes owner from .env even in groups
+3. **No auto-reply** - Bot only responds to commands with prefix
+4. **Better fonts** - Use stylish Unicode fonts for better appearance
+5. **Advanced cmd command** - Execute shell commands, install packages, get files
+6. **Canvas uptime** - Beautiful image-based uptime display
 
 ---
 
