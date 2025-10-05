@@ -331,6 +331,13 @@ async function establishWhatsAppConnection() {
             await messageHandler.handleMessageDelete(sock, deletedMessages);
         });
         
+        sock.ev.on('messages.reaction', async (reactions) => {
+            const handleReaction = (await import('./src/events/messageReaction.js')).default;
+            for (const reaction of reactions) {
+                await handleReaction(sock, reaction);
+            }
+        });
+        
         sock.ev.on('group-participants.update', async (groupUpdate) => {
             try {
                 await groupHandler.handleParticipantsUpdate(sock, groupUpdate);

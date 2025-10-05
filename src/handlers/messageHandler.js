@@ -343,6 +343,12 @@ class MessageHandler {
                 return;
             }
 
+            if (global.chatHandlers && global.chatHandlers[sender]) {
+                const chatHandler = global.chatHandlers[sender];
+                await chatHandler.handler(messageContent.text, message);
+                return;
+            }
+
             await this.handleMentions(sock, message, messageContent.text, isGroup);
 
             const isCommand = await this.processCommand(

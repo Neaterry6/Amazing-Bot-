@@ -75,7 +75,7 @@ export default {
             
             helpText += `╭──⦿【 ${categoryInfo.emoji} 𝗖𝗠𝗗 - ${categoryInfo.title} 】\n`;
             
-            const commandList = commands.map(cmd => `✧${cmd}`).join(' ');
+            const commandList = commands.map(cmd => `✧${cmd.name}`).join(' ');
             const words = commandList.split(' ');
             let currentLine = '│';
             
