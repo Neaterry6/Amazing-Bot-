@@ -320,17 +320,28 @@ export default {
     },
 
     async getRandomDragonBallImage() {
+        const animeApis = [
+            'https://api.waifu.pics/sfw/waifu',
+            'https://api.waifu.pics/sfw/neko',
+            'https://nekos.best/api/v2/neko',
+            'https://nekos.best/api/v2/waifu',
+            'https://api.nekosapi.com/v3/images/random?rating=safe&limit=1'
+        ];
+        
         try {
-            const response = await fetch('https://web.dragonball-api.com/api/characters?limit=50');
+            const randomApi = animeApis[Math.floor(Math.random() * animeApis.length)];
+            const response = await fetch(randomApi);
             const data = await response.json();
             
-            if (data.items && data.items.length > 0) {
-                const randomIndex = Math.floor(Math.random() * data.items.length);
-                const character = data.items[randomIndex];
-                return character.image || config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
+            if (randomApi.includes('waifu.pics')) {
+                return data.url || config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
+            } else if (randomApi.includes('nekos.best')) {
+                return data.results?.[0]?.url || config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
+            } else if (randomApi.includes('nekosapi')) {
+                return data.items?.[0]?.image_url || config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
             }
         } catch (error) {
-            console.error('Error fetching Dragon Ball image:', error);
+            console.error('Error fetching anime image:', error);
         }
         
         return config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';

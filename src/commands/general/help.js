@@ -2,6 +2,7 @@ import config from '../../config.js';
 import { commandHandler } from '../../handlers/commandHandler.js';
 import { getUser } from '../../models/User.js';
 import moment from 'moment';
+import fetch from 'node-fetch';
 
 export default {
     name: 'help',
@@ -35,7 +36,7 @@ export default {
         const userName = user.name || 'User';
         const userId = sender.split('@')[0];
         
-        const thumbnail = config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
+        const thumbnail = await this.getRandomAnimeImage();
         
         const categoryMap = {
             'admin': { emoji: '🛡️', title: 'ADMIN' },
@@ -160,6 +161,7 @@ export default {
         };
         
         const categoryEmoji = categoryInfo[command.category] || '⭐';
+        const thumbnail = await this.getRandomAnimeImage();
         
         const helpText = `╭──⦿【 ${categoryEmoji} ${command.name.toUpperCase()} 】
 │
@@ -186,7 +188,7 @@ ${command.aliases && command.aliases.length > 0 ? `│\n│ 🔗 𝗔𝗹𝗶�
                 externalAdReply: {
                     title: `${command.name.toUpperCase()} Command`,
                     body: command.description,
-                    thumbnailUrl: config.botThumbnail,
+                    thumbnailUrl: thumbnail,
                     sourceUrl: config.botRepository,
                     mediaType: 1,
                     renderLargerThumbnail: true
@@ -239,5 +241,33 @@ ${command.aliases && command.aliases.length > 0 ? `│\n│ 🔗 𝗔𝗹𝗶�
                 delete global.replyHandlers[messageId];
             }
         };
+    },
+
+    async getRandomAnimeImage() {
+        const animeApis = [
+            'https://api.waifu.pics/sfw/waifu',
+            'https://api.waifu.pics/sfw/neko',
+            'https://nekos.best/api/v2/neko',
+            'https://nekos.best/api/v2/waifu',
+            'https://api.nekosapi.com/v3/images/random?rating=safe&limit=1'
+        ];
+        
+        try {
+            const randomApi = animeApis[Math.floor(Math.random() * animeApis.length)];
+            const response = await fetch(randomApi);
+            const data = await response.json();
+            
+            if (randomApi.includes('waifu.pics')) {
+                return data.url || config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
+            } else if (randomApi.includes('nekos.best')) {
+                return data.results?.[0]?.url || config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
+            } else if (randomApi.includes('nekosapi')) {
+                return data.items?.[0]?.image_url || config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
+            }
+        } catch (error) {
+            console.error('Error fetching anime image:', error);
+        }
+        
+        return config.botThumbnail || 'https://i.ibb.co/2M7rtLk/ilom.jpg';
     }
 };
