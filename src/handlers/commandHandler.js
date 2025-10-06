@@ -135,13 +135,14 @@ class CommandHandler {
         return this.commandStats.get(commandName) || { used: 0, errors: 0 };
     }
 
-    async checkPermissions(command, user, group, isGroupAdmin, isBotAdmin) {
+    async checkPermissions(command, user, group, isGroupAdmin, isBotAdmin, sender) {
         if (!command.permissions || command.permissions.length === 0) return true;
         
-        const isOwner = config.ownerNumbers.some(num => {
-            const cleanNum = num.replace('@s.whatsapp.net', '');
-            const cleanUserJid = user.jid.replace('@s.whatsapp.net', '');
-            return cleanNum === cleanUserJid || num === user.jid;
+        const userPhone = (sender || user.jid).replace('@s.whatsapp.net', '').replace('@c.us', '');
+        
+        const isOwner = config.ownerNumbers.some(ownerNum => {
+            const ownerPhone = ownerNum.replace('@s.whatsapp.net', '').replace('@c.us', '');
+            return userPhone === ownerPhone;
         });
         
         for (const permission of command.permissions) {
@@ -262,13 +263,7 @@ class CommandHandler {
                 isBotAdmin = botParticipant?.admin === 'admin' || botParticipant?.admin === 'superadmin';
             }
             
-            const isOwner = config.ownerNumbers.some(num => {
-                const cleanNum = num.replace('@s.whatsapp.net', '');
-                const cleanUserJid = sender.replace('@s.whatsapp.net', '');
-                return cleanNum === cleanUserJid || num === sender;
-            });
-            
-            const hasPermission = await this.checkPermissions(command, user, group, isGroupAdmin, isBotAdmin);
+            const hasPermission = await this.checkPermissions(command, user, group, isGroupAdmin, isBotAdmin, sender);
             if (!hasPermission) {
                 await sock.sendMessage(from, {
                     text: `❌ *Access Denied*\n\nYou don't have permission to use this command.\n\n*Required:* ${command.permissions?.join(', ') || 'None'}`

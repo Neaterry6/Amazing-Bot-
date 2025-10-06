@@ -8,9 +8,25 @@ This is a powerful WhatsApp bot built with Baileys, featuring AI integration, me
 **Creator:** Ilom  
 **Total Commands:** 129
 
+## Recent Changes (October 6, 2025)
+
+### ✅ Fixed Owner Permission System (Latest)
+- **Issue**: Owner commands were not working in groups or private chats - showing "Access Denied" even for bot owner
+- **Root Cause**: Permission checking logic was not properly comparing phone numbers from ownerNumbers (.env) with sender numbers
+- **Solutions**:
+  - Improved `checkPermissions()` to use direct sender parameter for accurate owner verification
+  - Enhanced phone number comparison to strip both `@s.whatsapp.net` and `@c.us` suffixes
+  - Removed duplicate/unused owner check code for cleaner logic
+  - Now properly reads `OWNER_NUMBERS` from .env file (e.g., `2348180146181,2347075663318`)
+- **Result**: Owner commands (shell, eval, broadcast, etc.) now work perfectly in both groups and private chats for authorized owners
+- **Random Anime Images**: Added random anime image API integration to menu and help commands
+  - Uses Waifu Pics API, Neko Best API, and Nekos API
+  - Displays different anime character images each time menu/help is used
+  - Works in main menu, category views, and command details
+
 ## Recent Changes (October 5, 2025)
 
-### ✅ Enhanced Menu Command with Dragon Ball Theme (Latest)
+### ✅ Enhanced Menu Command with Dragon Ball Theme
 - **Dragon Ball API Integration**: Integrated web.dragonball-api.com API to fetch random Goku and Dragon Ball character images
 - **Advanced Design**: Completely redesigned menu with Dragon Ball themed ASCII borders and decorative elements, more advanced than help command
 - **User Profile Section**: Displays warrior stats including name, ID, level, status (Premium Warrior/Free Saiyan), power level, and credits (Zeni)
@@ -243,4 +259,4 @@ None. Bot is fully operational and ready for use in Replit environment.
 - Maintainable codebase
 
 ## Last Updated
-October 5, 2025 - Enhanced menu command with Dragon Ball theme, random character images, interactive buttons, and advanced design - all 129 commands working perfectly
+October 6, 2025 - Fixed owner permission system to work in groups and private chats, added random anime images to menu/help commands - all 129 commands working perfectly with proper owner access control
