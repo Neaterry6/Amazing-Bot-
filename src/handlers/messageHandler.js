@@ -157,18 +157,26 @@ class MessageHandler {
         const from = message.key.remoteJid;
         const suggestions = await commandHandler.searchCommands(commandName);
         
-        let response = `❓ *Unknown Command*\n\n*"${commandName}"* is not a valid command.`;
+        let response = `╭──⦿【 ❓ UNKNOWN COMMAND 】\n`;
+        response += `│ 𝗠𝗲𝘀𝘀𝗮𝗴𝗲: "${commandName}" is not valid\n`;
+        response += `│\n`;
         
         if (suggestions.length > 0) {
-            response += '\n\n*Did you mean:*\n';
+            response += `│ 💡 𝗗𝗶𝗱 𝘆𝗼𝘂 𝗺𝗲𝗮𝗻:\n`;
             suggestions.slice(0, 3).forEach(cmd => {
-                response += `• ${config.prefix}${cmd.name} - ${cmd.description}\n`;
+                response += `│    • ${config.prefix}${cmd.name}\n`;
+                response += `│      ${cmd.description}\n`;
             });
+            response += `│\n`;
         }
         
-        response += `\n*Type ${config.prefix}help for all commands*`;
+        response += `│ 📚 𝗧𝗶𝗽: Type ${config.prefix}help for all commands\n`;
+        response += `╰────────⦿\n\n`;
+        response += `╭─────────────⦿\n`;
+        response += `│💫 | [ Ilom Bot 🍀 ]\n`;
+        response += `╰────────────⦿`;
         
-        await sock.sendMessage(from, { text: response });
+        await sock.sendMessage(from, { text: response }, { quoted: message });
     }
 
     async handleAutoReply(sock, message, text, user, isGroup) {

@@ -250,13 +250,17 @@ class CommandHandler {
                 return true;
             }
             
-            const isGroupAdmin = isGroup ? 
-                (await sock.groupMetadata(from)).participants
-                    .find(p => p.id === sender)?.admin !== undefined : false;
+            let isGroupAdmin = false;
+            let isBotAdmin = false;
             
-            const isBotAdmin = isGroup ? 
-                (await sock.groupMetadata(from)).participants
-                    .find(p => p.id === sock.user.id)?.admin !== undefined : false;
+            if (isGroup) {
+                const groupMetadata = await sock.groupMetadata(from);
+                const senderParticipant = groupMetadata.participants.find(p => p.id === sender);
+                const botParticipant = groupMetadata.participants.find(p => p.id === sock.user.id);
+                
+                isGroupAdmin = senderParticipant?.admin === 'admin' || senderParticipant?.admin === 'superadmin';
+                isBotAdmin = botParticipant?.admin === 'admin' || botParticipant?.admin === 'superadmin';
+            }
             
             const isOwner = config.ownerNumbers.some(num => {
                 const cleanNum = num.replace('@s.whatsapp.net', '');

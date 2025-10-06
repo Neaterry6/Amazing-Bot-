@@ -252,12 +252,17 @@ export default {
                     }
 
                     try {
-                        const stream = await sock.downloadMediaMessage(message.message.extendedTextMessage.contextInfo.quotedMessage);
-                        const buffers = [];
-                        for await (const chunk of stream) {
-                            buffers.push(chunk);
-                        }
-                        const buffer = Buffer.concat(buffers);
+                        const { downloadMediaMessage } = await import('@whiskeysockets/baileys');
+                        const quotedMessage = message.message.extendedTextMessage.contextInfo.quotedMessage;
+                        
+                        const buffer = await downloadMediaMessage(
+                            { 
+                                message: quotedMessage,
+                                key: message.message.extendedTextMessage.contextInfo.stanzaId || message.key
+                            }, 
+                            'buffer', 
+                            {}
+                        );
                         
                         fs.writeFileSync(targetPath, buffer);
 
