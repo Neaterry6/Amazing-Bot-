@@ -2,61 +2,129 @@ export default {
     name: 'groupinfo',
     aliases: ['groupdetails', 'ginfo', 'group'],
     category: 'admin',
-    description: 'Get detailed information about the group',
+    description: 'Get detailed information about the group with group picture',
     usage: 'groupinfo',
+    example: 'groupinfo',
     cooldown: 5,
     permissions: ['user'],
+    args: false,
+    minArgs: 0,
+    maxArgs: 0,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: false,
+    supportsReact: false,
+    supportsButtons: false,
 
-    async execute({ sock, message, args, from, user, isGroup }) {
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
         if (!isGroup) {
             return await sock.sendMessage(from, {
-                text: '❌ *Group Only*\n\nThis command can only be used in groups.'
-            });
+                text: '╭──⦿【 ❌ ERROR 】\n│ 𝗠𝗲𝘀𝘀𝗮𝗴𝗲: Group only command\n│\n│ 💡 This command works in groups\n╰────────⦿'
+            }, { quoted: message });
         }
 
         try {
             const groupMetadata = await sock.groupMetadata(from);
-            const { subject, desc, participants, creation, owner } = groupMetadata;
+            const { subject, desc, participants, creation, owner, id } = groupMetadata;
 
             const totalMembers = participants.length;
             const admins = participants.filter(p => p.admin === 'admin' || p.admin === 'superadmin');
+            const superAdmins = participants.filter(p => p.admin === 'superadmin');
+            const regularAdmins = participants.filter(p => p.admin === 'admin');
             const regularMembers = totalMembers - admins.length;
 
-            const creationDate = new Date(creation * 1000).toLocaleDateString();
+            const creationDate = new Date(creation * 1000).toLocaleDateString('en-US', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric'
+            });
+            
+            const creationTime = new Date(creation * 1000).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
             const ownerNumber = owner ? owner.split('@')[0] : 'Unknown';
+            const groupId = id.split('@')[0];
 
-            let groupInfo = `╭─「 *GROUP INFORMATION* 」\n`;
-            groupInfo += `├ 📝 *Name:* ${subject}\n`;
-            groupInfo += `├ 📊 *Total Members:* ${totalMembers}\n`;
-            groupInfo += `├ 👑 *Admins:* ${admins.length}\n`;
-            groupInfo += `├ 👥 *Members:* ${regularMembers}\n`;
-            groupInfo += `├ 📅 *Created:* ${creationDate}\n`;
-            groupInfo += `├ 👤 *Owner:* +${ownerNumber}\n`;
-            groupInfo += `├ 🆔 *Group ID:* ${from.split('@')[0]}\n`;
+            let groupInfo = `╭──⦿【 📋 GROUP INFO 】
+│
+│ 📝 𝗡𝗮𝗺𝗲: ${subject}
+│ 🆔 𝗚𝗿𝗼𝘂𝗽 𝗜𝗗: ${groupId}
+│ 👤 𝗢𝘄𝗻𝗲𝗿: @${ownerNumber}
+│ 📅 𝗖𝗿𝗲𝗮𝘁𝗲𝗱: ${creationDate}
+│ ⏰ 𝗧𝗶𝗺𝗲: ${creationTime}
+│
+╰────────⦿
 
-            if (desc) {
-                groupInfo += `├ 📄 *Description:*\n├   ${desc.replace(/\n/g, '\n├   ')}\n`;
+╭──⦿【 📊 STATISTICS 】
+│
+│ 👥 𝗧𝗼𝘁𝗮𝗹 𝗠𝗲𝗺𝗯𝗲𝗿𝘀: ${totalMembers}
+│ 👑 𝗦𝘂𝗽𝗲𝗿 𝗔𝗱𝗺𝗶𝗻𝘀: ${superAdmins.length}
+│ 👮 𝗔𝗱𝗺𝗶𝗻𝘀: ${regularAdmins.length}
+│ 👤 𝗠𝗲𝗺𝗯𝗲𝗿𝘀: ${regularMembers}
+│
+╰────────⦿
+`;
+
+            if (desc && desc.trim()) {
+                const description = desc.length > 200 ? desc.substring(0, 200) + '...' : desc;
+                groupInfo += `
+╭──⦿【 📄 DESCRIPTION 】
+│
+│ ${description.replace(/\n/g, '\n│ ')}
+│
+╰────────⦿
+`;
             }
 
-            groupInfo += `╰────────────────\n\n`;
-            groupInfo += `*👑 ADMINS LIST:*\n`;
+            if (admins.length > 0) {
+                groupInfo += `
+╭──⦿【 👑 ADMINS LIST 】
+│
+`;
+                admins.forEach((admin, index) => {
+                    const number = admin.id.split('@')[0];
+                    const role = admin.admin === 'superadmin' ? '👑 Super Admin' : '👮 Admin';
+                    groupInfo += `│ ${index + 1}. ${role}\n│    @${number}\n│\n`;
+                });
+                groupInfo += `╰────────⦿
+`;
+            }
 
-            admins.forEach((admin, index) => {
-                const number = admin.id.split('@')[0];
-                const role = admin.admin === 'superadmin' ? '👑' : '👮';
-                groupInfo += `${index + 1}. ${role} +${number}\n`;
-            });
+            groupInfo += `
+╭─────────────⦿
+│💫 | [ Ilom Bot 🍀 ]
+╰────────────⦿`;
+
+            let groupPicture;
+            try {
+                groupPicture = await sock.profilePictureUrl(from, 'image');
+            } catch (err) {
+                groupPicture = 'https://i.ibb.co/2M7rtLk/ilom.jpg';
+            }
+
+            const allMentions = [owner, ...admins.map(a => a.id)].filter(Boolean);
 
             await sock.sendMessage(from, {
-                text: groupInfo,
-                mentions: admins.map(a => a.id)
-            });
+                image: { url: groupPicture },
+                caption: groupInfo,
+                mentions: allMentions
+            }, { quoted: message });
 
         } catch (error) {
             console.error('Group info command error:', error);
             await sock.sendMessage(from, {
-                text: '❌ *Error*\n\nFailed to fetch group information.'
-            });
+                text: `╭──⦿【 ❌ ERROR 】
+│ 𝗠𝗲𝘀𝘀𝗮𝗴𝗲: Failed to fetch info
+│
+│ ⚠️ 𝗗𝗲𝘁𝗮𝗶𝗹𝘀: ${error.message}
+│ 💡 Try again later
+╰────────⦿`
+            }, { quoted: message });
         }
     }
 };
