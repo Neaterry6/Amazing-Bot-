@@ -161,21 +161,23 @@ export default {
 
 ✨ Type ${prefix}support to join our Warrior Group!`;
 
-        const buttons = [
-            { buttonId: `${prefix}owner`, buttonText: { displayText: '👨‍💻 Owner' }, type: 1 },
-            { buttonId: `${prefix}support`, buttonText: { displayText: '🆘 Support Group' }, type: 1 },
-            { buttonId: `${prefix}stats`, buttonText: { displayText: '📊 Bot Stats' }, type: 1 }
-        ];
-
         try {
             await sock.sendMessage(from, {
                 image: { url: dragonBallImage },
                 caption: menuText,
-                footer: `© ${config.botName} - Powered by ${config.ownerName} | 🐉 Dragon Ball Theme`,
-                buttons: buttons,
-                headerType: 4
+                contextInfo: {
+                    externalAdReply: {
+                        title: `🐉 ${config.botName} - Ultimate Menu`,
+                        body: `Total Commands: ${totalCommands} | Power Level: ${userLevel}`,
+                        thumbnailUrl: dragonBallImage,
+                        sourceUrl: config.botRepository,
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
             }, { quoted: message });
         } catch (error) {
+            console.error('Error sending menu with image:', error);
             await sock.sendMessage(from, {
                 text: menuText,
                 contextInfo: {
@@ -295,14 +297,19 @@ export default {
             await sock.sendMessage(from, {
                 image: { url: dragonBallImage },
                 caption: commandList,
-                footer: `© ${config.botName} - ${cat.title}`,
-                buttons: [
-                    { buttonId: `${prefix}menu`, buttonText: { displayText: '🏠 Main Menu' }, type: 1 },
-                    { buttonId: `${prefix}support`, buttonText: { displayText: '🆘 Support' }, type: 1 }
-                ],
-                headerType: 4
+                contextInfo: {
+                    externalAdReply: {
+                        title: cat.title,
+                        body: cat.description,
+                        thumbnailUrl: dragonBallImage,
+                        sourceUrl: config.botRepository,
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
             }, { quoted: message });
         } catch (error) {
+            console.error('Error sending category menu with image:', error);
             await sock.sendMessage(from, {
                 text: commandList,
                 contextInfo: {

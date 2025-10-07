@@ -138,10 +138,11 @@ class CommandHandler {
     async checkPermissions(command, user, group, isGroupAdmin, isBotAdmin, sender) {
         if (!command.permissions || command.permissions.length === 0) return true;
         
-        const userPhone = (sender || user.jid).replace('@s.whatsapp.net', '').replace('@c.us', '');
+        const senderJid = sender || user.jid;
+        const userPhone = senderJid.replace(/@s\.whatsapp\.net/g, '').replace(/@c\.us/g, '').split(':')[0];
         
         const isOwner = config.ownerNumbers.some(ownerNum => {
-            const ownerPhone = ownerNum.replace('@s.whatsapp.net', '').replace('@c.us', '');
+            const ownerPhone = ownerNum.replace(/@s\.whatsapp\.net/g, '').replace(/@c\.us/g, '').split(':')[0];
             return userPhone === ownerPhone;
         });
         

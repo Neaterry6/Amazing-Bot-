@@ -1,0 +1,1023 @@
+[10/7, 9:58 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'binpaste',
+    aliases: ['paste', 'textbin'],
+    category: 'utility',
+    description: 'Create temporary text pastes',
+    usage: 'binpaste <text> [expiration]',
+    example: 'binpaste Hey whatsup 1hr',
+    cooldown: 5,
+    permissions: ['user'],
+    args: true,
+    minArgs: 1,
+    maxArgs: Infinity,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            const validExpirations = ['0', '1hr', '4hr', '12hr', '24hr', '7days', '30days'];
+            let expiration = args[args.length - 1];
+            let text = args.join(' ').trim();
+            if (validExpirations.includes(expiration)) {
+                text = args.slice(0, -1).join(' ').trim();
+            } else {
+                expiration = '1hr'; // Default expiration
+            }
+
+            if (!text) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nPlease provide text to paste.\n\n📜 *Usage*: \`${prefix}binpaste <text> [expiration]\`\n🎯 *Example*: \`${prefix}binpaste Hey whatsup 1hr\`\n\n*Valid Expirations*: ${validExpirations.join(', ')}`
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { react: { text: '📋', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `📋 *Creating Paste*...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/binpaste?text=${encodeURIComponent(text)}&expiration=${expiration}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const paste = response.data;
+
+            if (!paste || !paste.url) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nFailed to create paste.\n\n💡 Try again later!`
+                }, { quoted: message });
+                return;
+            }
+
+            const reply = `📋 *Text Paste*\n\n` +
+                          `- *URL*: ${paste.url}\n` +
+                          `- *Expiration*: ${expiration}\n` +
+                          `- *Content*: ${text.slice(0, 100)}${text.length > 100 ? '...' : ''}\n`;
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, { text: reply }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Binpaste command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to create paste: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 9:58 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'joke',
+    aliases: ['funny', 'laugh'],
+    category: 'fun',
+    description: 'Get a random joke',
+    usage: 'joke',
+    example: 'joke',
+    cooldown: 5,
+    permissions: ['user'],
+    args: false,
+    minArgs: 0,
+    maxArgs: 0,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            await sock.sendMessage(from, { react: { text: '😂', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `😂 *Fetching Joke*...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/joke?apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const joke = response.data?.joke || 'No joke received.';
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, {
+                text: `😂 *Joke*\n\n${joke}\n\n💡 Use \`${prefix}joke\` for another one!`
+            }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Joke command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch joke: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 9:58 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'line',
+    aliases: ['pickup', 'flirt'],
+    category: 'fun',
+    description: 'Get a random pickup line',
+    usage: 'pickupline',
+    example: 'pickupline',
+    cooldown: 5,
+    permissions: ['user'],
+    args: false,
+    minArgs: 0,
+    maxArgs: 0,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            await sock.sendMessage(from, { react: { text: '😘', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `😘 *Fetching Pickup Line*...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/pickuplines?apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const line = response.data?.line || 'No pickup line received.';
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, {
+                text: `😘 *Pickup Line*\n\n${line}\n\n💡 Use \`${prefix}pickupline\` for another one!`
+            }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Pickupline command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch pickup line: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 9:59 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'riddle',
+    aliases: ['puzzle', 'riddles'],
+    category: 'fun',
+    description: 'Get a random riddle',
+    usage: 'riddle',
+    example: 'riddle',
+    cooldown: 5,
+    permissions: ['user'],
+    args: false,
+    minArgs: 0,
+    maxArgs: 0,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            await sock.sendMessage(from, { react: { text: '🧩', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `🧩 *Fetching Riddle*...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/riddles?apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const riddle = response.data;
+
+            if (!riddle || !riddle.riddle) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nNo riddle found.\n\n💡 Try again later!`
+                }, { quoted: message });
+                return;
+            }
+
+            const reply = `🧩 *Riddle*\n\n${riddle.riddle}\n\n*Answer*: ||${riddle.answer}||\n\n💡 Use \`${prefix}riddle\` for another one!`;
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, { text: reply }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Riddle command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch riddle: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 9:59 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'catfact',
+    aliases: ['cat', 'meow'],
+    category: 'fun',
+    description: 'Get a random cat fact',
+    usage: 'catfact',
+    example: 'catfact',
+    cooldown: 5,
+    permissions: ['user'],
+    args: false,
+    minArgs: 0,
+    maxArgs: 0,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            await sock.sendMessage(from, { react: { text: '😺', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `😺 *Fetching Cat Fact*...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/catfact?apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const fact = response.data?.fact || 'No fact received.';
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, {
+                text: `😺 *Cat Fact*\n\n${fact}\n\n💡 Use \`${prefix}catfact\` for another fact!`
+            }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Catfact command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch cat fact: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:00 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'emojimix',
+    aliases: ['mixemoji', 'emoji'],
+    category: 'fun',
+    description: 'Combine two emojis to create an emojimix',
+    usage: 'emojimix <emoji1> <emoji2>',
+    example: 'emojimix 🥵 🐝',
+    cooldown: 5,
+    permissions: ['user'],
+    args: true,
+    minArgs: 2,
+    maxArgs: 2,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            const emoji1 = args[0].trim();
+            const emoji2 = args[1].trim();
+            if (!emoji1 || !emoji2) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nPlease provide two emojis.\n\n📜 *Usage*: \`${prefix}emojimix <emoji1> <emoji2>\`\n🎯 *Example*: \`${prefix}emojimix 🥵 🐝\``
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { react: { text: '😄', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `😄 *Creating Emojimix*: ${emoji1} + ${emoji2}...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/emojimix?emoji1=${encodeURIComponent(emoji1)}&emoji2=${encodeURIComponent(emoji2)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, {
+                responseType: 'arraybuffer',
+                timeout: 10000
+            });
+
+            const tempDir = path.join(process.cwd(), 'temp');
+            const tempFilePath = path.join(tempDir, `emojimix_${Date.now()}.png`);
+            if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+            fs.writeFileSync(tempFilePath, response.data);
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, {
+                image: fs.readFileSync(tempFilePath),
+                caption: `✅ *Emojimix*\n📄 *Emojis*: ${emoji1} + ${emoji2}\n\n💡 Emojimix created successfully!`
+            }, { quoted: message });
+
+            try {
+                fs.unlinkSync(tempFilePath);
+                if (fs.existsSync(tempDir) && fs.readdirSync(tempDir).length === 0) {
+                    fs.rmdirSync(tempDir);
+                }
+            } catch (cleanupError) {
+                console.warn('Failed to clean up temporary file:', cleanupError.message);
+            }
+
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Emojimix command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to create emojimix: ${error.message}\n\n💡 Try different emojis!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:00 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'bible',
+    aliases: ['verse', 'scripture'],
+    category: 'utility',
+    description: 'Get a random Bible verse',
+    usage: 'bible',
+    example: 'bible',
+    cooldown: 5,
+    permissions: ['user'],
+    args: false,
+    minArgs: 0,
+    maxArgs: 0,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            await sock.sendMessage(from, { react: { text: '📖', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `📖 *Fetching Bible Verse*...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/bible?apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const verse = response.data;
+
+            if (!verse || !verse.text) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nNo Bible verse found.\n\n💡 Try again later!`
+                }, { quoted: message });
+                return;
+            }
+
+            const reply = `📖 *Bible Verse*\n\n` +
+                          `- *Text*: ${verse.text}\n` +
+                          `- *Reference*: ${verse.reference || 'N/A'}\n`;
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, { text: reply }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Bible command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch verse: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:00 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'applemusic',
+    aliases: ['apple', 'amusic'],
+    category: 'music',
+    description: 'Fetch Apple Music search results',
+    usage: 'applemusic <query>',
+    example: 'applemusic Baby',
+    cooldown: 5,
+    permissions: ['user'],
+    args: true,
+    minArgs: 1,
+    maxArgs: Infinity,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            const query = args.join(' ').trim();
+            if (!query) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nPlease provide a search query.\n\n📜 *Usage*: \`${prefix}applemusic <query>\`\n🎯 *Example*: \`${prefix}applemusic Baby\``
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { react: { text: '🎶', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `🎶 *Searching Apple Music*: ${query}...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/apple-music?search=${encodeURIComponent(query)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const tracks = response.data?.results || [];
+
+            if (!tracks.length) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nNo tracks found for "${query}".\n\n💡 Try another query!`
+                }, { quoted: message });
+                return;
+            }
+
+            let reply = `🎶 *Apple Music*: ${query}\n\n`;
+            tracks.slice(0, 5).forEach((track, index) => {
+                reply += `**${index + 1}. ${track.name}**\n`;
+                reply += `- *Artist*: ${track.artistName}\n`;
+                reply += `- *Album*: ${track.collectionName || 'N/A'}\n`;
+                if (track.url) reply += `- *Link*: ${track.url}\n`;
+                reply += '\n';
+            });
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, { text: reply }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Apple Music command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch tracks: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:00 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'weather',
+    aliases: ['forecast', 'temp'],
+    category: 'utility',
+    description: 'Get weather information for a specified location',
+    usage: 'weather <location>',
+    example: 'weather Lagos',
+    cooldown: 5,
+    permissions: ['user'],
+    args: true,
+    minArgs: 1,
+    maxArgs: Infinity,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            const location = args.join(' ').trim();
+            if (!location) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nPlease provide a location.\n\n📜 *Usage*: \`${prefix}weather <location>\`\n🎯 *Example*: \`${prefix}weather Lagos\``
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { react: { text: '☁️', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `☁️ *Fetching Weather*: ${location}...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/weather?q=${encodeURIComponent(location)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const data = response.data;
+
+            if (!data || !data.weather) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nNo weather data found for "${location}".\n\n💡 Try another location!`
+                }, { quoted: message });
+                return;
+            }
+
+            const reply = `☁️ *Weather*: ${location}\n\n` +
+                          `- *Condition*: ${data.weather[0].description}\n` +
+                          `- *Temperature*: ${data.main.temp}°C\n` +
+                          `- *Feels Like*: ${data.main.feels_like}°C\n` +
+                          `- *Humidity*: ${data.main.humidity}%\n` +
+                          `- *Wind Speed*: ${data.wind.speed} m/s\n`;
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, { text: reply }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Weather command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch weather: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:00 AM] Heisbroken💔🫁: import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+
+export default {
+    name: 'removebg',
+    aliases: ['nobg', 'removebackground'],
+    category: 'utility',
+    description: 'Remove the background of an image',
+    usage: 'removebg <image_url> or reply to an image',
+    example: 'removebg https://example.com/image.jpg',
+    cooldown: 10,
+    permissions: ['user'],
+    args: true,
+    minArgs: 1,
+    maxArgs: 1,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: true,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            let imageUrl = args[0]?.trim();
+            if (message.quotedMsg && message.quotedMsg.message?.imageMessage) {
+                imageUrl = message.quotedMsg.message.imageMessage.url || null;
+            }
+
+            if (!imageUrl || !imageUrl.startsWith('http')) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nPlease provide a valid image URL or reply to an image.\n\n📜 *Usage*: \`${prefix}removebg <image_url>\`\n🎯 *Example*: \`${prefix}removebg https://example.com/image.jpg\``
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { react: { text: '🖼️', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `🖼️ *Removing Background*...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/removebg?url=${encodeURIComponent(imageUrl)}&stream=True&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, {
+                responseType: 'arraybuffer',
+                timeout: 15000
+            });
+
+            const tempDir = path.join(process.cwd(), 'temp');
+            const tempFilePath = path.join(tempDir, `nobg_${Date.now()}.png`);
+            if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+            fs.writeFileSync(tempFilePath, response.data);
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, {
+                image: fs.readFileSync(tempFilePath),
+                caption: `✅ *Background Removed*\n📄 *Source*: ${imageUrl.slice(0, 50)}...\n\n💡 Image background removed successfully!`
+            }, { quoted: message });
+
+            try {
+                fs.unlinkSync(tempFilePath);
+                if (fs.existsSync(tempDir) && fs.readdirSync(tempDir).length === 0) {
+                    fs.rmdirSync(tempDir);
+                }
+            } catch (cleanupError) {
+                console.warn('Failed to clean up temporary file:', cleanupError.message);
+            }
+
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Removebg command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to remove background: ${error.message}\n\n💡 Check the image URL or try again!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:00 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'wikipedia',
+    aliases: ['wiki', 'wikip'],
+    category: 'utility',
+    description: 'Fetch Wikipedia search results',
+    usage: 'wikipedia <query>',
+    example: 'wikipedia Baby',
+    cooldown: 5,
+    permissions: ['user'],
+    args: true,
+    minArgs: 1,
+    maxArgs: Infinity,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            const query = args.join(' ').trim();
+            if (!query) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nPlease provide a search query.\n\n📜 *Usage*: \`${prefix}wikipedia <query>\`\n🎯 *Example*: \`${prefix}wikipedia Baby\``
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { react: { text: '📚', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `📚 *Searching Wikipedia*: ${query}...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/wikipedia?search=${encodeURIComponent(query)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const results = response.data?.results || [];
+
+            if (!results.length) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nNo Wikipedia results found for "${query}".\n\n💡 Try another query!`
+                }, { quoted: message });
+                return;
+            }
+
+            let reply = `📚 *Wikipedia*: ${query}\n\n`;
+            results.slice(0, 3).forEach((result, index) => {
+                reply += `**${index + 1}. ${result.title}**\n`;
+                reply += `- *Summary*: ${result.summary.slice(0, 200)}...\n`;
+                if (result.url) reply += `- *Read More*: ${result.url}\n`;
+                reply += '\n';
+            });
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, { text: reply }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Wikipedia command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch Wikipedia results: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:01 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'spotify',
+    aliases: ['spotifys', 'music'],
+    category: 'music',
+    description: 'Search for tracks on Spotify',
+    usage: 'spotify <query>',
+    example: 'spotify Baby girl joeboy',
+    cooldown: 5,
+    permissions: ['user'],
+    args: true,
+    minArgs: 1,
+    maxArgs: Infinity,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            const query = args.join(' ').trim();
+            if (!query) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nPlease provide a search query.\n\n📜 *Usage*: \`${prefix}spotify <query>\`\n🎯 *Example*: \`${prefix}spotify Baby girl joeboy\``
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { react: { text: '🎵', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `🎵 *Searching Spotify*: ${query}...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/spotify-search?q=${encodeURIComponent(query)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const tracks = response.data?.tracks || [];
+
+            if (!tracks.length) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nNo tracks found for "${query}".\n\n💡 Try another query!`
+                }, { quoted: message });
+                return;
+            }
+
+            let reply = `🎵 *Spotify Search*: ${query}\n\n`;
+            tracks.slice(0, 5).forEach((track, index) => {
+                reply += `**${index + 1}. ${track.name}**\n`;
+                reply += `- *Artist*: ${track.artists.join(', ')}\n`;
+                reply += `- *Album*: ${track.album || 'N/A'}\n`;
+                if (track.preview_url) reply += `- *Preview*: ${track.preview_url}\n`;
+                reply += '\n';
+            });
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, { text: reply }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Spotify command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch tracks: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:01 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'dictionary',
+    aliases: ['dict', 'word'],
+    category: 'utility',
+    description: 'Get word definitions and meanings',
+    usage: 'dictionary <word>',
+    example: 'dictionary Baby',
+    cooldown: 5,
+    permissions: ['user'],
+    args: true,
+    minArgs: 1,
+    maxArgs: 1,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: false,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            const word = args[0].trim();
+            if (!word) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nPlease provide a word.\n\n📜 *Usage*: \`${prefix}dictionary <word>\`\n🎯 *Example*: \`${prefix}dictionary Baby\``
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { react: { text: '📖', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `📖 *Looking up*: ${word}...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/dictionary?word=${encodeURIComponent(word)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const data = response.data;
+
+            if (!data || !data.meanings || !data.meanings.length) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nNo definitions found for "${word}".\n\n💡 Try another word!`
+                }, { quoted: message });
+                return;
+            }
+
+            let reply = `📖 *Dictionary*: ${word}\n\n`;
+            data.meanings.forEach((meaning, index) => {
+                reply += `**${index + 1}. ${meaning.partOfSpeech}**\n`;
+                meaning.definitions.forEach((def, i) => {
+                    reply += `- ${def.definition}\n`;
+                    if (def.example) reply += `  *Example*: ${def.example}\n`;
+                });
+                reply += '\n';
+            });
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            await sock.sendMessage(from, { text: reply }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Dictionary command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch definition: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:01 AM] Heisbroken💔🫁: import axios from 'axios';
+
+export default {
+    name: 'xvideos',
+    aliases: ['xv', 'nsfwvid'],
+    category: 'nsfw',
+    description: 'Scrape adult videos from Xvideos (Owner-only, NSFW +18)',
+    usage: 'xvideos [page] [limit]',
+    example: 'xvideos 1 2',
+    cooldown: 10,
+    permissions: ['owner'],
+    args: false,
+    minArgs: 0,
+    maxArgs: 2,
+    typing: true,
+    premium: false,
+    hidden: true,
+    ownerOnly: true,
+    supportsReply: false,
+    supportsChat: false,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            if (isGroup) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nThis command is restricted to private chats due to NSFW content.\n\n💡 Use \`${prefix}xvideos\` in a private chat!`
+                }, { quoted: message });
+                return;
+            }
+
+            const page = parseInt(args[0]) || 1;
+            const limit = parseInt(args[1]) || 2;
+            if (limit > 10) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nLimit cannot exceed 10 videos.\n\n💡 Example: \`${prefix}xvideos 1 2\``
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { react: { text: '🔍', key: message.key } });
+            const processMessage = await sock.sendMessage(from, {
+                text: `🔞 *Searching Xvideos* (Page ${page}, Limit ${limit})...`
+            }, { quoted: message });
+
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/xvideos?page=${page}&limit=${limit}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const videos = response.data?.videos || [];
+
+            if (!videos.length) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nNo videos found.\n\n💡 Try a different page or limit!`
+                }, { quoted: message });
+                return;
+            }
+
+            await sock.sendMessage(from, { delete: processMessage.key });
+            for (const video of videos) {
+                await sock.sendMessage(from, {
+                    video: { url: video.url },
+                    mimetype: 'video/mp4',
+                    fileName: `${video.title || 'Xvideo'}.mp4`,
+                    caption: `🔞 *Xvideos*\n📝 *Title*: ${video.title || 'N/A'}\n⏱ *Duration*: ${video.duration || 'N/A'}\n🔗 *Source*: Xvideos\n\n⚠️ *NSFW Warning*: For private viewing only!`
+                }, { quoted: message });
+            }
+
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Xvideos command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to fetch videos: ${error.message}\n\n💡 Try again later!`
+            }, { quoted: message });
+        }
+    }
+};
+[10/7, 10:01 AM] Heisbroken💔🫁: import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
+
+export default {
+    name: 'got',
+    aliases: ['ai', 'chat'],
+    category: 'utility',
+    description: 'Interact with Got AI (GPT-4.1 or GPT-3.5) for text or image-based queries',
+    usage: 'got <query> or reply to a Got AI message or image to continue the conversation',
+    example: 'got What is the capital of France? or reply to an image with got Describe this',
+    cooldown: 5,
+    permissions: ['user'],
+    args: true,
+    minArgs: 1,
+    maxArgs: Infinity,
+    typing: true,
+    premium: false,
+    hidden: false,
+    ownerOnly: false,
+    supportsReply: true,
+    supportsChat: true,
+    supportsReact: true,
+    supportsButtons: false,
+
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
+        try {
+            // Determine if this is a reply and check for image
+            const isReply = message.quotedMsg && message.quotedMsg.fromMe;
+            let query = args.join(' ').trim();
+            let imageUrl = null;
+            let model = args[0].toLowerCase() === 'gpt3.5' ? 'gpt-3.5' : 'gpt-4.1'; // Default to GPT-4.1
+            if (args[0].toLowerCase() === 'gpt3.5') {
+                args.shift(); // Remove model specifier from query
+                query = args.join(' ').trim();
+            }
+
+            // Check if reply is to an image message
+            if (message.quotedMsg && message.quotedMsg.message?.imageMessage) {
+                imageUrl = message.quotedMsg.message.imageMessage.url || null;
+                query = query || 'Describe this image';
+            }
+
+            // Validate query
+            if (!query) {
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nPlease provide a query or reply to a Got AI message/image.\n\n📜 *Usage*: \`${prefix}got [gpt3.5] <query>\`\n🎯 *Example*: \`${prefix}got What is the capital of France?\` or \`${prefix}got gpt3.5 Tell me a story\``
+                }, { quoted: message });
+                return;
+            }
+
+            // React with thinking emoji (🤔)
+            await sock.sendMessage(from, {
+                react: { text: '🤔', key: message.key }
+            });
+
+            // Send temporary processing message
+            const processMessage = await sock.sendMessage(from, {
+                text: `🤖 *Got AI (${model})*: Processing your query...`
+            }, { quoted: message });
+
+            // Make API request
+            const apiBaseUrl = `https://kaiz-apis.gleeze.com/api/${model}`;
+            const params = {
+                ask: query,
+                uid: '33', // Assuming static UID as per example
+                apikey: 'a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea',
+            };
+            if (imageUrl) params.imageUrl = imageUrl;
+
+            let response;
+            try {
+                response = await axios.get(apiBaseUrl, { params, timeout: 15000 });
+            } catch (apiError) {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nFailed to fetch response from Got AI: ${apiError.message}\n\n💡 Try switching models (e.g., \`${prefix}got gpt3.5 <query>\`) or try again later!`
+                }, { quoted: message });
+                return;
+            }
+
+            // Extract response data
+            const aiResponse = response.data?.response || response.data?.message || 'No response received from the API.';
+            if (!aiResponse || typeof aiResponse !== 'string') {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `❌ *Error*\nInvalid response from Got AI.\n\n💡 Try a different query or model!`
+                }, { quoted: message });
+                return;
+            }
+
+            // Check response size (limit to 4KB for WhatsApp)
+            if (Buffer.byteLength(aiResponse, 'utf8') > 4096) {
+                const tempDir = path.join(process.cwd(), 'temp');
+                const tempFilePath = path.join(tempDir, `got_response_${Date.now()}.txt`);
+                if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+                fs.writeFileSync(tempFilePath, aiResponse, 'utf8');
+                const fileSizeKB = (fs.statSync(tempFilePath).size / 1024).toFixed(2);
+
+                await sock.sendMessage(from, { delete: processMessage.key });
+                const fileBuffer = fs.readFileSync(tempFilePath);
+                await sock.sendMessage(from, {
+                    document: fileBuffer,
+                    mimetype: 'text/plain',
+                    fileName: `Got_AI_Response.txt`,
+                    caption: `✅ *Got AI (${model}) Response*\n📄 *Query*: ${query}\n💾 *Size*: ${fileSizeKB} KB\n\n💡 Response was too long, sent as a file! Reply to continue.`
+                }, { quoted: message });
+
+                try {
+                    fs.unlinkSync(tempFilePath);
+                    if (fs.existsSync(tempDir) && fs.readdirSync(tempDir).length === 0) {
+                        fs.rmdirSync(tempDir);
+                    }
+                } catch (cleanupError) {
+                    console.warn('Failed to clean up temporary file:', cleanupError.message);
+                }
+            } else {
+                await sock.sendMessage(from, { delete: processMessage.key });
+                await sock.sendMessage(from, {
+                    text: `🤖 *Got AI (${model})*: ${aiResponse}\n\n💡 Reply to this message to continue, or use \`${prefix}got [gpt3.5] <new query>\`!`
+                }, { quoted: message });
+            }
+
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+        } catch (error) {
+            console.error('Got AI command error:', error);
+            await sock.sendMessage(from, {
+                text: `❌ *Error*\nFailed to process Got AI request: ${error.message}\n\n💡 Check your query or try again!`
+            }, { quoted: message });
+        }
+    }
+};

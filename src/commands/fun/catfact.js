@@ -1,12 +1,12 @@
 import axios from 'axios';
 
 export default {
-    name: 'joke',
-    aliases: ['funny', 'laugh'],
+    name: 'catfact',
+    aliases: ['cat', 'meow'],
     category: 'fun',
-    description: 'Get a random joke',
-    usage: 'joke',
-    example: 'joke',
+    description: 'Get a random cat fact',
+    usage: 'catfact',
+    example: 'catfact',
     cooldown: 5,
     permissions: ['user'],
     args: false,
@@ -23,23 +23,23 @@ export default {
 
     async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
         try {
-            await sock.sendMessage(from, { react: { text: '😂', key: message.key } });
+            await sock.sendMessage(from, { react: { text: '😺', key: message.key } });
             const processMessage = await sock.sendMessage(from, {
-                text: `😂 *Fetching Joke*...`
+                text: `😺 *Fetching Cat Fact*...`
             }, { quoted: message });
 
-            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/joke?apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
-            const joke = response.data?.joke || 'No joke received.';
+            const response = await axios.get(`https://kaiz-apis.gleeze.com/api/catfact?apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`, { timeout: 10000 });
+            const fact = response.data?.fact || 'No fact received.';
 
             await sock.sendMessage(from, { delete: processMessage.key });
             await sock.sendMessage(from, {
-                text: `😂 *Joke*\n\n${joke}\n\n💡 Use \`${prefix}joke\` for another one!`
+                text: `😺 *Cat Fact*\n\n${fact}\n\n💡 Use \`${prefix}catfact\` for another fact!`
             }, { quoted: message });
             await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
         } catch (error) {
-            console.error('Joke command error:', error);
+            console.error('Catfact command error:', error);
             await sock.sendMessage(from, {
-                text: `❌ *Error*\nFailed to fetch joke: ${error.message}\n\n💡 Try again later!`
+                text: `❌ *Error*\nFailed to fetch cat fact: ${error.message}\n\n💡 Try again later!`
             }, { quoted: message });
         }
     }
