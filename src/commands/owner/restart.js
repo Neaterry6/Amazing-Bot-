@@ -1,46 +1,81 @@
+import { exec } from 'child_process';
+
 export default {
     name: 'restart',
     aliases: ['reboot', 'reload'],
     category: 'owner',
-    description: 'Restart the bot process (Owner Only)',
+    description: 'Restart the bot process',
     usage: 'restart [reason]',
+    example: 'restart\nrestart updating features',
     cooldown: 0,
     permissions: ['owner'],
+    args: false,
+    minArgs: 0,
+    maxArgs: 50,
+    typing: true,
+    premium: false,
+    hidden: false,
     ownerOnly: true,
+    supportsReply: false,
+    supportsChat: false,
+    supportsReact: false,
+    supportsButtons: false,
 
-    async execute({ sock, message, args, from, sender, prefix }) {
+    async execute({ sock, message, args, command, user, group, from, sender, isGroup, isGroupAdmin, isBotAdmin, prefix }) {
         try {
             const reason = args.join(' ') || 'Manual restart by owner';
             const uptime = process.uptime();
+            const userId = sender.split('@')[0];
             
-            // Calculate uptime
             const days = Math.floor(uptime / 86400);
             const hours = Math.floor((uptime % 86400) / 3600);
             const minutes = Math.floor((uptime % 3600) / 60);
-            const uptimeString = `${days}d ${hours}h ${minutes}m`;
+            const seconds = Math.floor(uptime % 60);
+            const uptimeString = `${days}d ${hours}h ${minutes}m ${seconds}s`;
             
             await sock.sendMessage(from, {
-                text: `🔄 *Bot Restart Initiated*\n\n👤 **Initiated by:** Owner (${sender.split('@')[0]})\n📝 **Reason:** ${reason}\n⏰ **Current uptime:** ${uptimeString}\n🔄 **Status:** Preparing restart...\n\n⚠️ **Warning:** Bot will be offline temporarily\n⏳ **Expected downtime:** 10-30 seconds\n\n🤖 *Restarting bot process now...*`
-            });
+                text: `╭──⦿【 🔄 RESTARTING 】
+│ 👤 𝗜𝗻𝗶𝘁𝗶𝗮𝘁𝗲𝗱 𝗯𝘆: @${userId}
+│ 📝 𝗥𝗲𝗮𝘀𝗼𝗻: ${reason}
+│ ⏰ 𝗨𝗽𝘁𝗶𝗺𝗲: ${uptimeString}
+│ 🔄 𝗦𝘁𝗮𝘁𝘂𝘀: Preparing restart...
+╰────────⦿
+
+╭──⦿【 ⚠️ WARNING 】
+│ ⏳ 𝗗𝗼𝘄𝗻𝘁𝗶𝗺𝗲: 10-30 seconds
+│ 🤖 𝗕𝗼𝘁: Temporarily offline
+╰────────⦿
+
+╭──⦿【 ⚡ STATUS 】
+│ 🔄 Restarting bot process...
+╰────────⦿
+
+╭─────────────⦿
+│💫 | [ Ilom Bot 🍀 ]
+╰────────────⦿`,
+                mentions: [sender]
+            }, { quoted: message });
             
-            // Log restart event
             console.log(`[RESTART] Bot restart initiated by ${sender} - Reason: ${reason}`);
             
-            // Give time for message to send
             setTimeout(() => {
                 console.log('[RESTART] Restarting bot process...');
                 
-                // Attempt graceful restart
-                if (process.env.PM2_HOME) {
-                    // If using PM2
-                    require('child_process').exec('pm2 restart 0', (error) => {
+                if (process.env.PM2_HOME || process.env.pm_id) {
+                    exec('pm2 restart 0', (error, stdout, stderr) => {
                         if (error) {
                             console.error('[RESTART] PM2 restart failed:', error);
-                            process.exit(1);
+                            exec('pm2 restart all', (err2) => {
+                                if (err2) {
+                                    console.error('[RESTART] PM2 restart all failed:', err2);
+                                    process.exit(1);
+                                }
+                            });
+                        } else {
+                            console.log('[RESTART] PM2 restart successful:', stdout);
                         }
                     });
                 } else {
-                    // Standard Node.js restart
                     process.exit(0);
                 }
             }, 2000);
@@ -49,8 +84,26 @@ export default {
             console.error('Restart command error:', error);
             
             await sock.sendMessage(from, {
-                text: `❌ *Restart Failed*\n\n**Error:** ${error.message}\n\n**Possible causes:**\n• Process manager not available\n• Insufficient permissions\n• System resource constraints\n• Critical system error\n\n**Manual alternatives:**\n• Use system process manager\n• Restart hosting service\n• Check system logs\n• Contact system administrator\n\n⚠️ *Bot may need manual intervention*`
-            });
+                text: `╭──⦿【 ❌ ERROR 】
+│ 𝗠𝗲𝘀𝘀𝗮𝗴𝗲: Restart failed
+│
+│ ⚠️ 𝗗𝗲𝘁𝗮𝗶𝗹𝘀: ${error.message}
+╰────────⦿
+
+╭──⦿【 🔍 POSSIBLE CAUSES 】
+│ • Process manager unavailable
+│ • Insufficient permissions
+│ • System resource constraints
+│ • Critical system error
+╰────────⦿
+
+╭──⦿【 💡 ALTERNATIVES 】
+│ • Use system process manager
+│ • Restart hosting service
+│ • Check system logs
+│ • Contact administrator
+╰────────⦿`
+            }, { quoted: message });
         }
     }
 };
