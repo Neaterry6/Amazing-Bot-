@@ -271,17 +271,43 @@ class CommandHandler {
             
             let isGroupAdmin = false;
             let isBotAdmin = false;
+            let actualSender = sender;
             
             if (isGroup) {
                 const groupMetadata = await sock.groupMetadata(from);
-                const senderParticipant = groupMetadata.participants.find(p => p.id === sender);
+                
+                if (sender.endsWith('@lid')) {
+                    const participant = groupMetadata.participants.find(p => {
+                        return p.id === sender || 
+                               p.lid === sender || 
+                               (p.devices && p.devices.includes(sender));
+                    });
+                    
+                    if (participant && participant.id) {
+                        actualSender = participant.id;
+                        logger.debug(`Resolved device ID ${sender} to actual JID ${actualSender}`);
+                    } else {
+                        logger.warn(`Could not resolve device ID ${sender} to actual JID, checking all participants`);
+                        const match = groupMetadata.participants.find(p => {
+                            const deviceNum = sender.split('@')[0];
+                            const participantNum = p.id.split('@')[0];
+                            return participantNum.endsWith(deviceNum) || deviceNum.includes(participantNum);
+                        });
+                        if (match) {
+                            actualSender = match.id;
+                            logger.debug(`Fuzzy matched device ID ${sender} to ${actualSender}`);
+                        }
+                    }
+                }
+                
+                const senderParticipant = groupMetadata.participants.find(p => p.id === actualSender || p.id === sender);
                 const botParticipant = groupMetadata.participants.find(p => p.id === sock.user.id);
                 
                 isGroupAdmin = senderParticipant?.admin === 'admin' || senderParticipant?.admin === 'superadmin';
                 isBotAdmin = botParticipant?.admin === 'admin' || botParticipant?.admin === 'superadmin';
             }
             
-            const hasPermission = await this.checkPermissions(command, user, group, isGroupAdmin, isBotAdmin, sender);
+            const hasPermission = await this.checkPermissions(command, user, group, isGroupAdmin, isBotAdmin, actualSender);
             if (!hasPermission) {
                 await sock.sendMessage(from, {
                     text: `❌ *Access Denied*\n\nYou don't have permission to use this command.\n\n*Required:* ${command.permissions?.join(', ') || 'None'}`
