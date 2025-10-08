@@ -147,6 +147,8 @@ class CommandHandler {
             .split('@')[0]
             .trim();
         
+        logger.debug(`Permission check - Command: ${command.name}, Sender JID: ${senderJid}, Extracted Phone: ${userPhone}`);
+        
         const isOwner = config.ownerNumbers.some(ownerNum => {
             const ownerPhone = ownerNum
                 .replace(/@s\.whatsapp\.net/g, '')
@@ -155,8 +157,11 @@ class CommandHandler {
                 .split(':')[0]
                 .split('@')[0]
                 .trim();
+            logger.debug(`Comparing user ${userPhone} with owner ${ownerPhone}`);
             return userPhone === ownerPhone;
         });
+        
+        logger.debug(`Is owner: ${isOwner}, Required permissions: ${command.permissions.join(', ')}`);
         
         for (const permission of command.permissions) {
             switch (permission) {
