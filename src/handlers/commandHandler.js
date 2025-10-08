@@ -139,10 +139,22 @@ class CommandHandler {
         if (!command.permissions || command.permissions.length === 0) return true;
         
         const senderJid = sender || user.jid;
-        const userPhone = senderJid.replace(/@s\.whatsapp\.net/g, '').replace(/@c\.us/g, '').split(':')[0];
+        const userPhone = senderJid
+            .replace(/@s\.whatsapp\.net/g, '')
+            .replace(/@c\.us/g, '')
+            .replace(/@lid/g, '')
+            .split(':')[0]
+            .split('@')[0]
+            .trim();
         
         const isOwner = config.ownerNumbers.some(ownerNum => {
-            const ownerPhone = ownerNum.replace(/@s\.whatsapp\.net/g, '').replace(/@c\.us/g, '').split(':')[0];
+            const ownerPhone = ownerNum
+                .replace(/@s\.whatsapp\.net/g, '')
+                .replace(/@c\.us/g, '')
+                .replace(/@lid/g, '')
+                .split(':')[0]
+                .split('@')[0]
+                .trim();
             return userPhone === ownerPhone;
         });
         
