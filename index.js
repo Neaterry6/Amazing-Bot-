@@ -9,6 +9,8 @@ import NodeCache from 'node-cache';
 import figlet from 'figlet';
 import chalk from 'chalk';
 import { File } from 'megajs';
+import { makeWASocket, DisconnectReason, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } from '@whiskeysockets/baileys';
+import { Boom } from '@hapi/boom';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,7 +38,7 @@ let sock = null;
 let isInitialized = false;
 let reconnectAttempts = 0;
 
-const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
+const SESSION_PATH = process.env.NODE_ENV === 'production' ? '/opt/render/project/src/auth' : path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 3;
 
 async function createDirectoryStructure() {
@@ -54,18 +56,12 @@ async function createDirectoryStructure() {
         'media/profile', 'media/stickers', 'media/downloads', 'media/cache'
     ];
     
-    await Promise.all(directories.map(dir => fs.ensureDir(dir)));
+    await Promise.all(directories.map(dir => fs.ensureDir(path.join(process.cwd(), dir))));
 }
 
 async function displayStartupBanner() {
     console.clear();
-
-    const banner = figlet.textSync('ILOM BOT', {
-        font: 'ANSI Shadow',
-        horizontalLayout: 'fitted',
-        verticalLayout: 'default'
-    });
-
+    const banner = figlet.textSync('ILOM BOT', { font: 'ANSI Shadow', horizontalLayout: 'fitted', verticalLayout: 'default' });
     const gradient = (await import('gradient-string')).default;
     console.log(gradient.rainbow(banner));
     console.log(chalk.cyan.bold('\n🧠 Amazing Bot 🧠 v1 created by Ilom\n'));
@@ -82,23 +78,24 @@ async function processSessionCredentials() {
         try {
             const sessionId = process.env.SESSION_ID.trim();
             let sessionData;
-            
             logger.info('🔐 Processing session credentials from environment...');
 
-            // Handle Mega.nz session download
+            // Handle Mega.nz session download with timeout
             if (sessionId.startsWith('sypher™--')) {
                 try {
                     const sessdata = sessionId.replace("sypher™--", "");
                     const filer = File.fromURL(`https://mega.nz/file/${sessdata}`);
                     await new Promise((resolve, reject) => {
+                        const timeout = setTimeout(() => reject(new Error('Mega.nz download timed out')), 10000); // 10s timeout
                         filer.download((err, data) => {
+                            clearTimeout(timeout);
                             if (err) {
-                                logger.error("Failed to load creds from Mega");
+                                logger.error("Failed to load creds from Mega:", err.message);
                                 reject(err);
                             } else {
                                 fs.writeFile(path.join(SESSION_PATH, 'creds.json'), data, err => {
                                     if (err) {
-                                        logger.error("Failed to write creds from Mega");
+                                        logger.error("Failed to write creds from Mega:", err.message);
                                         reject(err);
                                     } else {
                                         logger.success("Session downloaded from Mega.nz");
@@ -111,39 +108,31 @@ async function processSessionCredentials() {
                     return true;
                 } catch (error) {
                     logger.warn('⚠️ Failed to download session from Mega:', error.message);
-                    // Continue to other formats if Mega fails
                 }
             }
 
-            // Handle different session ID formats with improved error handling
-            if (sessionId.startsWith('Ilom~')) {
-                const cleanId = sessionId.replace('Ilom~', '');
-                sessionData = JSON.parse(Buffer.from(cleanId, 'base64').toString());
-                logger.info('✅ Processed Ilom format session');
-            } else if (sessionId.startsWith('{') && sessionId.endsWith('}')) {
-                sessionData = JSON.parse(sessionId);
-                logger.info('✅ Processed JSON format session');
-            } else {
-                try {
+            // Handle session ID formats
+            try {
+                if (sessionId.startsWith('Ilom~')) {
+                    sessionData = JSON.parse(Buffer.from(sessionId.replace('Ilom~', ''), 'base64').toString());
+                    logger.info('✅ Processed Ilom format session');
+                } else if (sessionId.startsWith('{') && sessionId.endsWith('}')) {
+                    sessionData = JSON.parse(sessionId);
+                    logger.info('✅ Processed JSON format session');
+                } else {
                     sessionData = JSON.parse(Buffer.from(sessionId, 'base64').toString());
                     logger.info('✅ Processed base64 format session');
-                } catch {
-                    sessionData = JSON.parse(sessionId);
-                    logger.info('✅ Processed direct JSON format session');
                 }
+            } catch (error) {
+                logger.warn('⚠️ Invalid SESSION_ID format:', error.message);
+                return false;
             }
-            
+
             if (sessionData && typeof sessionData === 'object') {
-                // Handle complete multi-file auth state structure
                 if (sessionData.creds) {
-                    // New format: contains both creds and keys
                     await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData.creds, { spaces: 2 });
-                    
-                    // Process keys if available
                     if (sessionData.keys && typeof sessionData.keys === 'object') {
                         const keysPath = path.join(SESSION_PATH, 'keys');
-                        await fs.ensureDir(keysPath);
-                        
                         for (const [keyName, keyData] of Object.entries(sessionData.keys)) {
                             if (keyData && typeof keyData === 'object') {
                                 await fs.writeJSON(path.join(keysPath, `${keyName}.json`), keyData, { spaces: 2 });
@@ -154,22 +143,17 @@ async function processSessionCredentials() {
                         logger.info('✅ Session credentials processed (keys will be generated)');
                     }
                 } else {
-                    // Legacy format: direct creds object
                     await fs.writeJSON(path.join(SESSION_PATH, 'creds.json'), sessionData, { spaces: 2 });
                     logger.info('✅ Session credentials processed (legacy format)');
                 }
                 return true;
             }
         } catch (error) {
-            logger.warn('⚠️ Invalid SESSION_ID format:', error.message);
-            logger.debug('SESSION_ID content preview:', process.env.SESSION_ID?.substring(0, 100) + '...');
+            logger.warn('⚠️ Failed to process SESSION_ID:', error.message);
         }
     }
-    
-    // Check for existing valid session
+
     const credsPath = path.join(SESSION_PATH, 'creds.json');
-    const keysPath = path.join(SESSION_PATH, 'keys');
-    
     if (await fs.pathExists(credsPath)) {
         try {
             const creds = await fs.readJSON(credsPath);
@@ -185,7 +169,7 @@ async function processSessionCredentials() {
             await fs.remove(credsPath).catch(() => {});
         }
     }
-    
+
     logger.info('ℹ️ No valid session found - will generate QR code for pairing');
     return false;
 }
@@ -219,7 +203,8 @@ async function sendBotStatusUpdate(sock) {
 
     for (const ownerNumber of config.ownerNumbers) {
         try {
-            await sock.sendMessage(ownerNumber, {
+            const jid = `${ownerNumber}@s.whatsapp.net`;
+            await sock.sendMessage(jid, {
                 text: statusMessage,
                 contextInfo: {
                     externalAdReply: {
@@ -239,14 +224,12 @@ async function sendBotStatusUpdate(sock) {
 }
 
 async function handleConnectionEvents(sock, connectionUpdate) {
-    const { DisconnectReason } = await import('@whiskeysockets/baileys');
-    const { connection, lastDisconnect, qr, receivedPendingNotifications } = connectionUpdate;
+    const { connection, lastDisconnect, qr } = connectionUpdate;
 
     if (qr && !process.env.SESSION_ID) {
         console.log(chalk.cyan('\n📱 QR Code received - scan with WhatsApp to connect'));
         console.log(chalk.yellow('Set SESSION_ID environment variable to avoid QR scanning in future'));
 
-        // Generate QR code if scanner is enabled
         if (qrService.isQREnabled()) {
             try {
                 const qrGenerated = await qrService.generateQR(qr);
@@ -261,18 +244,29 @@ async function handleConnectionEvents(sock, connectionUpdate) {
             }
         }
     }
-    
+
     if (connection === 'close') {
-        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
         if (statusCode === DisconnectReason.restartRequired) {
+            logger.info('🔄 Restart required, reconnecting...');
             setTimeout(establishWhatsAppConnection, 10000);
+        } else if (statusCode !== DisconnectReason.loggedOut && reconnectAttempts < MAX_RECONNECT) {
+            logger.info(`🔄 Reconnecting (attempt ${reconnectAttempts + 1}/${MAX_RECONNECT})...`);
+            reconnectAttempts++;
+            setTimeout(establishWhatsAppConnection, 5000);
+        } else {
+            logger.error('Connection closed permanently or max reconnect attempts reached');
+            if (statusCode === DisconnectReason.loggedOut) {
+                logger.warn('🔄 Logged out, clearing auth and requiring new QR scan');
+                fs.remove(SESSION_PATH).catch(() => {});
+            }
+            process.exit(1);
         }
     } else if (connection === 'open') {
         reconnectAttempts = 0;
         logger.info('✅ WhatsApp connection established');
         console.log(chalk.green.bold('🚀 Bot is online and ready!'));
 
-        // Clear QR code when successfully connected
         if (qrService.isQREnabled()) {
             await qrService.clearQR();
         }
@@ -290,31 +284,27 @@ async function handleConnectionEvents(sock, connectionUpdate) {
 
 async function establishWhatsAppConnection() {
     try {
-        const { default: makeWASocket, Browsers, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = await import('@whiskeysockets/baileys');
-        const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
         const { version } = await fetchLatestBaileysVersion();
-        
+        const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
         sock = makeWASocket({
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, P({ level: "fatal" }).child({ level: "fatal" })),
+                keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' }).child({ level: 'fatal' })),
             },
-            printQRInTerminal: false,
-            browser: Browsers.macOS("Safari"),
+            printQRInTerminal: process.env.NODE_ENV !== 'production',
+            browser: ['Amazing Bot', 'Chrome', '20.0.04'],
             markOnlineOnConnect: true,
             defaultQueryTimeoutMs: 60000,
             connectTimeoutMs: 60000,
             retryRequestDelayMs: 5000,
             maxRetries: 5,
-            logger: P({ level: "silent" }),
+            logger: P({ level: process.env.PINO_LOG_LEVEL || 'silent' }),
+            version
         });
-        
-        sock.ev.on('connection.update', (update) => 
-            handleConnectionEvents(sock, update)
-        );
-        
+
+        sock.ev.on('connection.update', (update) => handleConnectionEvents(sock, update));
         sock.ev.on('creds.update', saveCreds);
-        
+
         sock.ev.on('messages.upsert', async ({ messages, type }) => {
             if (type === 'notify') {
                 for (const message of messages) {
@@ -322,22 +312,22 @@ async function establishWhatsAppConnection() {
                 }
             }
         });
-        
+
         sock.ev.on('messages.update', async (messageUpdates) => {
             await messageHandler.handleMessageUpdate(sock, messageUpdates);
         });
-        
+
         sock.ev.on('messages.delete', async (deletedMessages) => {
             await messageHandler.handleMessageDelete(sock, deletedMessages);
         });
-        
+
         sock.ev.on('messages.reaction', async (reactions) => {
             const handleReaction = (await import('./src/events/messageReaction.js')).default;
             for (const reaction of reactions) {
                 await handleReaction(sock, reaction);
             }
         });
-        
+
         sock.ev.on('group-participants.update', async (groupUpdate) => {
             try {
                 await groupHandler.handleParticipantsUpdate(sock, groupUpdate);
@@ -345,7 +335,7 @@ async function establishWhatsAppConnection() {
                 logger.error('Group participants update error:', error);
             }
         });
-        
+
         sock.ev.on('groups.update', async (groupsUpdate) => {
             try {
                 await groupHandler.handleGroupUpdate(sock, groupsUpdate);
@@ -353,11 +343,11 @@ async function establishWhatsAppConnection() {
                 logger.error('Groups update error:', error);
             }
         });
-        
+
         sock.ev.on('call', async (callEvents) => {
             await callHandler.handleIncomingCall(sock, callEvents);
         });
-        
+
         sock.ev.on('contacts.update', async (contactUpdates) => {
             try {
                 await eventHandler.handleContactUpdate(sock, contactUpdates);
@@ -365,15 +355,15 @@ async function establishWhatsAppConnection() {
                 logger.error('Contact update error:', error);
             }
         });
-        
+
         global.sock = sock;
-        
     } catch (error) {
         logger.error('Failed to establish WhatsApp connection:', error);
         if (reconnectAttempts < MAX_RECONNECT) {
             reconnectAttempts++;
             setTimeout(establishWhatsAppConnection, 5000);
         } else {
+            logger.error('Max reconnect attempts reached');
             process.exit(1);
         }
     }
@@ -384,19 +374,19 @@ function setupProcessHandlers() {
         logger.error('Unhandled Promise Rejection:', reason);
         errorHandler.handleError('unhandledRejection', reason);
     });
-    
+
     process.on('uncaughtException', (error) => {
         logger.error('Uncaught Exception:', error);
         errorHandler.handleError('uncaughtException', error);
         process.exit(1);
     });
-    
+
     process.on('SIGINT', async () => {
         logger.info('Received SIGINT - Graceful shutdown initiated');
         if (sock) await sock.logout();
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', async () => {
         logger.info('Received SIGTERM - Graceful shutdown initiated');
         if (sock) await sock.logout();
@@ -453,7 +443,7 @@ async function initializeDatabaseModels() {
     for (const model of models) {
         const modelPath = path.join(modelsDir, model);
         if (!await fs.pathExists(modelPath)) {
-            await fs.writeFile(modelPath, `const mongoose = require('mongoose');\n\nmodule.exports = mongoose.model('${model.replace('.js', '')}', new mongoose.Schema({}));`);
+            await fs.writeFile(modelPath, `import mongoose from 'mongoose';\n\nmodule.exports = mongoose.model('${model.replace('.js', '')}', new mongoose.Schema({}));`);
         }
     }
 }
@@ -469,51 +459,7 @@ async function setupAPIRoutes() {
         const routePath = path.join(routesDir, route);
         if (!await fs.pathExists(routePath)) {
             const routeName = route.replace('.js', '');
-            await fs.writeFile(routePath, `const express = require('express');\nconst router = express.Router();\n\nrouter.get('/', (req, res) => {\n    res.json({ route: '${routeName}', status: 'active' });\n});\n\nmodule.exports = router;`);
-        }
-    }
-}
-
-async function createConfigurationFiles() {
-    const configFiles = {
-        '.env.example': `SESSION_ID=\nOWNER_NUMBERS=254700143167\nPREFIX=.\nPUBLIC_MODE=false\nDATABASE_URL=mongodb://localhost:27017/ilombot\nPORT=3000\nTIMEZONE=UTC\nBOT_NAME=Ilom Bot\nBOT_VERSION=1.0.0`,
-        '.gitignore': `node_modules/\n.env\nsession/\nlogs/\ntemp/\nbackups/\nmedia/cache/\n*.log\n.DS_Store`,
-        '.dockerignore': `node_modules/\n.env\nsession/\nlogs/\ntemp/\nbackups/\n*.log\nDockerfile\n.dockerignore\n.git/`,
-        'package.json': JSON.stringify({
-            name: 'ilom-whatsapp-bot',
-            version: '1.0.0',
-            description: 'Advanced WhatsApp Bot by Ilom',
-            main: 'index.js',
-            scripts: {
-                start: 'node index.js',
-                dev: 'nodemon index.js',
-                test: 'jest'
-            },
-            dependencies: {
-                '@whiskeysockets/baileys': '^6.6.0',
-                'express': '^4.18.2',
-                'fs-extra': '^11.1.1',
-                'pino': '^8.15.0',
-                'node-cache': '^5.1.2',
-                'gradient-string': '^2.0.2',
-                'figlet': '^1.6.0',
-                'chalk': '^4.1.2',
-                'dotenv': '^16.3.1',
-                'mongoose': '^7.5.0',
-                'axios': '^1.5.0',
-                'moment': '^2.29.4'
-            },
-            devDependencies: {
-                'nodemon': '^3.0.1',
-                'jest': '^29.6.2'
-            }
-        }, null, 2)
-    };
-    
-    for (const [file, content] of Object.entries(configFiles)) {
-        const filePath = path.join(process.cwd(), file);
-        if (!await fs.pathExists(filePath)) {
-            await fs.writeFile(filePath, content);
+            await fs.writeFile(routePath, `import express from 'express';\nconst router = express.Router();\n\nrouter.get('/', (req, res) => {\n    res.json({ route: '${routeName}', status: 'active' });\n});\n\nexport default router;`);
         }
     }
 }
