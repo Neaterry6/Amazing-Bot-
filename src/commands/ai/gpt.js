@@ -1,147 +1,113 @@
-// commands/ai/brokenai.js
+import mongoose from 'mongoose';
 import axios from 'axios';
-import config from '../../config.js';
 import logger from '../../utils/logger.js';
-import { cache } from '../../utils/cache.js';
+
+// Define MongoDB schema for user chat sessions
+const ChatSessionSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true }, // WhatsApp ID (e.g., 254700143167@s.whatsapp.net)
+  command: { type: String, default: 'chat' },
+  chatHistory: [{ role: String, content: String, timestamp: Date }],
+  lastInteraction: { type: Date, default: Date.now },
+});
+const ChatSession = mongoose.model('ChatSession', ChatSessionSchema);
 
 export default {
-  name: 'brokenai',
-  description: 'Chat with Amazing AI, created by Ilom, for engaging conversations or vivid image descriptions. Reply to a message to continue the conversation or provide a prompt to start a new one. Use keywords like "generate image" or "create image" to generate images.',
-  usage: 'brokenai [prompt]',
-  example: 'brokenai What is the meaning of life? | brokenai Generate image of a cute anime girl',
-  category: 'ai',
-  permissions: ['premium'], // Restrict to premium users, adjust as needed
-  cooldown: 5, // 5-second cooldown
-  async execute({ sock, message, args, command, user, from, sender, prefix }) {
-    try {
-      // System prompt for chat responses
-      const systemPrompt = "You are Amazing AI, a friendly and intelligent assistant created by Ilom. Provide helpful, engaging, and beautified responses with a touch of humor and personality. Format your replies neatly with proper punctuation and emojis where appropriate. If responding to a reply, continue the conversation contextually. If an image is provided, describe it vividly.";
+  name: 'chat',
+  supportsChat: true,
 
-      // Check if the message is a reply
-      let quotedText = '';
-      let imageUrl = null;
-      const quotedMessage = message.message?.contextInfo?.quotedMessage;
+  async execute({ sock, message, from, sender }) {
+    await this.setupChatHandler(sock, from, sender);
 
-      if (quotedMessage) {
-        // Extract quoted message text
-        if (quotedMessage.conversation) {
-          quotedText = quotedMessage.conversation;
-        } else if (quotedMessage.extendedTextMessage) {
-          quotedText = quotedMessage.extendedTextMessage.text;
-        }
-
-        // Check for media in quoted message (e.g., images)
-        if (quotedMessage.imageMessage) {
-          imageUrl = quotedMessage.imageMessage.url || null;
-        }
-      }
-
-      // Combine user prompt from args
-      const userPrompt = args.length > 0 ? args.join(' ') : '';
-
-      // Check if the user is requesting image generation
-      const isImageGeneration = userPrompt.toLowerCase().includes('generate image') || 
-                               userPrompt.toLowerCase().includes('create image');
-
-      // If no prompt and no quoted text, provide usage instructions
-      if (!userPrompt && !quotedText && !isImageGeneration) {
-        await sock.sendMessage(from, {
-          text: `✨ *Amazing AI* ✨\n\nPlease provide a prompt, reply to a message, or request an image (e.g., "generate image of a cat").\n\n*Usage:* ${prefix}${command} [prompt]\n*Example:* ${prefix}${command} Tell me a joke! | ${prefix}${command} Generate image of a cute anime girl`,
-        });
-        return;
-      }
-
-      // Show typing indicator
-      await sock.sendPresenceUpdate('composing', from);
-
-      // Handle image generation
-      if (isImageGeneration) {
-        const imagePrompt = userPrompt; // Use the full prompt for image generation
-        const imageApiUrl = 'https://kaiz-apis.gleeze.com/api/flux-replicate';
-        const apiKey = 'a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea'; // Move to config in production
-
-        const imageParams = {
-          prompt: imagePrompt,
-          apikey: apiKey,
-        };
-
-        try {
-          const response = await axios.get(imageApiUrl, { params: imageParams, responseType: 'arraybuffer' });
-          const imageBuffer = Buffer.from(response.data);
-
-          // Send the image to WhatsApp
-          await sock.sendMessage(from, {
-            image: imageBuffer,
-            caption: `✨ *Amazing AI* ✨\n\nGenerated image for: "${imagePrompt}"`,
-            contextInfo: quotedMessage ? { quotedMessage: message.message } : undefined,
-          });
-
-          // Cache the image generation request
-          cache.set(`brokenai_image_${sender}`, {
-            prompt: imagePrompt,
-            timestamp: Date.now(),
-          }, 600); // Cache for 10 minutes
-
-        } catch (error) {
-          logger.error(`BrokenAI image generation error: ${error.message}`);
-          await sock.sendMessage(from, {
-            text: `❌ *Amazing AI Error* ❌\n\nFailed to generate image: ${error.message || 'Unknown error'} 😿\n\nPlease try again later.`,
-          });
-        }
-
-        return;
-      }
-
-      // Handle chat response
-      let fullPrompt = systemPrompt;
-      if (quotedText) {
-        fullPrompt += `\n\nPrevious message: ${quotedText}`;
-      }
-      if (userPrompt) {
-        fullPrompt += `\n\nUser: ${userPrompt}`;
-      }
-
-      // Make API call to Kaiz GPT-4.1 for chat
-      const apiUrl = 'https://kaiz-apis.gleeze.com/api/gpt-4.1';
-      const apiKey = 'a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea'; // Move to config in production
-      const uid = user.jid.split('@')[0]; // Use user's JID as UID
-
-      const params = {
-        ask: fullPrompt,
-        uid: uid,
-        apikey: apiKey,
-      };
-
-      if (imageUrl) {
-        params.imageUrl = imageUrl;
-      }
-
-      const response = await axios.get(apiUrl, { params });
-      const aiResponse = response.data.result || 'Sorry, I couldn’t generate a response. 😢';
-
-      // Beautify the chat response
-      const beautifiedResponse = `✨ *Amazing AI* ✨\n\n${aiResponse}`;
-
-      // Cache the chat response for conversation continuity
-      cache.set(`brokenai_${sender}`, {
-        prompt: fullPrompt,
-        response: aiResponse,
-        timestamp: Date.now(),
-      }, 600); // Cache for 10 minutes
-
-      // Send the chat response, quoting the original message if it was a reply
-      await sock.sendMessage(from, {
-        text: beautifiedResponse,
-        contextInfo: quotedMessage ? { quotedMessage: message.message } : undefined,
-      });
-
-    } catch (error) {
-      logger.error(`BrokenAI command error: ${error.message}`);
-      await sock.sendMessage(from, {
-        text: `❌ *Amazing AI Error* ❌\n\nSorry, something went wrong! 😿\n\n*Error:* ${error.message || 'Unknown error'}\n\nPlease try again later or contact support.`,
-      });
-    } finally {
-      await sock.sendPresenceUpdate('paused', from);
+    // Check for existing session
+    let session = await ChatSession.findOne({ userId: sender });
+    if (!session) {
+      session = new ChatSession({ userId: sender });
+      await session.save();
+      logger.info(`New chat session created for ${sender}`);
     }
+
+    // Send initial prompt
+    await sock.sendMessage(from, {
+      text: '👋 Hey there! I’m Ilom, your friendly AI buddy. What’s on your mind? Just chat with me normally, and I’ll keep up!',
+    }, { quoted: message });
+  },
+
+  async setupChatHandler(sock, from, sender) {
+    if (!global.chatHandlers) {
+      global.chatHandlers = {};
+    }
+
+    global.chatHandlers[sender] = {
+      command: this.name,
+      handler: async (text, message) => {
+        try {
+          let session = await ChatSession.findOne({ userId: sender });
+          if (!session) {
+            session = new ChatSession({ userId: sender });
+            await session.save();
+          }
+
+          // Add user message to history
+          session.chatHistory.push({ role: 'user', content: text, timestamp: new Date() });
+          session.lastInteraction = new Date();
+          await session.save();
+
+          // Call Kaiz GPT-4.1 API
+          let responseText;
+          try {
+            const response = await axios.post(
+              'https://api.kaiz.com/v1/chat',
+              {
+                model: 'gpt-4.1',
+                messages: [
+                  {
+                    role: 'system',
+                    content: 'You are Ilom, a friendly and knowledgeable AI assistant created by Ilom. Respond in a conversational, engaging tone, providing helpful and accurate answers. Keep responses concise (under 100 words) and adapt to the user’s style. Use emojis where appropriate to match WhatsApp’s vibe! 😊',
+                  },
+                  ...session.chatHistory.slice(-10).map(({ role, content }) => ({ role, content })), // Last 10 messages for context
+                  { role: 'user', content: text },
+                ],
+                max_tokens: 100,
+              },
+              {
+                headers: { Authorization: `Bearer ${process.env.KAIZ_API_KEY}` },
+                timeout: 10000, // 10s timeout
+              }
+            );
+
+            responseText = response.data.choices[0].message.content;
+            session.chatHistory.push({ role: 'assistant', content: responseText, timestamp: new Date() });
+            await session.save();
+          } catch (error) {
+            logger.error(`Ilom failed to generate response for ${sender}:`, error);
+            responseText = '😓 Sorry, Ilom’s having a moment! Try chatting again, or ask something else!';
+          }
+
+          await sock.sendMessage(from, {
+            text: responseText,
+          }, { quoted: message });
+
+          // Clean up old sessions (e.g., older than 1 hour)
+          if (Date.now() - session.lastInteraction.getTime() > 3600000) {
+            await ChatSession.deleteOne({ userId: sender });
+            delete global.chatHandlers[sender];
+            logger.info(`Cleared old chat session for ${sender}`);
+          }
+        } catch (error) {
+          logger.error(`Ilom chat handler error for ${sender}:`, error);
+          await sock.sendMessage(from, {
+            text: '❌ Ilom hit a snag! Try again, please! 😊',
+          }, { quoted: message });
+        }
+      },
+    };
+
+    // Set timeout to clean up in-memory handler
+    setTimeout(() => {
+      if (global.chatHandlers[sender]) {
+        delete global.chatHandlers[sender];
+        logger.info(`Ilom chat handler timeout for ${sender}`);
+      }
+    }, 300000); // 5 minutes
   },
 };
