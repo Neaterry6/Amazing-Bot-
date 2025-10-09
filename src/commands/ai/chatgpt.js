@@ -1,90 +1,119 @@
-// commands/ai/gpt.js
+import mongoose from 'mongoose';
 import axios from 'axios';
-import config from '../../config.js';
 import logger from '../../utils/logger.js';
-import { cache } from '../../utils/cache.js';
+
+// Define MongoDB schema for user chat sessions
+const ChatSessionSchema = new mongoose.Schema({
+  userId: { type: String, required: true, unique: true }, // WhatsApp ID (e.g., 254700143167@s.whatsapp.net)
+  command: { type: String, default: 'chat' },
+  chatHistory: [{ role: String, content: String, timestamp: Date }],
+  lastInteraction: { type: Date, default: Date.now },
+}, { collection: 'chatsessions' });
+const ChatSession = mongoose.model('ChatSession', ChatSessionSchema);
 
 export default {
-  name: 'gpt',
-  description: 'Chat with Amazing AI, created by Ilom, for engaging and insightful conversations. Reply to a message to continue the conversation or provide a prompt to start a new one.',
-  usage: 'gpt [prompt]',
-  example: 'gpt What is the meaning of life?',
-  category: 'ai',
-  permissions: ['premium'], // Restrict to premium users, adjust as needed
-  cooldown: 5, // 5-second cooldown
-  async execute({ sock, message, args, command, user, from, sender, prefix }) {
+  name: 'chat',
+  aliases: ['ilom', 'talk', 'ai'], // Added aliases
+  supportsChat: true,
+
+  async execute({ sock, message, from, sender }) {
+    await this.setupChatHandler(sock, from, sender);
+
+    let session;
     try {
-      // System prompt for chat responses
-      const systemPrompt = "You are Amazing AI, a friendly and intelligent assistant created by Ilom. Provide helpful, engaging, and beautified responses with a touch of humor and personality. Format your replies neatly with proper punctuation and emojis where appropriate. If responding to a reply, continue the conversation contextually.";
-
-      // Check if the message is a reply
-      let quotedText = '';
-      const quotedMessage = message.message?.contextInfo?.quotedMessage;
-
-      if (quotedMessage) {
-        // Extract quoted message text
-        if (quotedMessage.conversation) {
-          quotedText = quotedMessage.conversation;
-        } else if (quotedMessage.extendedTextMessage) {
-          quotedText = quotedMessage.extendedTextMessage.text;
-        }
+      session = await ChatSession.findOne({ userId: sender }).maxTimeMS(5000);
+      if (!session) {
+        session = new ChatSession({ userId: sender });
+        await session.save();
+        logger.info(`New chat session created for ${sender}`);
       }
-
-      // Combine user prompt from args
-      const userPrompt = args.length > 0 ? args.join(' ') : '';
-
-      // If no prompt and no quoted text, provide usage instructions
-      if (!userPrompt && !quotedText) {
-        await sock.sendMessage(from, {
-          text: `✨ *Amazing AI* ✨\n\nPlease provide a prompt or reply to a message to chat with me!\n\n*Usage:* ${prefix}${command} [prompt]\n*Example:* ${prefix}${command} Tell me a joke!`,
-        });
-        return;
-      }
-
-      // Show typing indicator
-      await sock.sendPresenceUpdate('composing', from);
-
-      // Combine system prompt, quoted text (if any), and user args
-      let fullPrompt = systemPrompt;
-      if (quotedText) {
-        fullPrompt += `\n\nPrevious message: ${quotedText}`;
-      }
-      if (userPrompt) {
-        fullPrompt += `\n\nUser: ${userPrompt}`;
-      }
-
-      // Make API call to Blackbox AI
-      const apiUrl = 'https://ab-blackboxai.abrahamdw882.workers.dev/';
-      const params = {
-        q: fullPrompt,
-      };
-
-      const response = await axios.get(apiUrl, { params });
-      const aiResponse = response.data.response || 'Sorry, I couldn’t generate a response. 😢';
-
-      // Beautify the chat response
-      const beautifiedResponse = `✨ *Amazing AI* ✨\n\n${aiResponse}`;
-
-      // Cache the chat response for conversation continuity
-      cache.set(`gpt_${sender}`, {
-        prompt: fullPrompt,
-        response: aiResponse,
-        timestamp: Date.now(),
-      }, 600); // Cache for 10 minutes
-
-      // Send the chat response, quoting the original message if it was a reply
-      await sock.sendMessage(from, {
-        text: beautifiedResponse,
-        contextInfo: quotedMessage ? { quotedMessage: message.message } : undefined,
-      });
-
     } catch (error) {
-      logger.error(`GPT command error: ${error.message}`);
-      await sock.sendMessage(from, {
-        text: `❌ *Amazing AI Error* ❌\n\nSorry, something went wrong! 😿\n\n*Error:* ${error.message || 'Unknown error'}\n\nPlease try again later or contact support.`,
-      });
-    } finally {
-      await sock.sendPresenceUpdate('paused', from);
+      logger.error(`Failed to fetch/create session for ${sender}:`, error);
+      session = { userId: sender, chatHistory: [], lastInteraction: new Date() }; // Fallback
     }
+
+    await sock.sendMessage(from, {
+      text: '👋 Yo! I’m Ilom, your chill AI buddy. What’s good? Chat with me like a friend, and I’ll keep up! 😎',
+    }, { quoted: message });
+  },
+
+  async setupChatHandler(sock, from, sender) {
+    if (!global.chatHandlers) {
+      global.chatHandlers = {};
+    }
+
+    global.chatHandlers[sender] = {
+      command: this.name,
+      handler: async (text, message) => {
+        try {
+          let session = await ChatSession.findOne({ userId: sender }).maxTimeMS(5000);
+          if (!session) {
+            session = new ChatSession({ userId: sender });
+            await session.save();
+          }
+
+          // Add user message to history
+          session.chatHistory.push({ role: 'user', content: text, timestamp: new Date() });
+          session.lastInteraction = new Date();
+          await session.save();
+
+          // Call Kaiz GPT-4.1 API
+          let responseText;
+          try {
+            const response = await axios.post(
+              'https://api.kaiz.com/v1/chat',
+              {
+                model: 'gpt-4.1',
+                messages: [
+                  {
+                    role: 'system',
+                    content: 'You are Ilom, a friendly and knowledgeable AI assistant created by Ilom. Respond in a conversational, engaging tone with a bit of humor, matching the user’s vibe. Keep answers short (under 100 words) and use emojis to fit WhatsApp’s style! 😎',
+                  },
+                  ...session.chatHistory.slice(-10).map(({ role, content }) => ({ role, content })), // Last 10 messages
+                  { role: 'user', content: text },
+                ],
+                max_tokens: 100,
+              },
+              {
+                headers: { Authorization: `Bearer ${process.env.KAIZ_API_KEY}` },
+                timeout: 10000,
+              }
+            );
+
+            responseText = response.data.choices[0].message.content;
+            session.chatHistory.push({ role: 'assistant', content: responseText, timestamp: new Date() });
+            await session.save();
+          } catch (error) {
+            logger.error(`Ilom failed to generate response for ${sender}:`, error);
+            responseText = '😓 Yo, Ilom’s brain froze for a sec! Try again, what’s up?';
+            session.chatHistory.push({ role: 'assistant', content: responseText, timestamp: new Date() });
+          }
+
+          await sock.sendMessage(from, {
+            text: responseText,
+          }, { quoted: message });
+
+          // Clean up sessions older than 1 hour
+          if (Date.now() - session.lastInteraction.getTime() > 3600000) {
+            await ChatSession.deleteOne({ userId: sender });
+            delete global.chatHandlers[sender];
+            logger.info(`Cleared old chat session for ${sender}`);
+          }
+        } catch (error) {
+          logger.error(`Ilom chat handler error for ${sender}:`, error);
+          await sock.sendMessage(from, {
+            text: '❌ Ilom’s having a rough day! Try again, please! 😎',
+          }, { quoted: message });
+        }
+      },
+    };
+
+    // Clean up in-memory handler after 5 minutes
+    setTimeout(() => {
+      if (global.chatHandlers[sender]) {
+        delete global.chatHandlers[sender];
+        logger.info(`Ilom chat handler timeout for ${sender}`);
+      }
+    }, 300000);
   },
 };
