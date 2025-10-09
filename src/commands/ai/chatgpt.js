@@ -1,3 +1,4 @@
+
 import mongoose from 'mongoose';
 import axios from 'axios';
 import logger from '../../utils/logger.js';
@@ -13,7 +14,7 @@ const ChatSession = mongoose.model('ChatSession', ChatSessionSchema);
 
 export default {
   name: 'chat',
-  aliases: ['ilom', 'talk', 'ai'], // Added aliases
+  aliases: ['ilom', 'talk', 'ai'],
   supportsChat: true,
 
   async execute({ sock, message, from, sender }) {
@@ -57,36 +58,48 @@ export default {
           session.lastInteraction = new Date();
           await session.save();
 
-          // Call Kaiz GPT-4.1 API
+          // Call Kaiz GPT-4.1 API with retries
           let responseText;
-          try {
-            const response = await axios.post(
-              'https://api.kaiz.com/v1/chat',
-              {
-                model: 'gpt-4.1',
-                messages: [
-                  {
-                    role: 'system',
-                    content: 'You are Ilom, a friendly and knowledgeable AI assistant created by Ilom. Respond in a conversational, engaging tone with a bit of humor, matching the user’s vibe. Keep answers short (under 100 words) and use emojis to fit WhatsApp’s style! 😎',
-                  },
-                  ...session.chatHistory.slice(-10).map(({ role, content }) => ({ role, content })), // Last 10 messages
-                  { role: 'user', content: text },
-                ],
-                max_tokens: 100,
-              },
-              {
-                headers: { Authorization: `Bearer ${process.env.KAIZ_API_KEY}` },
-                timeout: 10000,
-              }
-            );
+          const maxRetries = 3;
+          let attempt = 0;
 
-            responseText = response.data.choices[0].message.content;
-            session.chatHistory.push({ role: 'assistant', content: responseText, timestamp: new Date() });
-            await session.save();
-          } catch (error) {
-            logger.error(`Ilom failed to generate response for ${sender}:`, error);
-            responseText = '😓 Yo, Ilom’s brain froze for a sec! Try again, what’s up?';
-            session.chatHistory.push({ role: 'assistant', content: responseText, timestamp: new Date() });
+          while (attempt < maxRetries) {
+            try {
+              const response = await axios.post(
+                'https://api.kaiz.com/v1/chat',
+                {
+                  model: 'gpt-4.1',
+                  messages: [
+                    {
+                      role: 'system',
+                      content: 'You are Ilom, a friendly and knowledgeable AI assistant created by Ilom. Respond in a conversational, engaging tone with a bit of humor, matching the user’s vibe. Keep answers short (under 100 words) and use emojis to fit WhatsApp’s style! 😎',
+                    },
+                    ...session.chatHistory.slice(-10).map(({ role, content }) => ({ role, content })), // Last 10 messages
+                    { role: 'user', content: text },
+                  ],
+                  max_tokens: 100,
+                },
+                {
+                  headers: { Authorization: `Bearer ${process.env.KAIZ_API_KEY}` },
+                  timeout: 10000,
+                }
+              );
+
+              responseText = response.data.choices[0].message.content;
+              session.chatHistory.push({ role: 'assistant', content: responseText, timestamp: new Date() });
+              await session.save();
+              break; // Success, exit retry loop
+            } catch (error) {
+              attempt++;
+              logger.error(`Kaiz API attempt ${attempt}/${maxRetries} failed for ${sender}:`, error);
+              if (attempt === maxRetries) {
+                responseText = '😓 Yo, Ilom’s AI is acting up! Try again soon, or ask me something else! 😎';
+                session.chatHistory.push({ role: 'assistant', content: responseText, timestamp: new Date() });
+                await session.save();
+              } else {
+                await new Promise(resolve => setTimeout(resolve, 2000 * attempt)); // Exponential backoff
+              }
+            }
           }
 
           await sock.sendMessage(from, {
