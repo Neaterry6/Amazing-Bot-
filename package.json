@@ -1,4 +1,3 @@
-
 {
   "name": "ilom-whatsapp-bot",
   "version": "1.0.0",
@@ -19,20 +18,20 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/ilom-tech/whatsapp-bot.git"
+    "url": "https://github.com/Neaterry6/Amazing-Bot-.git"
   },
   "homepage": "https://ilom.tech",
   "bugs": {
-    "url": "https://github.com/ilom-tech/whatsapp-bot/issues"
+    "url": "https://github.com/Neaterry6/Amazing-Bot-/issues"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "22.16.0"
   },
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "jest --coverage",
-    "build": "npm ci", // Changed to npm ci for faster, consistent installs
+    "build": "npm ci",
     "update": "git pull && npm ci",
     "logs": "pm2 logs ilom-bot"
   },
@@ -79,7 +78,7 @@
     "passport-local": "1.0.0",
     "pdf-parse": "1.1.1",
     "pino": "9.4.0",
-    "pino-pretty": "11.2.2", // Added for readable logs on Render
+    "pino-pretty": "11.2.2",
     "puppeteer": "23.5.3",
     "qrcode": "1.5.4",
     "redis": "4.7.0",
