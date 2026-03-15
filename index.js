@@ -86,7 +86,7 @@ async function displayBanner() {
     console.log();
     console.log(line);
     console.log(gradient.rainbow('  ✦  Amazing WhatsApp Bot  ✦  v' + (constants.BOT_VERSION || '1.0.0') + '  ✦  By Ilom  ✦  Powered by Raphael  ✦'));
-    console.log(chalk.hex('#7C3AED')('  Baileys  ·  Cerebras AI  ·  MongoDB  ·  NodeCache'));
+    console.log(chalk.hex('#7C3AED')('  Baileys  ·  AI  ·  MongoDB  ·  NodeCache'));
     console.log(line);
     console.log();
 }
@@ -148,8 +148,8 @@ async function processSessionCredentials() {
         logger.info('Processing session credentials...');
         let sessionData;
 
-        if (sessionId.startsWith('sypher™--') || sessionId.startsWith('sypher sypher™--')) {
-            const sessdata = sessionId.replace('sypher sypher™--', '').replace('sypher™--', '').trim();
+        if (sessionId.startsWith('ilombot--') || sessionId.startsWith('ilombot ilombot--')) {
+            const sessdata = sessionId.replace('ilombot ilombot--', '').replace('ilombot--', '').trim();
             const axios = (await import('axios')).default;
             const response = await axios.get(
                 `https://existing-madelle-lance-ui-efecfdce.koyeb.app/download/${sessdata}`,
@@ -162,7 +162,7 @@ async function processSessionCredentials() {
                 await fs.remove(credPath);
                 throw new Error('Invalid session file');
             }
-            logger.info('Sypher session loaded successfully');
+            logger.info('ilombot session loaded successfully');
             return true;
         }
 
