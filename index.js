@@ -134,6 +134,29 @@ async function createDirectoryStructure() {
     await Promise.all(dirs.map(d => fs.ensureDir(d)));
 }
 
+// ✅ Download creds.json from Mega using the FULL URL (file ID + #decryption key)
+async function downloadFromMega(fullMegaUrl) {
+    const { File } = await import('megajs');
+    return new Promise((resolve, reject) => {
+        let file;
+        try {
+            file = File.fromURL(fullMegaUrl);
+        } catch (e) {
+            return reject(new Error(`Mega URL parse failed: ${e.message}`));
+        }
+
+        file.loadAttributes((err) => {
+            if (err) return reject(new Error(`Mega loadAttributes failed: ${err.message}`));
+
+            const chunks = [];
+            const stream = file.download();
+            stream.on('data', chunk => chunks.push(chunk));
+            stream.on('end', () => resolve(Buffer.concat(chunks)));
+            stream.on('error', e => reject(new Error(`Mega stream failed: ${e.message}`)));
+        });
+    });
+}
+
 async function processSessionCredentials() {
     await fs.ensureDir(SESSION_PATH);
     await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
@@ -148,23 +171,82 @@ async function processSessionCredentials() {
         logger.info('Processing session credentials...');
         let sessionData;
 
+        // ✅ PRIMARY: ilombot-- prefix
+        // pair.js encodes the full Mega URL as base64 after the prefix:
+        //   ilombot--<base64(https://mega.nz/file/FILEID#DECRYPTIONKEY)>
+        // We decode it to get the full URL including the #key fragment,
+        // then pass it directly to megajs which needs the hash to decrypt.
         if (sessionId.startsWith('ilombot--') || sessionId.startsWith('ilombot ilombot--')) {
-            const sessdata = sessionId.replace('ilombot ilombot--', '').replace('ilombot--', '').trim();
-            const axios = (await import('axios')).default;
-            const response = await axios.get(
-                `https://existing-madelle-lance-ui-efecfdce.koyeb.app/download/${sessdata}`,
-                { responseType: 'arraybuffer', timeout: 30000 }
-            );
+            const encoded = sessionId
+                .replace('ilombot ilombot--', '')
+                .replace('ilombot--', '')
+                .trim();
+
+            // ✅ Decode base64 to recover the full Mega URL with decryption key
+            let fullMegaUrl;
+            try {
+                fullMegaUrl = Buffer.from(encoded, 'base64').toString('utf8');
+                // Validate it looks like a Mega URL
+                if (!fullMegaUrl.startsWith('https://mega.nz/')) {
+                    throw new Error('Decoded value is not a Mega URL');
+                }
+                logger.info(`Decoded Mega URL: ${fullMegaUrl}`);
+            } catch (decodeErr) {
+                // ✅ FALLBACK for old-style sessions that stored raw file ID (not base64)
+                // e.g. sessions generated before this fix
+                logger.warn(`Base64 decode failed (${decodeErr.message}), treating as raw Mega file ID`);
+                fullMegaUrl = null;
+            }
+
             const credPath = path.join(SESSION_PATH, 'creds.json');
-            await fs.writeFile(credPath, response.data);
+            let fileData;
+
+            if (fullMegaUrl) {
+                // ✅ New format: download directly from Mega with full URL
+                logger.info('Downloading session from Mega...');
+                try {
+                    fileData = await downloadFromMega(fullMegaUrl);
+                    logger.info('Downloaded session from Mega successfully');
+                } catch (megaErr) {
+                    logger.warn(`Mega download failed: ${megaErr.message} — trying fallback server...`);
+                    // Fallback to koyeb server using just the file ID portion
+                    const fileIdOnly = fullMegaUrl
+                        .replace('https://mega.nz/file/', '')
+                        .split('#')[0];
+                    const axios = (await import('axios')).default;
+                    const response = await axios.get(
+                        `https://existing-madelle-lance-ui-efecfdce.koyeb.app/download/${fileIdOnly}`,
+                        { responseType: 'arraybuffer', timeout: 30000 }
+                    );
+                    fileData = Buffer.from(response.data);
+                    logger.info('Downloaded session from fallback server');
+                }
+            } else {
+                // ✅ Old format fallback: encoded was a raw Mega file ID, use koyeb server
+                logger.info('Using fallback download server for legacy session ID...');
+                const axios = (await import('axios')).default;
+                const response = await axios.get(
+                    `https://existing-madelle-lance-ui-efecfdce.koyeb.app/download/${encoded}`,
+                    { responseType: 'arraybuffer', timeout: 30000 }
+                );
+                fileData = Buffer.from(response.data);
+                logger.info('Downloaded session from fallback server');
+            }
+
+            await fs.writeFile(credPath, fileData);
+
+            // Validate the creds.json has required Baileys fields
             const saved = await fs.readJSON(credPath);
             if (!saved.noiseKey && !saved.signedIdentityKey) {
                 await fs.remove(credPath);
-                throw new Error('Invalid session file');
+                throw new Error('Downloaded session file is invalid — missing Baileys credential keys');
             }
-            logger.info('ilombot session loaded successfully');
+
+            logger.info('✅ ilombot session loaded successfully');
             return true;
         }
+
+        // ✅ LEGACY formats — kept exactly as-is, nothing removed
 
         if (sessionId.startsWith('Ilom~')) {
             sessionData = JSON.parse(Buffer.from(sessionId.replace('Ilom~', ''), 'base64').toString());
