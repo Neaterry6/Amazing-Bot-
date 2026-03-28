@@ -44,7 +44,8 @@
     "url": "https://github.com/NexusCoders-cyber/Amazing-Bot-/issues"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "^22.12.0 || ^23.0.0 || >=24.0.0",
+    "npm": ">=10"
   },
   "scripts": {
     "start": "node index.js",
@@ -101,7 +102,6 @@
     "helmet": "^8.1.0",
     "human-readable": "^0.2.1",
     "jimp": "^1.6.0",
-    "jsdom": "^28.1.0",
     "jsonwebtoken": "^9.0.3",
     "lodash": "^4.17.23",
     "lowdb": "^7.0.1",
