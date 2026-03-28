@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './utils/loadEnv.js';
 
 function normalizePhoneNumber(phone) {
     if (!phone || phone.trim() === '') return null;

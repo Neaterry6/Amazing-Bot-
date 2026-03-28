@@ -1,4 +1,5 @@
-FROM node:23-alpine
+ARG NODE_VERSION=22
+FROM node:${NODE_VERSION}-alpine
 
 LABEL maintainer="Ilom <contact@ilom.tech>"
 LABEL version="1.0.0"
@@ -22,7 +23,7 @@ RUN apk add --no-cache \
 
 COPY package*.json ./
 
-RUN npm ci --only=production && \
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi && \
     npm cache clean --force && \
     rm -rf /tmp/*
 
