@@ -5,6 +5,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import readline from 'readline/promises';
 import NodeCache from 'node-cache';
 import chalk from 'chalk';
 import figlet from 'figlet';
@@ -37,6 +38,7 @@ let sock = null;
 let isShuttingDown = false;
 let connectionTimeout = null;
 let reconnectAttempts = 0;
+let cachedPairingNumber = null;
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 10;
@@ -160,6 +162,8 @@ async function downloadFromMega(fullMegaUrl) {
 async function processSessionCredentials() {
     await fs.ensureDir(SESSION_PATH);
     await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
+    const credPath = path.join(SESSION_PATH, 'creds.json');
+    const keysPath = path.join(SESSION_PATH, 'keys');
 
     const sessionId = (
         process.env.SESSION_ID ||
@@ -228,7 +232,11 @@ async function processSessionCredentials() {
         //   ilombot--<base64(https://mega.nz/file/FILEID#DECRYPTIONKEY)>
         // We decode it to get the full URL including the #key fragment,
         // then pass it directly to megajs which needs the hash to decrypt.
-        if (sessionId.startsWith('ilombot--') || sessionId.startsWith('ilombot ilombot--')) {
+        if (
+            sessionId.startsWith('ilombot--') ||
+            sessionId.startsWith('ilombot ilombot--') ||
+            /^https:\/\/mega\.nz\/(file|folder)\//.test(sessionId)
+        ) {
             const encoded = sessionId
                 .replace('ilombot ilombot--', '')
                 .replace('ilombot--', '')
@@ -256,6 +264,11 @@ async function processSessionCredentials() {
             }
 
             let fileData;
+
+            // If sessionId is already a Mega URL, use it directly.
+            if (/^https:\/\/mega\.nz\/(file|folder)\//.test(sessionId)) {
+                fullMegaUrl = sessionId;
+            }
 
             if (fullMegaUrl) {
                 // ✅ New format: download directly from Mega with full URL
@@ -413,6 +426,47 @@ async function setupEventHandlers(sock, saveCreds) {
     logger.info('All event handlers registered');
 }
 
+async function promptPairingNumber() {
+    if (cachedPairingNumber) return cachedPairingNumber;
+
+    const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
+    if (envNumber.length >= 10) {
+        cachedPairingNumber = envNumber;
+        return cachedPairingNumber;
+    }
+
+    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') return null;
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    try {
+        console.log(chalk.hex('#60A5FA')('\n  📱 Pairing Mode Enabled'));
+        console.log(chalk.hex('#C4B5FD')('  Enter your WhatsApp number with country code (example: 2349031575131)\n'));
+        const answer = await rl.question('  Number: ');
+        const normalized = String(answer || '').replace(/\D/g, '');
+        if (normalized.length < 10) return null;
+        cachedPairingNumber = normalized;
+        return normalized;
+    } finally {
+        rl.close();
+    }
+}
+
+async function requestPairingCodeIfNeeded(sock, isRegistered) {
+    if (isRegistered) return;
+    const number = await promptPairingNumber();
+    if (!number) return;
+
+    try {
+        const rawCode = await sock.requestPairingCode(number);
+        const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+        console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
+        console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
+        console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
+    } catch (error) {
+        logger.warn(`Failed to generate pairing code: ${error.message}`);
+    }
+}
+
 async function establishWhatsAppConnection() {
     return new Promise(async (resolve, reject) => {
         try {
@@ -428,7 +482,7 @@ async function establishWhatsAppConnection() {
                     creds: state.creds,
                     keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' }).child({ level: 'fatal' }))
                 },
-                printQRInTerminal: true,
+                printQRInTerminal: false,
                 browser: Browsers.ubuntu('Chrome'),
                 markOnlineOnConnect: config.autoOnline !== false,
                 syncFullHistory: false,
@@ -442,6 +496,8 @@ async function establishWhatsAppConnection() {
                 getMessage: async () => ({ conversation: '' })
             });
 
+            await requestPairingCodeIfNeeded(sock, state.creds?.registered);
+
             if (connectionTimeout) clearTimeout(connectionTimeout);
             connectionTimeout = setTimeout(() => {
                 if (!sock?.user) {
@@ -452,6 +508,10 @@ async function establishWhatsAppConnection() {
 
             sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
                 if (qr) {
+                    try {
+                        const qrterm = await import('qrcode-terminal');
+                        qrterm.default.generate(qr, { small: true });
+                    } catch {}
                     console.log(chalk.hex('#FBBF24').bold('\n  📱  Scan the QR code above with WhatsApp\n'));
                     if (qrService.isQREnabled()) {
                         await qrService.generateQR(qr).catch(() => {});
