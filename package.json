@@ -52,7 +52,7 @@
     "dev": "nodemon index.js",
     "test": "jest --coverage",
     "build": "npm install",
-    "postinstall": "node scripts/postinstall.js",
+    "postinstall": "node -e \"const fs=require('fs'); if(fs.existsSync('scripts/postinstall.js')){ require('child_process').execSync('node scripts/postinstall.js', {stdio:'inherit'});} else {console.log('Skipping postinstall: scripts/postinstall.js not available yet');}\"",
     "setup": "bash scripts/install.sh",
     "cleanup": "node scripts/cleanup.js",
     "backup": "bash scripts/backup.sh",
