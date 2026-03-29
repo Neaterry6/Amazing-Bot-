@@ -107,6 +107,31 @@ async function displayConfig() {
     console.log();
 }
 
+function displayDesignLogCard() {
+    const sessionPreview = (
+        process.env.SESSION_ID ||
+        process.env.WA_SESSION_ID ||
+        process.env.ILOMBOT_SESSION_ID ||
+        process.env.CREDS_JSON ||
+        process.env.SESSION_CREDS_JSON ||
+        ''
+    ) ? chalk.greenBright('READY') : chalk.yellowBright('QR MODE');
+
+    const deployPort = process.env.PORT || config.server?.port || 5000;
+    const modeBadge = config.publicMode ? chalk.greenBright('PUBLIC') : chalk.yellowBright('PRIVATE');
+
+    box([
+        chalk.hex('#C084FC').bold('  🎨  ILOM BOT STARTUP PANEL'),
+        chalk.hex('#A78BFA')('  ───────────────────────────────────────────────'),
+        `${chalk.hex('#60A5FA')('  ✦ Mode      :')} ${modeBadge}`,
+        `${chalk.hex('#34D399')('  ✦ Session   :')} ${sessionPreview}`,
+        `${chalk.hex('#FBBF24')('  ✦ Prefix    :')} ${chalk.whiteBright(config.prefix)}`,
+        `${chalk.hex('#F472B6')('  ✦ Deploy    :')} ${chalk.whiteBright(`PORT ${deployPort}`)}`,
+        `${chalk.hex('#22D3EE')('  ✦ Bot Name  :')} ${chalk.whiteBright(config.botName)}`
+    ]);
+    console.log();
+}
+
 async function displayReady(commandCount, pluginCount) {
     const gradient = (await import('gradient-string')).default;
     console.log();
@@ -620,6 +645,7 @@ async function initializeBot() {
     try {
         await displayBanner();
         await displayConfig();
+        displayDesignLogCard();
 
         console.log(chalk.hex('#8B5CF6').bold('  ⚡  INITIALIZING SYSTEMS'));
         console.log(tline);
