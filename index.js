@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './src/utils/loadEnv.js';
 import P from 'pino';
 import express from 'express';
 import fs from 'fs-extra';
