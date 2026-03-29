@@ -7,6 +7,11 @@ LABEL description="🧠 Amazing Bot 🧠 v1 created by Ilom - Advanced WhatsApp 
 
 WORKDIR /app
 
+ENV NODE_ENV=production \
+    PORT=5000 \
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+
 RUN apk add --no-cache \
     python3 \
     make \
@@ -17,6 +22,7 @@ RUN apk add --no-cache \
     giflib-dev \
     librsvg-dev \
     pixman-dev \
+    curl \
     ffmpeg \
     imagemagick \
     && rm -rf /var/cache/apk/*
@@ -38,9 +44,6 @@ EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:5000/health || exit 1
-
-ENV NODE_ENV=production
-ENV PORT=5000
 
 VOLUME ["/app/logs", "/app/session", "/app/media", "/app/backups"]
 
