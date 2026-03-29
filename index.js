@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './src/utils/loadEnv.js';
 import P from 'pino';
 import express from 'express';
 import fs from 'fs-extra';
@@ -180,14 +180,19 @@ async function processSessionCredentials() {
             const encoded = sessionId
                 .replace('ilombot ilombot--', '')
                 .replace('ilombot--', '')
-                .trim();
+                .trim()
+                .replace(/\s+/g, '');
 
             // ✅ Decode base64 to recover the full Mega URL with decryption key
             let fullMegaUrl;
             try {
-                fullMegaUrl = Buffer.from(encoded, 'base64').toString('utf8');
+                const normalized = encoded
+                    .replace(/-/g, '+')
+                    .replace(/_/g, '/')
+                    .padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+                fullMegaUrl = Buffer.from(normalized, 'base64').toString('utf8').trim();
                 // Validate it looks like a Mega URL
-                if (!fullMegaUrl.startsWith('https://mega.nz/')) {
+                if (!/^https:\/\/mega\.nz\/(file|folder)\//.test(fullMegaUrl)) {
                     throw new Error('Decoded value is not a Mega URL');
                 }
                 logger.info(`Decoded Mega URL: ${fullMegaUrl}`);
