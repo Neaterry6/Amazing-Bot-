@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './src/utils/loadEnv.js';
 import P from 'pino';
 import express from 'express';
 import fs from 'fs-extra';
@@ -161,7 +161,13 @@ async function processSessionCredentials() {
     await fs.ensureDir(SESSION_PATH);
     await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
 
-    const sessionId = process.env.SESSION_ID?.trim();
+    const sessionId = (
+        process.env.SESSION_ID ||
+        process.env.WA_SESSION_ID ||
+        process.env.ILOMBOT_SESSION_ID ||
+        config.session?.sessionId ||
+        ''
+    ).trim().replace(/^['"]|['"]$/g, '');
     if (!sessionId) {
         logger.info('No SESSION_ID - will generate QR code');
         return false;
@@ -170,6 +176,52 @@ async function processSessionCredentials() {
     try {
         logger.info('Processing session credentials...');
         let sessionData;
+        const persistSessionData = async (rawData) => {
+            const credPath = path.join(SESSION_PATH, 'creds.json');
+            const keysPath = path.join(SESSION_PATH, 'keys');
+
+            let parsed = rawData;
+            if (Buffer.isBuffer(parsed)) {
+                const asText = parsed.toString('utf8').trim();
+                try {
+                    parsed = JSON.parse(asText);
+                } catch {
+                    try {
+                        parsed = JSON.parse(Buffer.from(asText, 'base64').toString('utf8'));
+                    } catch {
+                        parsed = null;
+                    }
+                }
+            }
+
+            // If we got wrapped session data ({ creds, keys }) split it properly.
+            if (parsed?.creds && typeof parsed.creds === 'object') {
+                await fs.writeJSON(credPath, parsed.creds, { spaces: 2 });
+                if (parsed.keys && typeof parsed.keys === 'object') {
+                    for (const [keyName, keyData] of Object.entries(parsed.keys)) {
+                        if (keyData && typeof keyData === 'object') {
+                            await fs.writeJSON(path.join(keysPath, `${keyName}.json`), keyData, { spaces: 2 });
+                        }
+                    }
+                }
+                return true;
+            }
+
+            // If parsed is already creds.json shape, save directly.
+            if (parsed?.noiseKey || parsed?.signedIdentityKey) {
+                await fs.writeJSON(credPath, parsed, { spaces: 2 });
+                return true;
+            }
+
+            // As last attempt, write raw buffer and re-parse as JSON file.
+            if (Buffer.isBuffer(rawData)) {
+                await fs.writeFile(credPath, rawData);
+                const saved = await fs.readJSON(credPath);
+                return !!(saved?.noiseKey || saved?.signedIdentityKey || saved?.creds);
+            }
+
+            return false;
+        };
 
         // ✅ PRIMARY: ilombot-- prefix
         // pair.js encodes the full Mega URL as base64 after the prefix:
@@ -180,14 +232,19 @@ async function processSessionCredentials() {
             const encoded = sessionId
                 .replace('ilombot ilombot--', '')
                 .replace('ilombot--', '')
-                .trim();
+                .trim()
+                .replace(/\s+/g, '');
 
             // ✅ Decode base64 to recover the full Mega URL with decryption key
             let fullMegaUrl;
             try {
-                fullMegaUrl = Buffer.from(encoded, 'base64').toString('utf8');
+                const normalized = encoded
+                    .replace(/-/g, '+')
+                    .replace(/_/g, '/')
+                    .padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+                fullMegaUrl = Buffer.from(normalized, 'base64').toString('utf8').trim();
                 // Validate it looks like a Mega URL
-                if (!fullMegaUrl.startsWith('https://mega.nz/')) {
+                if (!/^https:\/\/mega\.nz\/(file|folder)\//.test(fullMegaUrl)) {
                     throw new Error('Decoded value is not a Mega URL');
                 }
                 logger.info(`Decoded Mega URL: ${fullMegaUrl}`);
@@ -198,7 +255,6 @@ async function processSessionCredentials() {
                 fullMegaUrl = null;
             }
 
-            const credPath = path.join(SESSION_PATH, 'creds.json');
             let fileData;
 
             if (fullMegaUrl) {
@@ -233,13 +289,10 @@ async function processSessionCredentials() {
                 logger.info('Downloaded session from fallback server');
             }
 
-            await fs.writeFile(credPath, fileData);
-
-            // Validate the creds.json has required Baileys fields
-            const saved = await fs.readJSON(credPath);
-            if (!saved.noiseKey && !saved.signedIdentityKey) {
-                await fs.remove(credPath);
-                throw new Error('Downloaded session file is invalid — missing Baileys credential keys');
+            const persisted = await persistSessionData(fileData);
+            if (!persisted) {
+                await fs.remove(path.join(SESSION_PATH, 'creds.json')).catch(() => {});
+                throw new Error('Downloaded session file is invalid or unsupported');
             }
 
             logger.info('✅ ilombot session loaded successfully');
