@@ -30,7 +30,7 @@ RUN apk add --no-cache \
 
 COPY package*.json ./
 
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev --ignore-scripts --no-audit --no-fund; else npm install --omit=dev --ignore-scripts --no-audit --no-fund; fi && \
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi && \
     npm cache clean --force && \
     rm -rf /tmp/*
 
