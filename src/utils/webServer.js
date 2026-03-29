@@ -409,6 +409,7 @@ module.exports = router;`;
     async handleHealth(req, res) {
         try {
             const { databaseManager } = await import('./database.js');
+            const strictHealthcheck = String(process.env.HEALTHCHECK_STRICT || '').toLowerCase() === 'true';
             
             const health = {
                 status: 'healthy',
@@ -423,8 +424,11 @@ module.exports = router;`;
             };
 
             const allHealthy = Object.values(health.services).every(status => status === true);
-            
-            res.status(allHealthy ? 200 : 503).json(health);
+            const statusCode = strictHealthcheck ? (allHealthy ? 200 : 503) : 200;
+            health.status = allHealthy ? 'healthy' : 'degraded';
+            health.strict = strictHealthcheck;
+
+            res.status(statusCode).json(health);
         } catch (error) {
             res.status(500).json({
                 status: 'unhealthy',
