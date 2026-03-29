@@ -1,10 +1,11 @@
-import 'dotenv/config';
+import './src/utils/loadEnv.js';
 import P from 'pino';
 import express from 'express';
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import readline from 'readline/promises';
 import NodeCache from 'node-cache';
 import chalk from 'chalk';
 import figlet from 'figlet';
@@ -37,6 +38,7 @@ let sock = null;
 let isShuttingDown = false;
 let connectionTimeout = null;
 let reconnectAttempts = 0;
+let cachedPairingNumber = null;
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 10;
@@ -161,7 +163,13 @@ async function processSessionCredentials() {
     await fs.ensureDir(SESSION_PATH);
     await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
 
-    const sessionId = process.env.SESSION_ID?.trim();
+    const sessionId = (
+        process.env.SESSION_ID ||
+        process.env.WA_SESSION_ID ||
+        process.env.ILOMBOT_SESSION_ID ||
+        config.session?.sessionId ||
+        ''
+    ).trim().replace(/^['"]|['"]$/g, '');
     if (!sessionId) {
         logger.info('No SESSION_ID - will generate QR code');
         return false;
@@ -170,6 +178,85 @@ async function processSessionCredentials() {
     try {
         logger.info('Processing session credentials...');
         let sessionData;
+        const persistSessionData = async (rawData) => {
+            const credPath = path.join(SESSION_PATH, 'creds.json');
+            const keysPath = path.join(SESSION_PATH, 'keys');
+
+            // Some session providers return a ZIP archive (starts with "PK")
+            // that contains creds.json and keys/*.json files.
+            if (Buffer.isBuffer(rawData) && rawData.length > 4 && rawData[0] === 0x50 && rawData[1] === 0x4B) {
+                try {
+                    const unzipperModule = await import('unzipper');
+                    const unzipperApi = unzipperModule?.Open ? unzipperModule : unzipperModule?.default;
+                    if (!unzipperApi?.Open?.buffer) {
+                        throw new Error('unzipper.Open.buffer is unavailable');
+                    }
+                    const archive = await unzipperApi.Open.buffer(rawData);
+                    const entries = archive.files || [];
+
+                    const credsEntry = entries.find((e) => /(^|\/)creds\.json$/i.test(e.path));
+                    if (!credsEntry) return false;
+
+                    const credsBuffer = await credsEntry.buffer();
+                    const credsJson = JSON.parse(credsBuffer.toString('utf8'));
+                    await fs.writeJSON(credPath, credsJson, { spaces: 2 });
+
+                    for (const entry of entries) {
+                        if (!/(^|\/)keys\/.+\.json$/i.test(entry.path)) continue;
+                        const keyName = path.basename(entry.path);
+                        const keyBuffer = await entry.buffer();
+                        const keyJson = JSON.parse(keyBuffer.toString('utf8'));
+                        await fs.writeJSON(path.join(keysPath, keyName), keyJson, { spaces: 2 });
+                    }
+
+                    return true;
+                } catch (zipError) {
+                    logger.warn(`ZIP session extraction failed: ${zipError.message}`);
+                }
+            }
+
+            let parsed = rawData;
+            if (Buffer.isBuffer(parsed)) {
+                const asText = parsed.toString('utf8').trim();
+                try {
+                    parsed = JSON.parse(asText);
+                } catch {
+                    try {
+                        parsed = JSON.parse(Buffer.from(asText, 'base64').toString('utf8'));
+                    } catch {
+                        parsed = null;
+                    }
+                }
+            }
+
+            // If we got wrapped session data ({ creds, keys }) split it properly.
+            if (parsed?.creds && typeof parsed.creds === 'object') {
+                await fs.writeJSON(credPath, parsed.creds, { spaces: 2 });
+                if (parsed.keys && typeof parsed.keys === 'object') {
+                    for (const [keyName, keyData] of Object.entries(parsed.keys)) {
+                        if (keyData && typeof keyData === 'object') {
+                            await fs.writeJSON(path.join(keysPath, `${keyName}.json`), keyData, { spaces: 2 });
+                        }
+                    }
+                }
+                return true;
+            }
+
+            // If parsed is already creds.json shape, save directly.
+            if (parsed?.noiseKey || parsed?.signedIdentityKey) {
+                await fs.writeJSON(credPath, parsed, { spaces: 2 });
+                return true;
+            }
+
+            // As last attempt, write raw buffer and re-parse as JSON file.
+            if (Buffer.isBuffer(rawData)) {
+                await fs.writeFile(credPath, rawData);
+                const saved = await fs.readJSON(credPath);
+                return !!(saved?.noiseKey || saved?.signedIdentityKey || saved?.creds);
+            }
+
+            return false;
+        };
 
         // ✅ PRIMARY: ilombot-- prefix
         // pair.js encodes the full Mega URL as base64 after the prefix:
@@ -180,14 +267,19 @@ async function processSessionCredentials() {
             const encoded = sessionId
                 .replace('ilombot ilombot--', '')
                 .replace('ilombot--', '')
-                .trim();
+                .trim()
+                .replace(/\s+/g, '');
 
             // ✅ Decode base64 to recover the full Mega URL with decryption key
             let fullMegaUrl;
             try {
-                fullMegaUrl = Buffer.from(encoded, 'base64').toString('utf8');
+                const normalized = encoded
+                    .replace(/-/g, '+')
+                    .replace(/_/g, '/')
+                    .padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+                fullMegaUrl = Buffer.from(normalized, 'base64').toString('utf8').trim();
                 // Validate it looks like a Mega URL
-                if (!fullMegaUrl.startsWith('https://mega.nz/')) {
+                if (!/^https:\/\/mega\.nz\/(file|folder)\//.test(fullMegaUrl)) {
                     throw new Error('Decoded value is not a Mega URL');
                 }
                 logger.info(`Decoded Mega URL: ${fullMegaUrl}`);
@@ -198,7 +290,6 @@ async function processSessionCredentials() {
                 fullMegaUrl = null;
             }
 
-            const credPath = path.join(SESSION_PATH, 'creds.json');
             let fileData;
 
             if (fullMegaUrl) {
@@ -233,13 +324,10 @@ async function processSessionCredentials() {
                 logger.info('Downloaded session from fallback server');
             }
 
-            await fs.writeFile(credPath, fileData);
-
-            // Validate the creds.json has required Baileys fields
-            const saved = await fs.readJSON(credPath);
-            if (!saved.noiseKey && !saved.signedIdentityKey) {
-                await fs.remove(credPath);
-                throw new Error('Downloaded session file is invalid — missing Baileys credential keys');
+            const persisted = await persistSessionData(fileData);
+            if (!persisted) {
+                await fs.remove(path.join(SESSION_PATH, 'creds.json')).catch(() => {});
+                throw new Error('Downloaded session file is invalid or unsupported');
             }
 
             logger.info('✅ ilombot session loaded successfully');
@@ -360,6 +448,47 @@ async function setupEventHandlers(sock, saveCreds) {
     logger.info('All event handlers registered');
 }
 
+async function promptPairingNumber() {
+    if (cachedPairingNumber) return cachedPairingNumber;
+
+    const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
+    if (envNumber.length >= 10) {
+        cachedPairingNumber = envNumber;
+        return cachedPairingNumber;
+    }
+
+    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') return null;
+
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    try {
+        console.log(chalk.hex('#60A5FA')('\n  📱 Pairing Mode Enabled'));
+        console.log(chalk.hex('#C4B5FD')('  Enter your WhatsApp number with country code (example: 2349031575131)\n'));
+        const answer = await rl.question('  Number: ');
+        const normalized = String(answer || '').replace(/\D/g, '');
+        if (normalized.length < 10) return null;
+        cachedPairingNumber = normalized;
+        return normalized;
+    } finally {
+        rl.close();
+    }
+}
+
+async function requestPairingCodeIfNeeded(sock, isRegistered) {
+    if (isRegistered) return;
+    const number = await promptPairingNumber();
+    if (!number) return;
+
+    try {
+        const rawCode = await sock.requestPairingCode(number);
+        const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+        console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
+        console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
+        console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
+    } catch (error) {
+        logger.warn(`Failed to generate pairing code: ${error.message}`);
+    }
+}
+
 async function establishWhatsAppConnection() {
     return new Promise(async (resolve, reject) => {
         try {
@@ -375,7 +504,7 @@ async function establishWhatsAppConnection() {
                     creds: state.creds,
                     keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' }).child({ level: 'fatal' }))
                 },
-                printQRInTerminal: true,
+                printQRInTerminal: false,
                 browser: Browsers.ubuntu('Chrome'),
                 markOnlineOnConnect: config.autoOnline !== false,
                 syncFullHistory: false,
@@ -389,6 +518,8 @@ async function establishWhatsAppConnection() {
                 getMessage: async () => ({ conversation: '' })
             });
 
+            await requestPairingCodeIfNeeded(sock, state.creds?.registered);
+
             if (connectionTimeout) clearTimeout(connectionTimeout);
             connectionTimeout = setTimeout(() => {
                 if (!sock?.user) {
@@ -399,6 +530,10 @@ async function establishWhatsAppConnection() {
 
             sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
                 if (qr) {
+                    try {
+                        const qrterm = await import('qrcode-terminal');
+                        qrterm.default.generate(qr, { small: true });
+                    } catch {}
                     console.log(chalk.hex('#FBBF24').bold('\n  📱  Scan the QR code above with WhatsApp\n'));
                     if (qrService.isQREnabled()) {
                         await qrService.generateQR(qr).catch(() => {});
