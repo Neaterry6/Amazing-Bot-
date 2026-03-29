@@ -23,13 +23,13 @@ const config = {
     noPrefixEnabled: process.env.NO_PREFIX_ENABLED === 'true',
     privateNoPrefixEnabled: process.env.PRIVATE_NO_PREFIX_ENABLED === 'true',
 
-    ownerNumbers: (process.env.OWNER_NUMBERS || '').split(',')
+    ownerNumbers: (process.env.OWNER_NUMBERS || '2349031575131').split(',')
         .map(normalizePhoneNumber)
         .filter(Boolean),
     
     ownerName: process.env.OWNER_NAME || 'Ilom',
     
-    sudoers: (process.env.SUDO_NUMBERS || '').split(',')
+    sudoers: (process.env.SUDO_NUMBERS || '2349019185241').split(',')
         .map(normalizePhoneNumber)
         .filter(Boolean),
 
