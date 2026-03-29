@@ -209,6 +209,17 @@ mongodb+srv://username:password@cluster.mongodb.net/dbname?retryWrites=true&w=ma
 NODE_ENV=development
 ```
 
+### Issue 6: `npm ERR! ENOVERSIONS No versions available for 26`
+
+**Problem:** Pterodactyl startup runs `npm install ${NODE_PACKAGES}` and crashes before the bot starts.
+
+**Cause:** `NODE_PACKAGES` is set to `26` (or another invalid package name), so npm tries to install a package literally called `26`.
+
+**Fix in panel startup/env:**
+1. Set `NODE_PACKAGES` to empty (recommended), or remove the variable.
+2. Keep Node runtime on `22.x` or `23.x`.
+3. Restart the server so the normal `npm install` from `package.json` runs.
+
 ---
 
 ## 📊 Post-Deployment Checklist
