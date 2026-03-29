@@ -165,60 +165,14 @@ async function processSessionCredentials() {
     const credPath = path.join(SESSION_PATH, 'creds.json');
     const keysPath = path.join(SESSION_PATH, 'keys');
 
-    const directCredsPayload = (process.env.CREDS_JSON || process.env.SESSION_CREDS_JSON || '').trim();
-    if (directCredsPayload) {
-        try {
-            let parsedCreds;
-            try {
-                parsedCreds = JSON.parse(directCredsPayload);
-            } catch {
-                parsedCreds = JSON.parse(Buffer.from(directCredsPayload, 'base64').toString('utf8'));
-            }
-
-            if (!parsedCreds || typeof parsedCreds !== 'object') {
-                throw new Error('CREDS_JSON is not a valid object');
-            }
-
-            const realCreds = parsedCreds.creds && typeof parsedCreds.creds === 'object'
-                ? parsedCreds.creds
-                : parsedCreds;
-
-            await fs.writeJSON(credPath, realCreds, { spaces: 2 });
-
-            const directKeysPayload = (process.env.SESSION_KEYS_JSON || '').trim();
-            if (directKeysPayload) {
-                let parsedKeys;
-                try {
-                    parsedKeys = JSON.parse(directKeysPayload);
-                } catch {
-                    parsedKeys = JSON.parse(Buffer.from(directKeysPayload, 'base64').toString('utf8'));
-                }
-
-                if (parsedKeys && typeof parsedKeys === 'object') {
-                    for (const [keyName, keyData] of Object.entries(parsedKeys)) {
-                        if (keyData && typeof keyData === 'object') {
-                            await fs.writeJSON(path.join(keysPath, `${keyName}.json`), keyData, { spaces: 2 });
-                        }
-                    }
-                }
-            }
-
-            logger.info('Loaded session creds from CREDS_JSON/SESSION_CREDS_JSON');
-            return true;
-        } catch (error) {
-            logger.warn(`Failed to parse CREDS_JSON payload: ${error.message}`);
-            await fs.remove(credPath).catch(() => {});
-        }
-    }
-
-    const rawSessionInput = (
+    const sessionId = (
         process.env.SESSION_ID ||
         process.env.WA_SESSION_ID ||
         process.env.ILOMBOT_SESSION_ID ||
         config.session?.sessionId ||
         ''
     ).trim().replace(/^['"]|['"]$/g, '');
-    if (!rawSessionInput) {
+    if (!sessionId) {
         logger.info('No SESSION_ID - will generate QR code');
         return false;
     }
@@ -226,52 +180,9 @@ async function processSessionCredentials() {
     try {
         logger.info('Processing session credentials...');
         let sessionData;
-        let sessionId = rawSessionInput;
-
-        // Accept JSON wrappers such as:
-        // {"sessionId":"ilombot--..."} or {"SESSION_ID":"..."} or {"megaUrl":"https://mega.nz/file/..."}
-        if (sessionId.startsWith('{')) {
-            try {
-                const parsedWrapper = JSON.parse(sessionId);
-                const extracted = parsedWrapper?.sessionId || parsedWrapper?.SESSION_ID || parsedWrapper?.megaUrl || parsedWrapper?.url;
-                if (typeof extracted === 'string' && extracted.trim()) {
-                    sessionId = extracted.trim();
-                }
-            } catch {}
-        }
         const persistSessionData = async (rawData) => {
-            // Some session providers return a ZIP archive (starts with "PK")
-            // that contains creds.json and keys/*.json files.
-            if (Buffer.isBuffer(rawData) && rawData.length > 4 && rawData[0] === 0x50 && rawData[1] === 0x4B) {
-                try {
-                    const unzipperModule = await import('unzipper');
-                    const unzipperApi = unzipperModule?.Open ? unzipperModule : unzipperModule?.default;
-                    if (!unzipperApi?.Open?.buffer) {
-                        throw new Error('unzipper.Open.buffer is unavailable');
-                    }
-                    const archive = await unzipperApi.Open.buffer(rawData);
-                    const entries = archive.files || [];
-
-                    const credsEntry = entries.find((e) => /(^|\/)creds\.json$/i.test(e.path));
-                    if (!credsEntry) return false;
-
-                    const credsBuffer = await credsEntry.buffer();
-                    const credsJson = JSON.parse(credsBuffer.toString('utf8'));
-                    await fs.writeJSON(credPath, credsJson, { spaces: 2 });
-
-                    for (const entry of entries) {
-                        if (!/(^|\/)keys\/.+\.json$/i.test(entry.path)) continue;
-                        const keyName = path.basename(entry.path);
-                        const keyBuffer = await entry.buffer();
-                        const keyJson = JSON.parse(keyBuffer.toString('utf8'));
-                        await fs.writeJSON(path.join(keysPath, keyName), keyJson, { spaces: 2 });
-                    }
-
-                    return true;
-                } catch (zipError) {
-                    logger.warn(`ZIP session extraction failed: ${zipError.message}`);
-                }
-            }
+            const credPath = path.join(SESSION_PATH, 'creds.json');
+            const keysPath = path.join(SESSION_PATH, 'keys');
 
             let parsed = rawData;
             if (Buffer.isBuffer(parsed)) {
