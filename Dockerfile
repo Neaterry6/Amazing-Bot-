@@ -13,6 +13,7 @@ ENV NODE_ENV=production \
     PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 RUN apk add --no-cache \
+    git \
     python3 \
     make \
     g++ \
