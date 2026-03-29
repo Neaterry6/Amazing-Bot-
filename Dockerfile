@@ -36,6 +36,8 @@ RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit
 
 COPY . .
 
+RUN npm run postinstall --if-present
+
 RUN mkdir -p logs temp session media backups && \
     chown -R node:node /app
 
