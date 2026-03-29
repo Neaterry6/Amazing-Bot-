@@ -180,35 +180,6 @@ async function processSessionCredentials() {
             const credPath = path.join(SESSION_PATH, 'creds.json');
             const keysPath = path.join(SESSION_PATH, 'keys');
 
-            // Some session providers return a ZIP archive (starts with "PK")
-            // that contains creds.json and keys/*.json files.
-            if (Buffer.isBuffer(rawData) && rawData.length > 4 && rawData[0] === 0x50 && rawData[1] === 0x4B) {
-                try {
-                    const unzipper = await import('unzipper');
-                    const archive = await unzipper.default.Open.buffer(rawData);
-                    const entries = archive.files || [];
-
-                    const credsEntry = entries.find((e) => /(^|\/)creds\.json$/i.test(e.path));
-                    if (!credsEntry) return false;
-
-                    const credsBuffer = await credsEntry.buffer();
-                    const credsJson = JSON.parse(credsBuffer.toString('utf8'));
-                    await fs.writeJSON(credPath, credsJson, { spaces: 2 });
-
-                    for (const entry of entries) {
-                        if (!/(^|\/)keys\/.+\.json$/i.test(entry.path)) continue;
-                        const keyName = path.basename(entry.path);
-                        const keyBuffer = await entry.buffer();
-                        const keyJson = JSON.parse(keyBuffer.toString('utf8'));
-                        await fs.writeJSON(path.join(keysPath, keyName), keyJson, { spaces: 2 });
-                    }
-
-                    return true;
-                } catch (zipError) {
-                    logger.warn(`ZIP session extraction failed: ${zipError.message}`);
-                }
-            }
-
             let parsed = rawData;
             if (Buffer.isBuffer(parsed)) {
                 const asText = parsed.toString('utf8').trim();
