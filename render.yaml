@@ -3,7 +3,7 @@ services:
     name: ilom-whatsapp-bot
     runtime: node
     plan: free
-    buildCommand: npm install --production=false
+    buildCommand: npm install --omit=dev
     startCommand: npm start
     healthCheckPath: /health
     envVars:
@@ -15,3 +15,7 @@ services:
         value: false
       - key: DATABASE_ENABLED
         value: false
+      - key: HEALTHCHECK_STRICT
+        value: false
+      - key: PUPPETEER_SKIP_DOWNLOAD
+        value: true
