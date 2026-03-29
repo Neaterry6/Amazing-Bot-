@@ -101,6 +101,7 @@
     "helmet": "^8.1.0",
     "human-readable": "^0.2.1",
     "jimp": "^1.6.0",
+    "jsdom": "^26.1.0",
     "jsonwebtoken": "^9.0.3",
     "lodash": "^4.17.23",
     "lowdb": "^7.0.1",
