@@ -73,6 +73,12 @@ const logger = {
     debug: (message, meta) => winstonLogger.debug(message, meta || {}),
     verbose: (message, meta) => winstonLogger.verbose(message, meta || {}),
     http: (message, meta) => winstonLogger.http(message, meta || {}),
+    logAPI: (method, path, statusCode, responseTime, userAgent = '') => {
+        const status = Number(statusCode) || 0;
+        const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'http';
+        const ua = String(userAgent || '').slice(0, 120);
+        winstonLogger.log(level, `${method} ${path} ${status} ${responseTime}ms ${ua}`.trim());
+    },
     cleanup: async () => {
         try {
             const files = await fs.readdir(logDir);

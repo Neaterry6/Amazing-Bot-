@@ -161,7 +161,13 @@ async function processSessionCredentials() {
     await fs.ensureDir(SESSION_PATH);
     await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
 
-    const sessionId = process.env.SESSION_ID?.trim();
+    const sessionId = (
+        process.env.SESSION_ID ||
+        process.env.WA_SESSION_ID ||
+        process.env.ILOMBOT_SESSION_ID ||
+        config.session?.sessionId ||
+        ''
+    ).trim().replace(/^['"]|['"]$/g, '');
     if (!sessionId) {
         logger.info('No SESSION_ID - will generate QR code');
         return false;
