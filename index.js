@@ -568,11 +568,16 @@ async function establishWhatsAppConnection() {
 
                     const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut
+                        DisconnectReason.loggedOut,
+                        DisconnectReason.connectionReplaced
                     ].includes(statusCode);
 
                     if (requiresFreshPairing) {
-                        logger.warn('Session issue detected. Reconnecting without clearing credentials first...');
+                        logger.warn('Session became invalid. Clearing local auth files and waiting for new pairing...');
+                        await fs.remove(SESSION_PATH).catch(() => {});
+                        await fs.ensureDir(SESSION_PATH);
+                        await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
+                        cachedPairingNumber = null;
                         reconnectAttempts = 0;
                     }
 
