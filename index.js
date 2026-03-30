@@ -460,7 +460,10 @@ async function promptPairingNumber() {
         return cachedPairingNumber;
     }
 
-    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') return null;
+    const allowInteractivePairing = process.env.ENABLE_PAIRING_PROMPT === 'true';
+    if (!allowInteractivePairing || !process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
+        return null;
+    }
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     try {
@@ -479,7 +482,10 @@ async function promptPairingNumber() {
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
-    if (!number) return;
+    if (!number) {
+        logger.warn('Session is not registered. Set PAIRING_NUMBER in env (or ENABLE_PAIRING_PROMPT=true) to generate pair code.');
+        return;
+    }
 
     try {
         const rawCode = await sock.requestPairingCode(number);
@@ -566,22 +572,18 @@ async function establishWhatsAppConnection() {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
                     logger.warn(`Connection closed. Code: ${statusCode}`);
 
-                    const fatalCodes = [
+                    const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut,
-                        DisconnectReason.connectionReplaced
-                    ];
+                        DisconnectReason.loggedOut
+                    ].includes(statusCode);
 
-                    if (fatalCodes.includes(statusCode)) {
-                        logger.error('Fatal disconnect - clearing session');
-                        await fs.remove(SESSION_PATH).catch(() => {});
-                        await fs.ensureDir(SESSION_PATH);
-                        await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
-                        setTimeout(() => process.exit(1), 2000);
-                    } else {
-                        console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
-                        handleReconnect(resolve, reject);
+                    if (requiresFreshPairing) {
+                        logger.warn('Session issue detected. Reconnecting without clearing credentials first...');
+                        reconnectAttempts = 0;
                     }
+
+                    console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
+                    handleReconnect(resolve, reject);
                 }
             });
 
