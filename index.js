@@ -48,6 +48,16 @@ const W = 65;
 const line  = chalk.hex('#8B5CF6')('═'.repeat(W));
 const tline = chalk.hex('#6D28D9')('─'.repeat(W));
 
+function getSessionIdentifier() {
+    return (
+        process.env.SESSION_ID ||
+        process.env.WA_SESSION_ID ||
+        process.env.ILOMBOT_SESSION_ID ||
+        config.session?.sessionId ||
+        ''
+    ).trim().replace(/^['"]|['"]$/g, '');
+}
+
 function box(content) {
     console.log(chalk.hex('#8B5CF6')('╔' + '═'.repeat(W) + '╗'));
     for (const row of content) {
@@ -100,7 +110,7 @@ async function displayConfig() {
     step('📌', 'Prefix',      config.prefix);
     step('🌐', 'Mode',        config.publicMode ? chalk.greenBright('Public') : chalk.yellowBright('Private'));
     step('👑', 'Owners',      config.ownerNumbers.length + ' configured');
-    step('🔑', 'Session',     process.env.SESSION_ID ? chalk.greenBright('Present') : chalk.yellowBright('QR Required'));
+    step('🔑', 'Session',     getSessionIdentifier() ? chalk.greenBright('Present') : chalk.yellowBright('QR Required'));
     step('🗄️', 'Database',    config.database?.enabled ? chalk.greenBright('Enabled') : chalk.gray('Disabled'));
     step('📡', 'Redis',       config.redis?.enabled ? chalk.greenBright('Enabled') : chalk.gray('Disabled'));
     step('🌍', 'Node',        process.version);
@@ -190,13 +200,7 @@ async function processSessionCredentials() {
     const credPath = path.join(SESSION_PATH, 'creds.json');
     const keysPath = path.join(SESSION_PATH, 'keys');
 
-    const sessionId = (
-        process.env.SESSION_ID ||
-        process.env.WA_SESSION_ID ||
-        process.env.ILOMBOT_SESSION_ID ||
-        config.session?.sessionId ||
-        ''
-    ).trim().replace(/^['"]|['"]$/g, '');
+    const sessionId = getSessionIdentifier();
     if (!sessionId) {
         logger.info('No SESSION_ID - will generate QR code');
         return false;
