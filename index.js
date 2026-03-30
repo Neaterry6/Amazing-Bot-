@@ -453,14 +453,10 @@ async function setupEventHandlers(sock, saveCreds) {
 
 async function promptPairingNumber() {
     if (cachedPairingNumber) return cachedPairingNumber;
-
-    const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
-    if (envNumber.length >= 10) {
-        cachedPairingNumber = envNumber;
-        return cachedPairingNumber;
+    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
+        logger.warn('Pairing required but console input is not available.');
+        return null;
     }
-
-    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') return null;
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     try {
@@ -479,17 +475,25 @@ async function promptPairingNumber() {
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
-    if (!number) return;
-
-    try {
-        const rawCode = await sock.requestPairingCode(number);
-        const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
-        console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
-        console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
-        console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
-    } catch (error) {
-        logger.warn(`Failed to generate pairing code: ${error.message}`);
+    if (!number) {
+        logger.warn('Session is not registered and no phone number was provided.');
+        return;
     }
+
+    for (let i = 1; i <= 5; i++) {
+        try {
+            const rawCode = await sock.requestPairingCode(number);
+            const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+            console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
+            console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
+            console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
+            return;
+        } catch (error) {
+            logger.warn(`Pairing code attempt ${i}/5 failed: ${error.message}`);
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    }
+    logger.error('Unable to generate pairing code after multiple attempts. Please restart and try again.');
 }
 
 async function establishWhatsAppConnection() {
@@ -499,6 +503,7 @@ async function establishWhatsAppConnection() {
 
             const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
             const { version } = await fetchLatestBaileysVersion();
+            let pairingRequested = false;
 
             logger.info(`Connecting with Baileys v${version.join('.')}`);
 
@@ -521,8 +526,6 @@ async function establishWhatsAppConnection() {
                 getMessage: async () => ({ conversation: '' })
             });
 
-            await requestPairingCodeIfNeeded(sock, state.creds?.registered);
-
             if (connectionTimeout) clearTimeout(connectionTimeout);
             connectionTimeout = setTimeout(() => {
                 if (!sock?.user) {
@@ -532,14 +535,27 @@ async function establishWhatsAppConnection() {
             }, 120000);
 
             sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+                if (connection === 'connecting' && !state.creds?.registered && !pairingRequested) {
+                    pairingRequested = true;
+                    setTimeout(() => {
+                        requestPairingCodeIfNeeded(sock, false).catch((e) => {
+                            logger.warn(`Pairing request failed: ${e.message}`);
+                        });
+                    }, 2000);
+                }
+
                 if (qr) {
-                    try {
-                        const qrterm = await import('qrcode-terminal');
-                        qrterm.default.generate(qr, { small: true });
-                    } catch {}
-                    console.log(chalk.hex('#FBBF24').bold('\n  📱  Scan the QR code above with WhatsApp\n'));
-                    if (qrService.isQREnabled()) {
-                        await qrService.generateQR(qr).catch(() => {});
+                    if (!pairingRequested) {
+                        try {
+                            const qrterm = await import('qrcode-terminal');
+                            qrterm.default.generate(qr, { small: true });
+                        } catch {}
+                        console.log(chalk.hex('#FBBF24').bold('\n  📱  Scan the QR code above with WhatsApp\n'));
+                        if (qrService.isQREnabled()) {
+                            await qrService.generateQR(qr).catch(() => {});
+                        }
+                    } else {
+                        logger.info('QR generated but waiting for pairing-code link flow.');
                     }
                 }
 
@@ -566,22 +582,22 @@ async function establishWhatsAppConnection() {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
                     logger.warn(`Connection closed. Code: ${statusCode}`);
 
-                    const fatalCodes = [
+                    const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut,
-                        DisconnectReason.connectionReplaced
-                    ];
+                        DisconnectReason.loggedOut
+                    ].includes(statusCode);
 
-                    if (fatalCodes.includes(statusCode)) {
-                        logger.error('Fatal disconnect - clearing session');
+                    if (requiresFreshPairing) {
+                        logger.warn('Session became invalid. Clearing local auth files and waiting for new pairing...');
                         await fs.remove(SESSION_PATH).catch(() => {});
                         await fs.ensureDir(SESSION_PATH);
                         await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
-                        setTimeout(() => process.exit(1), 2000);
-                    } else {
-                        console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
-                        handleReconnect(resolve, reject);
+                        cachedPairingNumber = null;
+                        reconnectAttempts = 0;
                     }
+
+                    console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
+                    handleReconnect(resolve, reject);
                 }
             });
 
