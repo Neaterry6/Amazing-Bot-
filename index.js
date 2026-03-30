@@ -485,15 +485,20 @@ async function requestPairingCodeIfNeeded(sock, isRegistered) {
         return;
     }
 
-    try {
-        const rawCode = await sock.requestPairingCode(number);
-        const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
-        console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
-        console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
-        console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
-    } catch (error) {
-        logger.warn(`Failed to generate pairing code: ${error.message}`);
+    for (let i = 1; i <= 5; i++) {
+        try {
+            const rawCode = await sock.requestPairingCode(number);
+            const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+            console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
+            console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
+            console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
+            return;
+        } catch (error) {
+            logger.warn(`Pairing code attempt ${i}/5 failed: ${error.message}`);
+            await new Promise(r => setTimeout(r, 2000));
+        }
     }
+    logger.error('Unable to generate pairing code after multiple attempts. Please restart and try again.');
 }
 
 async function establishWhatsAppConnection() {
@@ -503,6 +508,7 @@ async function establishWhatsAppConnection() {
 
             const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
             const { version } = await fetchLatestBaileysVersion();
+            let pairingRequested = false;
 
             logger.info(`Connecting with Baileys v${version.join('.')}`);
 
@@ -525,8 +531,6 @@ async function establishWhatsAppConnection() {
                 getMessage: async () => ({ conversation: '' })
             });
 
-            await requestPairingCodeIfNeeded(sock, state.creds?.registered);
-
             if (connectionTimeout) clearTimeout(connectionTimeout);
             connectionTimeout = setTimeout(() => {
                 if (!sock?.user) {
@@ -536,14 +540,27 @@ async function establishWhatsAppConnection() {
             }, 120000);
 
             sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+                if (connection === 'connecting' && !state.creds?.registered && !pairingRequested) {
+                    pairingRequested = true;
+                    setTimeout(() => {
+                        requestPairingCodeIfNeeded(sock, false).catch((e) => {
+                            logger.warn(`Pairing request failed: ${e.message}`);
+                        });
+                    }, 2000);
+                }
+
                 if (qr) {
-                    try {
-                        const qrterm = await import('qrcode-terminal');
-                        qrterm.default.generate(qr, { small: true });
-                    } catch {}
-                    console.log(chalk.hex('#FBBF24').bold('\n  📱  Scan the QR code above with WhatsApp\n'));
-                    if (qrService.isQREnabled()) {
-                        await qrService.generateQR(qr).catch(() => {});
+                    if (!pairingRequested) {
+                        try {
+                            const qrterm = await import('qrcode-terminal');
+                            qrterm.default.generate(qr, { small: true });
+                        } catch {}
+                        console.log(chalk.hex('#FBBF24').bold('\n  📱  Scan the QR code above with WhatsApp\n'));
+                        if (qrService.isQREnabled()) {
+                            await qrService.generateQR(qr).catch(() => {});
+                        }
+                    } else {
+                        logger.info('QR generated but waiting for pairing-code link flow.');
                     }
                 }
 
