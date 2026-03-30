@@ -5,6 +5,7 @@ import { checkAntilink } from '../commands/admin/antilink.js';
 import { checkBan } from '../commands/admin/ban.js';
 import { checkSpam } from '../commands/admin/antispam.js';
 import { checkBadWord } from '../commands/admin/antiword.js';
+import { isSuspended } from '../utils/suspendStore.js';
 
 let autoDownloadHandler = null;
 
@@ -379,7 +380,7 @@ class MessageHandler {
 
             const stanzaId = resolveStanzaId(message);
             const replyHandler = findReplyHandler(stanzaId);
-            const chatHandler = !isGroup ? findChatHandler(from) : null;
+            const chatHandler = findChatHandler(from);
             const hasActiveHandler = !!(replyHandler || chatHandler);
 
             if (fromMe && !config.selfMode && !isOwnerUser && !isSudoUser && !hasActiveHandler) {
@@ -391,6 +392,12 @@ class MessageHandler {
                 try { if (await checkSpam(sock, message)) return; } catch {}
                 try { if (await checkAntilink(sock, message)) return; } catch {}
                 try { if (await checkBadWord(sock, message)) return; } catch {}
+                try {
+                    if (await isSuspended(from, rawParticipant)) {
+                        await sock.sendMessage(from, { delete: message.key }).catch(() => {});
+                        return;
+                    }
+                } catch {}
             }
 
             const messageContent = this.extractMessageContent(message);

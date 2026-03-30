@@ -453,14 +453,10 @@ async function setupEventHandlers(sock, saveCreds) {
 
 async function promptPairingNumber() {
     if (cachedPairingNumber) return cachedPairingNumber;
-
-    const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
-    if (envNumber.length >= 10) {
-        cachedPairingNumber = envNumber;
-        return cachedPairingNumber;
+    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
+        logger.warn('Pairing required but console input is not available.');
+        return null;
     }
-
-    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') return null;
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     try {
@@ -479,7 +475,10 @@ async function promptPairingNumber() {
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
-    if (!number) return;
+    if (!number) {
+        logger.warn('Session is not registered and no phone number was provided.');
+        return;
+    }
 
     try {
         const rawCode = await sock.requestPairingCode(number);
@@ -566,22 +565,22 @@ async function establishWhatsAppConnection() {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
                     logger.warn(`Connection closed. Code: ${statusCode}`);
 
-                    const fatalCodes = [
+                    const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut,
-                        DisconnectReason.connectionReplaced
-                    ];
+                        DisconnectReason.loggedOut
+                    ].includes(statusCode);
 
-                    if (fatalCodes.includes(statusCode)) {
-                        logger.error('Fatal disconnect - clearing session');
+                    if (requiresFreshPairing) {
+                        logger.warn('Session became invalid. Clearing local auth files and waiting for new pairing...');
                         await fs.remove(SESSION_PATH).catch(() => {});
                         await fs.ensureDir(SESSION_PATH);
                         await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
-                        setTimeout(() => process.exit(1), 2000);
-                    } else {
-                        console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
-                        handleReconnect(resolve, reject);
+                        cachedPairingNumber = null;
+                        reconnectAttempts = 0;
                     }
+
+                    console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
+                    handleReconnect(resolve, reject);
                 }
             });
 
