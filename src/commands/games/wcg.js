@@ -10,15 +10,6 @@ function normalizeWord(word) {
     return String(word || '').toLowerCase().replace(/[^a-z]/g, '');
 }
 
-function normalizeJid(jid) {
-    return String(jid || '').split(':')[0].replace(/@lid/g, '@s.whatsapp.net');
-}
-
-function hasPlayer(session, jid) {
-    const n = normalizeJid(jid);
-    return session.players.some(p => normalizeJid(p.jid) === n);
-}
-
 function randomLetter() {
     return ALPHA[Math.floor(Math.random() * ALPHA.length)];
 }
@@ -135,8 +126,8 @@ export default {
             if (!session || session.phase !== 'join') {
                 return await sock.sendMessage(from, { text: '❌ Join phase is not active. Use .wcg start first.' }, { quoted: message });
             }
-            if (!hasPlayer(session, sender)) {
-                session.players.push({ jid: normalizeJid(sender), out: false, rounds: 0 });
+            if (!session.players.some(p => p.jid === sender)) {
+                session.players.push({ jid: sender, out: false, rounds: 0 });
             }
             return await sock.sendMessage(from, { text: `✅ ${mentionOf(sender)} joined WCG`, mentions: [sender] }, { quoted: message });
         }
@@ -151,7 +142,7 @@ export default {
 
         const session = {
             phase: 'join',
-            players: [{ jid: normalizeJid(sender), out: false, rounds: 0 }],
+            players: [{ jid: sender, out: false, rounds: 0 }],
             currentIdx: -1,
             waitingFor: null,
             expected: null,
@@ -166,11 +157,11 @@ export default {
             handler: async (text, incomingMessage) => {
                 const live = sessions.get(from);
                 if (!live) return;
-                const participant = normalizeJid(incomingMessage.key.participant || incomingMessage.key.remoteJid);
+                const participant = incomingMessage.key.participant || incomingMessage.key.remoteJid;
                 const body = (text || '').trim().toLowerCase();
 
-                if (live.phase === 'join' && /^join\b/i.test(body)) {
-                    if (!hasPlayer(live, participant)) {
+                if (live.phase === 'join' && body === 'join') {
+                    if (!live.players.some(p => p.jid === participant)) {
                         live.players.push({ jid: participant, out: false, rounds: 0 });
                         await sock.sendMessage(from, { text: `✅ ${mentionOf(participant)} joined WCG`, mentions: [participant] });
                     }
