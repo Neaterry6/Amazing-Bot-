@@ -453,11 +453,9 @@ async function setupEventHandlers(sock, saveCreds) {
 
 async function promptPairingNumber() {
     if (cachedPairingNumber) return cachedPairingNumber;
-
-    const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
-    if (envNumber.length >= 10) {
-        cachedPairingNumber = envNumber;
-        return cachedPairingNumber;
+    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
+        logger.warn('Pairing required but console input is not available.');
+        return null;
     }
 
     const allowInteractivePairing = process.env.ENABLE_PAIRING_PROMPT === 'true';
