@@ -458,6 +458,11 @@ async function promptPairingNumber() {
         return null;
     }
 
+    const allowInteractivePairing = process.env.ENABLE_PAIRING_PROMPT === 'true';
+    if (!allowInteractivePairing || !process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
+        return null;
+    }
+
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     try {
         console.log(chalk.hex('#60A5FA')('\n  📱 Pairing Mode Enabled'));
@@ -476,7 +481,7 @@ async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
     if (!number) {
-        logger.warn('Session is not registered and no phone number was provided.');
+        logger.warn('Session is not registered. Set PAIRING_NUMBER in env (or ENABLE_PAIRING_PROMPT=true) to generate pair code.');
         return;
     }
 
@@ -567,7 +572,8 @@ async function establishWhatsAppConnection() {
 
                     const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut
+                        DisconnectReason.loggedOut,
+                        DisconnectReason.connectionReplaced
                     ].includes(statusCode);
 
                     if (requiresFreshPairing) {
