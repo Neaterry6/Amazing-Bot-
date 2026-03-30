@@ -566,22 +566,18 @@ async function establishWhatsAppConnection() {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
                     logger.warn(`Connection closed. Code: ${statusCode}`);
 
-                    const fatalCodes = [
+                    const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut,
-                        DisconnectReason.connectionReplaced
-                    ];
+                        DisconnectReason.loggedOut
+                    ].includes(statusCode);
 
-                    if (fatalCodes.includes(statusCode)) {
-                        logger.error('Fatal disconnect - clearing session');
-                        await fs.remove(SESSION_PATH).catch(() => {});
-                        await fs.ensureDir(SESSION_PATH);
-                        await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
-                        setTimeout(() => process.exit(1), 2000);
-                    } else {
-                        console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
-                        handleReconnect(resolve, reject);
+                    if (requiresFreshPairing) {
+                        logger.warn('Session issue detected. Reconnecting without clearing credentials first...');
+                        reconnectAttempts = 0;
                     }
+
+                    console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
+                    handleReconnect(resolve, reject);
                 }
             });
 
