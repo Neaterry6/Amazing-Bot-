@@ -509,9 +509,13 @@ async function setupEventHandlers(sock, saveCreds) {
 
 async function promptPairingNumber() {
     if (cachedPairingNumber) return cachedPairingNumber;
-    if (getSessionIdentifier()) return null;
     if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
         logger.warn('Pairing required but console input is not available.');
+        return null;
+    }
+
+    const allowInteractivePairing = process.env.ENABLE_PAIRING_PROMPT === 'true';
+    if (!allowInteractivePairing || !process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
         return null;
     }
 
@@ -533,7 +537,7 @@ async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
     if (!number) {
-        logger.warn('Session is not registered and no phone number was provided.');
+        logger.warn('Session is not registered. Set PAIRING_NUMBER in env (or ENABLE_PAIRING_PROMPT=true) to generate pair code.');
         return;
     }
 
@@ -592,7 +596,7 @@ async function establishWhatsAppConnection() {
             }, 120000);
 
             sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-                if (connection === 'connecting' && !state.creds?.registered && !pairingRequested && !getSessionIdentifier()) {
+                if (connection === 'connecting' && !state.creds?.registered && !pairingRequested) {
                     pairingRequested = true;
                     setTimeout(() => {
                         requestPairingCodeIfNeeded(sock, false).catch((e) => {
@@ -641,7 +645,8 @@ async function establishWhatsAppConnection() {
 
                     const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut
+                        DisconnectReason.loggedOut,
+                        DisconnectReason.connectionReplaced
                     ].includes(statusCode);
 
                     if (requiresFreshPairing) {
