@@ -3,6 +3,18 @@ import axios from 'axios';
 function pickList(data) {
     if (Array.isArray(data?.result)) return data.result;
     if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.movies)) return data.movies;
+    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.results)) return data.results;
+    if (data && typeof data === 'object') {
+        for (const value of Object.values(data)) {
+            if (Array.isArray(value) && value.length) return value;
+            if (value && typeof value === 'object') {
+                const nested = pickList(value);
+                if (nested.length) return nested;
+            }
+        }
+    }
     if (Array.isArray(data)) return data;
     return [];
 }
@@ -28,7 +40,11 @@ export default {
             const api = `https://apiskeith.top/${source}/search?q=${encodeURIComponent(query)}`;
             const { data } = await axios.get(api, { timeout: 30000 });
             const list = pickList(data);
-            if (!list.length) return await sock.sendMessage(from, { text: `❌ No result for ${query}` }, { quoted: message });
+            if (!list.length) {
+                return await sock.sendMessage(from, {
+                    text: `❌ No parsed list for "${query}". Raw API (first 1200 chars):\n${JSON.stringify(data).slice(0, 1200)}`
+                }, { quoted: message });
+            }
 
             const text = list.slice(0, 10).map((it, i) => {
                 const title = it.title || it.name || it.movie || it.drama || 'Unknown';
