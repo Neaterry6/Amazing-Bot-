@@ -215,16 +215,34 @@ async function processSessionCredentials() {
 
             let parsed = rawData;
             if (Buffer.isBuffer(parsed)) {
-                const asText = parsed.toString('utf8').trim();
+                const asText = parsed.toString('utf8').replace(/^\uFEFF/, '').trim();
                 try {
                     parsed = JSON.parse(asText);
                 } catch {
                     try {
                         parsed = JSON.parse(Buffer.from(asText, 'base64').toString('utf8'));
                     } catch {
-                        parsed = null;
+                        // Some hosts prepend text around JSON; try extracting JSON object body
+                        const firstBrace = asText.indexOf('{');
+                        const lastBrace = asText.lastIndexOf('}');
+                        if (firstBrace !== -1 && lastBrace > firstBrace) {
+                            const jsonSlice = asText.slice(firstBrace, lastBrace + 1);
+                            try {
+                                parsed = JSON.parse(jsonSlice);
+                            } catch {
+                                parsed = null;
+                            }
+                        } else {
+                            parsed = null;
+                        }
                     }
                 }
+            }
+
+            if (typeof parsed === 'string') {
+                try {
+                    parsed = JSON.parse(parsed);
+                } catch {}
             }
 
             // If we got wrapped session data ({ creds, keys }) split it properly.
@@ -249,8 +267,14 @@ async function processSessionCredentials() {
             // As last attempt, write raw buffer and re-parse as JSON file.
             if (Buffer.isBuffer(rawData)) {
                 await fs.writeFile(credPath, rawData);
-                const saved = await fs.readJSON(credPath);
-                return !!(saved?.noiseKey || saved?.signedIdentityKey || saved?.creds);
+                try {
+                    const saved = await fs.readJSON(credPath);
+                    return !!(saved?.noiseKey || saved?.signedIdentityKey || saved?.creds);
+                } catch {
+                    const preview = rawData.toString('utf8').slice(0, 120).replace(/\s+/g, ' ');
+                    logger.warn(`Session raw file is not JSON. Preview: ${preview}`);
+                    return false;
+                }
             }
 
             return false;
