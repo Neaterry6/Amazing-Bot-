@@ -460,7 +460,10 @@ async function promptPairingNumber() {
         return cachedPairingNumber;
     }
 
-    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') return null;
+    const allowInteractivePairing = process.env.ENABLE_PAIRING_PROMPT === 'true';
+    if (!allowInteractivePairing || !process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
+        return null;
+    }
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     try {
@@ -479,7 +482,10 @@ async function promptPairingNumber() {
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
-    if (!number) return;
+    if (!number) {
+        logger.warn('Session is not registered. Set PAIRING_NUMBER in env (or ENABLE_PAIRING_PROMPT=true) to generate pair code.');
+        return;
+    }
 
     try {
         const rawCode = await sock.requestPairingCode(number);
