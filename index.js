@@ -213,6 +213,34 @@ async function processSessionCredentials() {
             const credPath = path.join(SESSION_PATH, 'creds.json');
             const keysPath = path.join(SESSION_PATH, 'keys');
 
+            // pair.js uploads zipped auth folders (PK zip). Extract directly when detected.
+            if (Buffer.isBuffer(rawData) && rawData.length > 4 && rawData[0] === 0x50 && rawData[1] === 0x4b) {
+                try {
+                    const unzipper = await import('unzipper');
+                    const zip = await unzipper.Open.buffer(rawData);
+                    for (const entry of zip.files) {
+                        if (entry.type !== 'File') continue;
+                        const safePath = path.normalize(entry.path).replace(/^(\.\.(\/|\\|$))+/, '');
+                        const target = path.join(SESSION_PATH, safePath);
+                        await fs.ensureDir(path.dirname(target));
+                        const content = await entry.buffer();
+                        await fs.writeFile(target, content);
+                    }
+
+                    // Support both root creds.json and nested auth_info path variants.
+                    const rootCreds = path.join(SESSION_PATH, 'creds.json');
+                    if (!await fs.pathExists(rootCreds)) {
+                        const nestedCreds = path.join(SESSION_PATH, 'auth_info_baileys', 'creds.json');
+                        if (await fs.pathExists(nestedCreds)) {
+                            await fs.copy(nestedCreds, rootCreds, { overwrite: true });
+                        }
+                    }
+                    return await fs.pathExists(rootCreds);
+                } catch (zipErr) {
+                    logger.warn(`Zip session extraction failed: ${zipErr.message}`);
+                }
+            }
+
             let parsed = rawData;
             if (Buffer.isBuffer(parsed)) {
                 const asText = parsed.toString('utf8').replace(/^\uFEFF/, '').trim();
