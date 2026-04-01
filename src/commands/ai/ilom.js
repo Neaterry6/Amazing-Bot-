@@ -122,35 +122,7 @@ export default {
             const api = `https://apiskeith.top/download/audio?url=${encodeURIComponent(video.url)}`;
             const { data } = await axios.get(api, { timeout: 30000 });
             if (!data?.result) throw new Error('Song API failed');
-
-            if (video.thumbnail) {
-                await sock.sendMessage(from, {
-                    image: { url: video.thumbnail },
-                    caption: `🎵 *${video.title || 'Song'}*\n👤 ${video.author?.name || 'Unknown artist'}\n⏱️ ${video.timestamp || 'Unknown duration'}`
-                }, { quoted: message });
-            }
-
-            return await sock.sendMessage(from, {
-                audio: { url: data.result },
-                mimetype: 'audio/mpeg',
-                ptt: false,
-                contextInfo: {
-                    externalAdReply: {
-                        title: video.title || 'Audio',
-                        body: `${video.author?.name || 'Unknown artist'} • ${video.timestamp || ''}`.trim(),
-                        thumbnailUrl: video.thumbnail || undefined,
-                        mediaType: 1,
-                        renderLargerThumbnail: true,
-                        sourceUrl: video.url
-                    }
-                }
-            }, { quoted: message });
-        }
-
-        if (/\b(aza|account number|send money|transfer|opay)\b/i.test(input)) {
-            return await sock.sendMessage(from, {
-                text: `Nah my account be that, you self send me money 😌\n\n🏦 Bank: OPay\n👤 Name: Akewushola Abdulbakri Temitope\n💳 Account Number: 8148804813`
-            }, { quoted: message });
+            return await sock.sendMessage(from, { audio: { url: data.result }, mimetype: 'audio/mpeg' }, { quoted: message });
         }
 
         if (/send me image|image of|generate image/i.test(input)) {
