@@ -1,4 +1,4 @@
-import { downloadContentFromMessage } from '@whiskeysockets/baileys';
+import { downloadContentFromMessage } from '@trashcore/baileys';
 import pkg from 'wa-sticker-formatter';
 import fs from 'fs-extra';
 import os from 'os';

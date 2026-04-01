@@ -39,6 +39,7 @@ let isShuttingDown = false;
 let connectionTimeout = null;
 let reconnectAttempts = 0;
 let cachedPairingNumber = null;
+let generatedSessionSaved = false;
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 10;
@@ -560,7 +561,7 @@ async function requestPairingCodeIfNeeded(sock, isRegistered) {
 async function establishWhatsAppConnection() {
     return new Promise(async (resolve, reject) => {
         try {
-            const { makeWASocket, Browsers, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = await import('@whiskeysockets/baileys');
+            const { makeWASocket, Browsers, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = await import('@trashcore/baileys');
 
             const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
             const { version } = await fetchLatestBaileysVersion();
@@ -633,6 +634,20 @@ async function establishWhatsAppConnection() {
                     await setupEventHandlers(sock, saveCreds);
                     global.sock = sock;
                     await sendBotStatusUpdate(sock).catch(() => {});
+
+                    if (!getSessionIdentifier() && !generatedSessionSaved) {
+                        try {
+                            const generated = await buildSessionIdFromLocalAuth();
+                            if (generated) {
+                                await persistGeneratedSessionId(generated);
+                                generatedSessionSaved = true;
+                                logger.info('New session paired. SESSION_ID saved to data/generated_session_id.txt and .env');
+                            }
+                        } catch (saveErr) {
+                            logger.warn(`Failed to save generated session id: ${saveErr.message}`);
+                        }
+                    }
+
                     resolve(sock);
                 }
 
