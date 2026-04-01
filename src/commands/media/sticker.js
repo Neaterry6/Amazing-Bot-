@@ -1,5 +1,5 @@
 import { Sticker, StickerTypes } from "wa-sticker-formatter";
-import { downloadContentFromMessage } from "@trashcore/baileys";
+import { downloadContentFromMessage } from "@whiskeysockets/baileys";
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';

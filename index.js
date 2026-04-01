@@ -59,39 +59,6 @@ function getSessionIdentifier() {
     ).trim().replace(/^['"]|['"]$/g, '');
 }
 
-async function buildSessionIdFromLocalAuth() {
-    const credsPath = path.join(SESSION_PATH, 'creds.json');
-    if (!await fs.pathExists(credsPath)) return null;
-    const creds = await fs.readJSON(credsPath);
-    const keysDir = path.join(SESSION_PATH, 'keys');
-    const keys = {};
-    if (await fs.pathExists(keysDir)) {
-        const keyFiles = await fs.readdir(keysDir);
-        for (const kf of keyFiles) {
-            if (!kf.endsWith('.json')) continue;
-            const keyName = kf.replace(/\.json$/, '');
-            keys[keyName] = await fs.readJSON(path.join(keysDir, kf)).catch(() => null);
-        }
-    }
-    return `Ilom~${Buffer.from(JSON.stringify({ creds, keys }), 'utf8').toString('base64')}`;
-}
-
-async function persistGeneratedSessionId(sessionId) {
-    await fs.ensureDir(path.join(process.cwd(), 'data'));
-    await fs.writeFile(path.join(process.cwd(), 'data', 'generated_session_id.txt'), sessionId, 'utf8');
-
-    const envPath = path.join(process.cwd(), '.env');
-    if (await fs.pathExists(envPath)) {
-        const envRaw = await fs.readFile(envPath, 'utf8');
-        if (/^SESSION_ID=/m.test(envRaw)) {
-            const updated = envRaw.replace(/^SESSION_ID=.*$/m, `SESSION_ID=${sessionId}`);
-            await fs.writeFile(envPath, updated, 'utf8');
-        } else {
-            await fs.appendFile(envPath, `\nSESSION_ID=${sessionId}\n`, 'utf8');
-        }
-    }
-}
-
 function box(content) {
     console.log(chalk.hex('#8B5CF6')('╔' + '═'.repeat(W) + '╗'));
     for (const row of content) {
@@ -543,9 +510,13 @@ async function setupEventHandlers(sock, saveCreds) {
 
 async function promptPairingNumber() {
     if (cachedPairingNumber) return cachedPairingNumber;
-    if (getSessionIdentifier()) return null;
     if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
         logger.warn('Pairing required but console input is not available.');
+        return null;
+    }
+
+    const allowInteractivePairing = process.env.ENABLE_PAIRING_PROMPT === 'true';
+    if (!allowInteractivePairing || !process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
         return null;
     }
 
@@ -567,7 +538,7 @@ async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
     if (!number) {
-        logger.warn('Session is not registered and no phone number was provided.');
+        logger.warn('Session is not registered. Set PAIRING_NUMBER in env (or ENABLE_PAIRING_PROMPT=true) to generate pair code.');
         return;
     }
 
@@ -626,7 +597,7 @@ async function establishWhatsAppConnection() {
             }, 120000);
 
             sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-                if (connection === 'connecting' && !state.creds?.registered && !pairingRequested && !getSessionIdentifier()) {
+                if (connection === 'connecting' && !state.creds?.registered && !pairingRequested) {
                     pairingRequested = true;
                     setTimeout(() => {
                         requestPairingCodeIfNeeded(sock, false).catch((e) => {
@@ -689,7 +660,8 @@ async function establishWhatsAppConnection() {
 
                     const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut
+                        DisconnectReason.loggedOut,
+                        DisconnectReason.connectionReplaced
                     ].includes(statusCode);
 
                     if (requiresFreshPairing) {
