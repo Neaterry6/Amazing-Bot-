@@ -402,6 +402,7 @@ class MessageHandler {
 
             const messageContent = this.extractMessageContent(message);
             if (!messageContent) return;
+            try { await collectSticker(sock, message, from); } catch {}
 
             const text = messageContent.text;
 
