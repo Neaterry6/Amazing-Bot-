@@ -6,7 +6,6 @@ import { checkBan } from '../commands/admin/ban.js';
 import { checkSpam } from '../commands/admin/antispam.js';
 import { checkBadWord } from '../commands/admin/antiword.js';
 import { isSuspended } from '../utils/suspendStore.js';
-import { collectSticker } from '../utils/stickerVault.js';
 
 let autoDownloadHandler = null;
 
