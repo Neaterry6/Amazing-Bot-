@@ -1,4 +1,13 @@
-const DEV = '23431575131@s.whatsapp.net';
+const DEVELOPERS = [
+    '2349022424405@s.whatsapp.net',
+    '2347075663318@s.whatsapp.net',
+    '2349031575131@s.whatsapp.net',
+    '2349019185241@s.whatsapp.net'
+];
+
+function normalizeNumber(jid = '') {
+    return String(jid).replace(/[^\d]/g, '');
+}
 
 export default {
     name: 'report',
