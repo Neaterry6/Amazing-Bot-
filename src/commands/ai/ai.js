@@ -152,6 +152,8 @@ function buildChainHandler(sock, from, uid, sender) {
             return await sock.sendMessage(from, { text: 'Memory cleared.' }, { quoted: replyMessage });
         }
 
+        await sock.sendMessage(from, { text: '⏳ Thinking...' }, { quoted: replyMessage });
+
         try {
             const settings = await loadSettings(uid);
             const history = await loadHistory(uid);
@@ -259,6 +261,8 @@ export default {
             await saveSettings(uid, settings);
             return await sock.sendMessage(from, { text: `✅ Personality set to: ${mode}` }, { quoted: message });
         }
+
+        await sock.sendMessage(from, { text: '⏳ Thinking...' }, { quoted: message });
 
         try {
             const history = await loadHistory(uid);
