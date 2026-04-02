@@ -12,7 +12,7 @@ import {
     Browsers,
     fetchLatestBaileysVersion,
     DisconnectReason
-} from '@whiskeysockets/baileys';
+} from '@trashcore/baileys';
 import { upload as megaUpload } from './mega.js';
 
 const router = express.Router();
