@@ -126,9 +126,7 @@ function registerReplyHandler(msgId, chatJid, handler) {
     global.replyHandlers[msgId] = { command: 'ai', handler };
     setTimeout(() => { if (global.replyHandlers?.[msgId]) delete global.replyHandlers[msgId]; }, REPLY_TTL);
 
-    if (!chatJid.endsWith('@g.us')) {
-        registerChatHandler(chatJid, { command: 'ai', handler }, REPLY_TTL);
-    }
+    registerChatHandler(chatJid, { command: 'ai', handler }, REPLY_TTL);
 }
 
 function buildChainHandler(sock, from, uid, sender) {
@@ -154,8 +152,6 @@ function buildChainHandler(sock, from, uid, sender) {
             return await sock.sendMessage(from, { text: 'Memory cleared.' }, { quoted: replyMessage });
         }
 
-        const thinkMsg = await sock.sendMessage(from, { text: '⏳ Thinking...' }, { quoted: replyMessage });
-
         try {
             const settings = await loadSettings(uid);
             const history = await loadHistory(uid);
@@ -163,13 +159,11 @@ function buildChainHandler(sock, from, uid, sender) {
             const aiText = await getAIResponse(settings, history);
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
-            try { await sock.sendMessage(from, { text: aiText, edit: thinkMsg.key }); }
-            catch { await sock.sendMessage(from, { text: aiText }, { quoted: replyMessage }); }
-            registerReplyHandler(thinkMsg.key.id, from, buildChainHandler(sock, from, uid, sender));
+            const sent = await sock.sendMessage(from, { text: aiText }, { quoted: replyMessage });
+            registerReplyHandler(sent.key.id, from, buildChainHandler(sock, from, uid, sender));
         } catch (err) {
             const errText = `❌ Error: ${err.message || 'Could not get response'}`;
-            try { await sock.sendMessage(from, { text: errText, edit: thinkMsg.key }); }
-            catch { await sock.sendMessage(from, { text: errText }, { quoted: replyMessage }); }
+            await sock.sendMessage(from, { text: errText }, { quoted: replyMessage });
         }
     };
 }
@@ -266,8 +260,6 @@ export default {
             return await sock.sendMessage(from, { text: `✅ Personality set to: ${mode}` }, { quoted: message });
         }
 
-        const thinkMsg = await sock.sendMessage(from, { text: '⏳ Thinking...' }, { quoted: message });
-
         try {
             const history = await loadHistory(uid);
             history.push({ role: 'user', content: body });
@@ -275,13 +267,11 @@ export default {
             if (!aiText) throw new Error('Empty response received');
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
-            try { await sock.sendMessage(from, { text: aiText, edit: thinkMsg.key }); }
-            catch { await sock.sendMessage(from, { text: aiText }, { quoted: message }); }
-            registerReplyHandler(thinkMsg.key.id, from, buildChainHandler(sock, from, uid, sender));
+            const sent = await sock.sendMessage(from, { text: aiText }, { quoted: message });
+            registerReplyHandler(sent.key.id, from, buildChainHandler(sock, from, uid, sender));
         } catch (err) {
             const errText = `❌ AI Error: ${err.message || 'Unknown error'}\n\nTry: .ai -engine:gemini`;
-            try { await sock.sendMessage(from, { text: errText, edit: thinkMsg.key }); }
-            catch { await sock.sendMessage(from, { text: errText }, { quoted: message }); }
+            await sock.sendMessage(from, { text: errText }, { quoted: message });
         }
     }
 };
