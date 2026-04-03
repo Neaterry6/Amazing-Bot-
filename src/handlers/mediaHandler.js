@@ -43,7 +43,7 @@ class MediaHandler {
 
     async downloadMedia(message, mediaType = 'buffer') {
         try {
-            const { downloadMediaMessage } = await import('@trashcore/baileys');
+            const { downloadMediaMessage } = await import('@whiskeysockets/baileys');
             const buffer = await downloadMediaMessage(message, mediaType, {});
             
             if (!buffer || buffer.length === 0) {

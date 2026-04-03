@@ -114,7 +114,7 @@ export default {
                 mediaType = 'document';
             }
 
-            const { downloadContentFromMessage } = await import('@trashcore/baileys');
+            const { downloadContentFromMessage } = await import('@whiskeysockets/baileys');
             const stream = await downloadContentFromMessage(mediaObject, mediaType);
             const mediaBuffer = await streamToBuffer(stream);
             const fileType = await fileTypeFromBuffer(mediaBuffer);
