@@ -39,7 +39,6 @@ let isShuttingDown = false;
 let connectionTimeout = null;
 let reconnectAttempts = 0;
 let cachedPairingNumber = null;
-let generatedSessionSaved = false;
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 10;
@@ -510,21 +509,19 @@ async function setupEventHandlers(sock, saveCreds) {
 
 async function promptPairingNumber() {
     if (cachedPairingNumber) return cachedPairingNumber;
-    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
-        logger.warn('Pairing required but console input is not available.');
-        return null;
+
+    const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
+    if (envNumber.length >= 10) {
+        cachedPairingNumber = envNumber;
+        return cachedPairingNumber;
     }
 
-    const allowInteractivePairing = process.env.ENABLE_PAIRING_PROMPT === 'true';
-    if (!allowInteractivePairing || !process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
-        return null;
-    }
+    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') return null;
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     try {
         console.log(chalk.hex('#60A5FA')('\n  📱 Pairing Mode Enabled'));
         console.log(chalk.hex('#C4B5FD')('  Enter your WhatsApp number with country code (example: 2349031575131)\n'));
-        console.log(chalk.hex('#FBBF24')('  How to link: WhatsApp > Linked Devices > Link with phone number\n'));
         const answer = await rl.question('  Number: ');
         const normalized = String(answer || '').replace(/\D/g, '');
         if (normalized.length < 10) return null;
@@ -538,25 +535,17 @@ async function promptPairingNumber() {
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
-    if (!number) {
-        logger.warn('Session is not registered. Set PAIRING_NUMBER in env (or ENABLE_PAIRING_PROMPT=true) to generate pair code.');
-        return;
-    }
+    if (!number) return;
 
-    for (let i = 1; i <= 5; i++) {
-        try {
-            const rawCode = await sock.requestPairingCode(number);
-            const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
-            console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
-            console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
-            console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
-            return;
-        } catch (error) {
-            logger.warn(`Pairing code attempt ${i}/5 failed: ${error.message}`);
-            await new Promise(r => setTimeout(r, 2000));
-        }
+    try {
+        const rawCode = await sock.requestPairingCode(number);
+        const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+        console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
+        console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
+        console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
+    } catch (error) {
+        logger.warn(`Failed to generate pairing code: ${error.message}`);
     }
-    logger.error('Unable to generate pairing code after multiple attempts. Please restart and try again.');
 }
 
 async function establishWhatsAppConnection() {
