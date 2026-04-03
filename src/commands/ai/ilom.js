@@ -2,14 +2,50 @@ import fs from 'fs-extra';
 import path from 'path';
 import axios from 'axios';
 import yts from 'yt-search';
+import translate from 'translate-google-api';
 
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
 const GEMINI_URL = 'https://api.qasimdev.dpdns.org/api/gemini/flash';
 const GEMINI_API_KEY = 'qasim-dev';
+const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
+
+const LANGUAGE_ALIASES = {
+    english: 'en',
+    en: 'en',
+    french: 'fr',
+    fresh: 'fr',
+    francais: 'fr',
+    fr: 'fr',
+    spanish: 'es',
+    espanol: 'es',
+    es: 'es',
+    german: 'de',
+    deutsch: 'de',
+    de: 'de',
+    portuguese: 'pt',
+    portugese: 'pt',
+    pt: 'pt',
+    arabic: 'ar',
+    ar: 'ar',
+    hindi: 'hi',
+    hi: 'hi',
+    japanese: 'ja',
+    ja: 'ja',
+    korean: 'ko',
+    ko: 'ko',
+    chinese: 'zh-cn',
+    mandarin: 'zh-cn',
+    zh: 'zh-cn',
+    italian: 'it',
+    it: 'it',
+    russian: 'ru',
+    ru: 'ru'
+};
 
 async function loadState() {
     try { return await fs.readJSON(STATE_FILE); } catch { return { public: false }; }
 }
+
 async function saveState(state) {
     await fs.ensureDir(path.dirname(STATE_FILE));
     await fs.writeJSON(STATE_FILE, state, { spaces: 2 });
@@ -20,9 +56,27 @@ function extractText(message) {
     return m?.conversation || m?.extendedTextMessage?.text || m?.imageMessage?.caption || m?.videoMessage?.caption || '';
 }
 
+function extractQuotedText(message) {
+    const quoted = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (!quoted) return '';
+    return quoted.conversation || quoted.extendedTextMessage?.text || quoted.imageMessage?.caption || quoted.videoMessage?.caption || '';
+}
+
 function extractUrl(text) {
     const m = text.match(/https?:\/\/[^\s]+/i);
     return m?.[0] || null;
+}
+
+function normalizeLang(value) {
+    if (!value) return 'en';
+    const key = String(value).trim().toLowerCase();
+    return LANGUAGE_ALIASES[key] || key;
+}
+
+function parseTranslateTarget(input = '') {
+    const cleaned = input.toLowerCase();
+    const hit = cleaned.match(/(?:translate(?:\s+it)?(?:\s+to)?|to)\s+([a-zA-Z-]{2,20})/i);
+    return normalizeLang(hit?.[1] || 'en');
 }
 
 async function findFileByName(fileName, base = process.cwd()) {
@@ -58,42 +112,42 @@ function registerReplyHandler(messageId, handler) {
 
 export default {
     name: 'ilom',
-    aliases: ['ilomai'],
+    aliases: ['ilomai', '@ilom'],
     category: 'ai',
-    description: 'Special AI assistant with no-prefix trigger and tools',
-    usage: 'ilom <message>',
+    description: 'Special AI assistant with personal @ilom trigger and tools',
+    usage: '@ilom <message>',
     noPrefix: true,
 
     async execute({ sock, message, args, from, sender, isGroup, isBotAdmin, isOwner, isSudo }) {
         const text = extractText(message).trim();
         const full = text || `ilom ${args.join(' ')}`;
-        if (!/^ilom\b/i.test(full)) return;
+        if (!ILOM_PREFIX_REGEX.test(full)) return;
 
         const state = await loadState();
         const isPrivileged = isOwner || isSudo;
-        const input = full.replace(/^ilom\s*/i, '').trim();
-        const recentHistory = await getRecentHistory({ from, sender });
-        const userStyle = inferUserStyle(recentHistory);
+        const input = full.replace(ILOM_PREFIX_REGEX, '').trim();
+        const userStyle = 'casual';
+        const quotedText = extractQuotedText(message);
 
         if (/^on$/i.test(input)) {
             if (!isPrivileged) return;
             state.public = true;
             await saveState(state);
-            return await sock.sendMessage(from, { text: '✅ ilom public mode is ON' }, { quoted: message });
+            return await sock.sendMessage(from, { text: '✅ @ilom public mode is ON' }, { quoted: message });
         }
 
         if (/^off$/i.test(input)) {
             if (!isPrivileged) return;
             state.public = false;
             await saveState(state);
-            return await sock.sendMessage(from, { text: '✅ ilom public mode is OFF' }, { quoted: message });
+            return await sock.sendMessage(from, { text: '✅ @ilom public mode is OFF' }, { quoted: message });
         }
 
         if (!state.public && !isPrivileged) return;
 
         if (/\btag\b/i.test(input) && isGroup) {
             const meta = await sock.groupMetadata(from);
-            const mentions = meta.participants.map(p => p.id);
+            const mentions = meta.participants.map((p) => p.id);
             return await sock.sendMessage(from, { text: `📢 ${input.replace(/\btag\b/i, '').trim() || 'Attention everyone!'}`, mentions }, { quoted: message });
         }
 
@@ -138,11 +192,23 @@ export default {
             if (!url) return await sock.sendMessage(from, { text: '❌ Provide a valid URL.' }, { quoted: message });
             const { data } = await axios.get(url, { timeout: 20000 });
             const html = String(data);
-            const endpoints = [...new Set([...(html.match(/href=["']([^"'#?]+)["']/gi) || []).map(x => x.replace(/href=["']|["']/gi, '')), ...(html.match(/src=["']([^"'#?]+)["']/gi) || []).map(x => x.replace(/src=["']|["']/gi, ''))])].filter(Boolean).slice(0, 40);
-            return await sock.sendMessage(from, { text: `🌐 HTML fetched (${html.length} chars)\n\nEndpoints:\n${endpoints.map(e => `• ${e}`).join('\n') || 'None found'}` }, { quoted: message });
+            const endpoints = [...new Set([...(html.match(/href=["']([^"'#?]+)["']/gi) || []).map((x) => x.replace(/href=["']|["']/gi, '')), ...(html.match(/src=["']([^"'#?]+)["']/gi) || []).map((x) => x.replace(/src=["']|["']/gi, ''))])].filter(Boolean).slice(0, 40);
+            return await sock.sendMessage(from, { text: `🌐 HTML fetched (${html.length} chars)\n\nEndpoints:\n${endpoints.map((e) => `• ${e}`).join('\n') || 'None found'}` }, { quoted: message });
         }
 
-        const aiReply = await askAI(`You are Ilom, an assistant for WhatsApp chats. User: ${input || 'hello'}`);
+        if (quotedText && /\btranslate\b/i.test(input)) {
+            const target = parseTranslateTarget(input);
+            const result = await translate(quotedText, { to: target });
+            const translated = Array.isArray(result) ? result.join('') : String(result || '').trim();
+            if (!translated) {
+                return await sock.sendMessage(from, { text: '❌ Translation failed. Try again.' }, { quoted: message });
+            }
+            return await sock.sendMessage(from, {
+                text: `🌐 *@ilom Translation*\n\n📝 Original: ${quotedText}\n\n✅ Translated (${target}): ${translated}`
+            }, { quoted: message });
+        }
+
+        const aiReply = await askAI(`You are Ilom, an assistant for WhatsApp chats. User style: ${userStyle}. User: ${input || 'hello'}`);
         const sent = await sock.sendMessage(from, { text: aiReply }, { quoted: message });
         const chain = async (replyText, replyMessage) => {
             const sub = (replyText || '').trim();
@@ -151,7 +217,7 @@ export default {
                 const replySender = replyMessage.key.participant || replyMessage.key.remoteJid;
                 if (String(replySender).split(':')[0] !== String(sender).split(':')[0] && !isPrivileged) return;
             }
-            const follow = await askAI(`Continue as Ilom. User: ${sub}`);
+            const follow = await askAI(`Continue as Ilom. User style: ${userStyle}. User: ${sub}`);
             const s2 = await sock.sendMessage(from, { text: follow }, { quoted: replyMessage });
             registerReplyHandler(s2.key.id, chain);
         };
