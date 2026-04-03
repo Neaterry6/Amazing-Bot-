@@ -524,6 +524,7 @@ async function promptPairingNumber() {
     try {
         console.log(chalk.hex('#60A5FA')('\n  📱 Pairing Mode Enabled'));
         console.log(chalk.hex('#C4B5FD')('  Enter your WhatsApp number with country code (example: 2349031575131)\n'));
+        console.log(chalk.hex('#FBBF24')('  How to link: WhatsApp > Linked Devices > Link with phone number\n'));
         const answer = await rl.question('  Number: ');
         const normalized = String(answer || '').replace(/\D/g, '');
         if (normalized.length < 10) return null;
@@ -569,17 +570,21 @@ async function establishWhatsAppConnection() {
 
             logger.info(`Connecting with Baileys v${version.join('.')}`);
 
+            const browserProfile = typeof Browsers?.ubuntu === 'function'
+                ? Browsers.ubuntu('Chrome')
+                : Browsers.macOS('Chrome');
+
             sock = makeWASocket({
                 auth: {
                     creds: state.creds,
                     keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' }).child({ level: 'fatal' }))
                 },
                 printQRInTerminal: false,
-                browser: Browsers.ubuntu('Chrome'),
+                browser: browserProfile,
                 markOnlineOnConnect: config.autoOnline !== false,
                 syncFullHistory: false,
                 defaultQueryTimeoutMs: undefined,
-                connectTimeoutMs: 120000,
+                connectTimeoutMs: 180000,
                 keepAliveIntervalMs: 25000,
                 retryRequestDelayMs: 250,
                 generateHighQualityLinkPreview: false,
