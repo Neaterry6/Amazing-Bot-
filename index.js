@@ -39,6 +39,8 @@ let isShuttingDown = false;
 let connectionTimeout = null;
 let reconnectAttempts = 0;
 let cachedPairingNumber = null;
+let generatedSessionSaved = false;
+let forcePairingPrompt = false;
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 10;
@@ -47,6 +49,60 @@ const RECONNECT_DELAYS = [3000, 5000, 10000, 15000, 20000, 30000, 30000, 30000, 
 const W = 65;
 const line  = chalk.hex('#8B5CF6')('═'.repeat(W));
 const tline = chalk.hex('#6D28D9')('─'.repeat(W));
+
+function getSessionIdentifier() {
+    return (
+        process.env.SESSION_ID ||
+        process.env.WA_SESSION_ID ||
+        process.env.ILOMBOT_SESSION_ID ||
+        config.session?.sessionId ||
+        ''
+    ).trim().replace(/^['"]|['"]$/g, '');
+}
+
+function getEnvPairingNumber() {
+    const raw = (
+        process.env.PAIRING_NUMBER ||
+        process.env.PAIR_NUMBER ||
+        process.env.WA_PAIR_NUMBER ||
+        ''
+    ).trim();
+    const normalized = raw.replace(/\D/g, '');
+    return normalized.length >= 10 ? normalized : null;
+}
+
+async function buildSessionIdFromLocalAuth() {
+    const credsPath = path.join(SESSION_PATH, 'creds.json');
+    if (!await fs.pathExists(credsPath)) return null;
+    const creds = await fs.readJSON(credsPath);
+    const keysDir = path.join(SESSION_PATH, 'keys');
+    const keys = {};
+    if (await fs.pathExists(keysDir)) {
+        const keyFiles = await fs.readdir(keysDir);
+        for (const kf of keyFiles) {
+            if (!kf.endsWith('.json')) continue;
+            const keyName = kf.replace(/\.json$/, '');
+            keys[keyName] = await fs.readJSON(path.join(keysDir, kf)).catch(() => null);
+        }
+    }
+    return `Ilom~${Buffer.from(JSON.stringify({ creds, keys }), 'utf8').toString('base64')}`;
+}
+
+async function persistGeneratedSessionId(sessionId) {
+    await fs.ensureDir(path.join(process.cwd(), 'data'));
+    await fs.writeFile(path.join(process.cwd(), 'data', 'generated_session_id.txt'), sessionId, 'utf8');
+
+    const envPath = path.join(process.cwd(), '.env');
+    if (await fs.pathExists(envPath)) {
+        const envRaw = await fs.readFile(envPath, 'utf8');
+        if (/^SESSION_ID=/m.test(envRaw)) {
+            const updated = envRaw.replace(/^SESSION_ID=.*$/m, `SESSION_ID=${sessionId}`);
+            await fs.writeFile(envPath, updated, 'utf8');
+        } else {
+            await fs.appendFile(envPath, `\nSESSION_ID=${sessionId}\n`, 'utf8');
+        }
+    }
+}
 
 function box(content) {
     console.log(chalk.hex('#8B5CF6')('╔' + '═'.repeat(W) + '╗'));
@@ -100,7 +156,7 @@ async function displayConfig() {
     step('📌', 'Prefix',      config.prefix);
     step('🌐', 'Mode',        config.publicMode ? chalk.greenBright('Public') : chalk.yellowBright('Private'));
     step('👑', 'Owners',      config.ownerNumbers.length + ' configured');
-    step('🔑', 'Session',     process.env.SESSION_ID ? chalk.greenBright('Present') : chalk.yellowBright('QR Required'));
+    step('🔑', 'Session',     getSessionIdentifier() ? chalk.greenBright('Present') : chalk.yellowBright('QR Required'));
     step('🗄️', 'Database',    config.database?.enabled ? chalk.greenBright('Enabled') : chalk.gray('Disabled'));
     step('📡', 'Redis',       config.redis?.enabled ? chalk.greenBright('Enabled') : chalk.gray('Disabled'));
     step('🌍', 'Node',        process.version);
@@ -190,13 +246,7 @@ async function processSessionCredentials() {
     const credPath = path.join(SESSION_PATH, 'creds.json');
     const keysPath = path.join(SESSION_PATH, 'keys');
 
-    const sessionId = (
-        process.env.SESSION_ID ||
-        process.env.WA_SESSION_ID ||
-        process.env.ILOMBOT_SESSION_ID ||
-        config.session?.sessionId ||
-        ''
-    ).trim().replace(/^['"]|['"]$/g, '');
+    const sessionId = getSessionIdentifier();
     if (!sessionId) {
         logger.info('No SESSION_ID - will generate QR code');
         return false;
@@ -209,18 +259,64 @@ async function processSessionCredentials() {
             const credPath = path.join(SESSION_PATH, 'creds.json');
             const keysPath = path.join(SESSION_PATH, 'keys');
 
+            // pair.js uploads zipped auth folders (PK zip). Extract directly when detected.
+            if (Buffer.isBuffer(rawData) && rawData.length > 4 && rawData[0] === 0x50 && rawData[1] === 0x4b) {
+                try {
+                    const unzipper = await import('unzipper');
+                    const zip = await unzipper.Open.buffer(rawData);
+                    for (const entry of zip.files) {
+                        if (entry.type !== 'File') continue;
+                        const safePath = path.normalize(entry.path).replace(/^(\.\.(\/|\\|$))+/, '');
+                        const target = path.join(SESSION_PATH, safePath);
+                        await fs.ensureDir(path.dirname(target));
+                        const content = await entry.buffer();
+                        await fs.writeFile(target, content);
+                    }
+
+                    // Support both root creds.json and nested auth_info path variants.
+                    const rootCreds = path.join(SESSION_PATH, 'creds.json');
+                    if (!await fs.pathExists(rootCreds)) {
+                        const nestedCreds = path.join(SESSION_PATH, 'auth_info_baileys', 'creds.json');
+                        if (await fs.pathExists(nestedCreds)) {
+                            await fs.copy(nestedCreds, rootCreds, { overwrite: true });
+                        }
+                    }
+                    return await fs.pathExists(rootCreds);
+                } catch (zipErr) {
+                    logger.warn(`Zip session extraction failed: ${zipErr.message}`);
+                }
+            }
+
             let parsed = rawData;
             if (Buffer.isBuffer(parsed)) {
-                const asText = parsed.toString('utf8').trim();
+                const asText = parsed.toString('utf8').replace(/^\uFEFF/, '').trim();
                 try {
                     parsed = JSON.parse(asText);
                 } catch {
                     try {
                         parsed = JSON.parse(Buffer.from(asText, 'base64').toString('utf8'));
                     } catch {
-                        parsed = null;
+                        // Some hosts prepend text around JSON; try extracting JSON object body
+                        const firstBrace = asText.indexOf('{');
+                        const lastBrace = asText.lastIndexOf('}');
+                        if (firstBrace !== -1 && lastBrace > firstBrace) {
+                            const jsonSlice = asText.slice(firstBrace, lastBrace + 1);
+                            try {
+                                parsed = JSON.parse(jsonSlice);
+                            } catch {
+                                parsed = null;
+                            }
+                        } else {
+                            parsed = null;
+                        }
                     }
                 }
+            }
+
+            if (typeof parsed === 'string') {
+                try {
+                    parsed = JSON.parse(parsed);
+                } catch {}
             }
 
             // If we got wrapped session data ({ creds, keys }) split it properly.
@@ -245,8 +341,14 @@ async function processSessionCredentials() {
             // As last attempt, write raw buffer and re-parse as JSON file.
             if (Buffer.isBuffer(rawData)) {
                 await fs.writeFile(credPath, rawData);
-                const saved = await fs.readJSON(credPath);
-                return !!(saved?.noiseKey || saved?.signedIdentityKey || saved?.creds);
+                try {
+                    const saved = await fs.readJSON(credPath);
+                    return !!(saved?.noiseKey || saved?.signedIdentityKey || saved?.creds);
+                } catch {
+                    const preview = rawData.toString('utf8').slice(0, 120).replace(/\s+/g, ' ');
+                    logger.warn(`Session raw file is not JSON. Preview: ${preview}`);
+                    return false;
+                }
             }
 
             return false;
@@ -453,19 +555,26 @@ async function setupEventHandlers(sock, saveCreds) {
 
 async function promptPairingNumber() {
     if (cachedPairingNumber) return cachedPairingNumber;
+    if (getSessionIdentifier() && !forcePairingPrompt) return null;
 
-    const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
-    if (envNumber.length >= 10) {
-        cachedPairingNumber = envNumber;
-        return cachedPairingNumber;
+    const envPairNumber = getEnvPairingNumber();
+    if (envPairNumber) {
+        cachedPairingNumber = envPairNumber;
+        logger.info(`Using PAIRING_NUMBER from env: +${envPairNumber}`);
+        return envPairNumber;
     }
 
-    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') return null;
+    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
+        logger.warn('Pairing required but console input is not available.');
+        logger.warn('Set PAIRING_NUMBER in .env to auto-generate pairing code without console input.');
+        return null;
+    }
 
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
     try {
         console.log(chalk.hex('#60A5FA')('\n  📱 Pairing Mode Enabled'));
         console.log(chalk.hex('#C4B5FD')('  Enter your WhatsApp number with country code (example: 2349031575131)\n'));
+        console.log(chalk.hex('#FBBF24')('  How to link: WhatsApp > Linked Devices > Link with phone number\n'));
         const answer = await rl.question('  Number: ');
         const normalized = String(answer || '').replace(/\D/g, '');
         if (normalized.length < 10) return null;
@@ -479,28 +588,43 @@ async function promptPairingNumber() {
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
-    if (!number) return;
-
-    try {
-        const rawCode = await sock.requestPairingCode(number);
-        const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
-        console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
-        console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
-        console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
-    } catch (error) {
-        logger.warn(`Failed to generate pairing code: ${error.message}`);
+    if (!number) {
+        logger.warn('Session is not registered and no phone number was provided.');
+        return;
     }
+
+    for (let i = 1; i <= 5; i++) {
+        try {
+            const rawCode = await sock.requestPairingCode(number);
+            const code = rawCode?.match(/.{1,4}/g)?.join('-') || rawCode;
+            console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
+            console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
+            console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
+            console.log(chalk.hex('#34D399')('  After successful link, the bot will auto-save SESSION_ID to .env and deploy.\n'));
+            return;
+        } catch (error) {
+            logger.warn(`Pairing code attempt ${i}/5 failed: ${error.message}`);
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    }
+    logger.error('Unable to generate pairing code after multiple attempts. Please restart and try again.');
 }
 
 async function establishWhatsAppConnection() {
     return new Promise(async (resolve, reject) => {
         try {
-            const { makeWASocket, Browsers, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = await import('@whiskeysockets/baileys');
+            const { makeWASocket, Browsers, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = await import('baileys');
 
             const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
             const { version } = await fetchLatestBaileysVersion();
+            let pairingRequested = false;
 
             logger.info(`Connecting with Baileys v${version.join('.')}`);
+
+            const browserProfile =
+                (typeof Browsers?.ubuntu === 'function' && Browsers.ubuntu('Chrome')) ||
+                (typeof Browsers?.macOS === 'function' && Browsers.macOS('Chrome')) ||
+                ['Ubuntu', 'Chrome', '120.0.0'];
 
             sock = makeWASocket({
                 auth: {
@@ -508,11 +632,11 @@ async function establishWhatsAppConnection() {
                     keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' }).child({ level: 'fatal' }))
                 },
                 printQRInTerminal: false,
-                browser: Browsers.ubuntu('Chrome'),
+                browser: browserProfile,
                 markOnlineOnConnect: config.autoOnline !== false,
                 syncFullHistory: false,
                 defaultQueryTimeoutMs: undefined,
-                connectTimeoutMs: 120000,
+                connectTimeoutMs: 180000,
                 keepAliveIntervalMs: 25000,
                 retryRequestDelayMs: 250,
                 generateHighQualityLinkPreview: false,
@@ -521,7 +645,12 @@ async function establishWhatsAppConnection() {
                 getMessage: async () => ({ conversation: '' })
             });
 
-            await requestPairingCodeIfNeeded(sock, state.creds?.registered);
+            if (!state.creds?.registered) {
+                pairingRequested = true;
+                await requestPairingCodeIfNeeded(sock, false).catch((e) => {
+                    logger.warn(`Pairing request failed: ${e.message}`);
+                });
+            }
 
             if (connectionTimeout) clearTimeout(connectionTimeout);
             connectionTimeout = setTimeout(() => {
@@ -532,14 +661,27 @@ async function establishWhatsAppConnection() {
             }, 120000);
 
             sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
+                if (connection === 'connecting' && !state.creds?.registered && !pairingRequested) {
+                    pairingRequested = true;
+                    setTimeout(() => {
+                        requestPairingCodeIfNeeded(sock, false).catch((e) => {
+                            logger.warn(`Pairing request failed: ${e.message}`);
+                        });
+                    }, 2000);
+                }
+
                 if (qr) {
-                    try {
-                        const qrterm = await import('qrcode-terminal');
-                        qrterm.default.generate(qr, { small: true });
-                    } catch {}
-                    console.log(chalk.hex('#FBBF24').bold('\n  📱  Scan the QR code above with WhatsApp\n'));
-                    if (qrService.isQREnabled()) {
-                        await qrService.generateQR(qr).catch(() => {});
+                    if (!pairingRequested) {
+                        try {
+                            const qrterm = await import('qrcode-terminal');
+                            qrterm.default.generate(qr, { small: true });
+                        } catch {}
+                        console.log(chalk.hex('#FBBF24').bold('\n  📱  Scan the QR code above with WhatsApp\n'));
+                        if (qrService.isQREnabled()) {
+                            await qrService.generateQR(qr).catch(() => {});
+                        }
+                    } else {
+                        logger.info('QR generated but waiting for pairing-code link flow.');
                     }
                 }
 
@@ -556,6 +698,21 @@ async function establishWhatsAppConnection() {
                     await setupEventHandlers(sock, saveCreds);
                     global.sock = sock;
                     await sendBotStatusUpdate(sock).catch(() => {});
+
+                    if ((!getSessionIdentifier() || forcePairingPrompt) && !generatedSessionSaved) {
+                        try {
+                            const generated = await buildSessionIdFromLocalAuth();
+                            if (generated) {
+                                await persistGeneratedSessionId(generated);
+                                generatedSessionSaved = true;
+                                forcePairingPrompt = false;
+                                logger.info('New session paired. SESSION_ID saved to data/generated_session_id.txt and .env');
+                            }
+                        } catch (saveErr) {
+                            logger.warn(`Failed to save generated session id: ${saveErr.message}`);
+                        }
+                    }
+
                     resolve(sock);
                 }
 
@@ -566,22 +723,24 @@ async function establishWhatsAppConnection() {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
                     logger.warn(`Connection closed. Code: ${statusCode}`);
 
-                    const fatalCodes = [
+                    const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut,
-                        DisconnectReason.connectionReplaced
-                    ];
+                        DisconnectReason.loggedOut
+                    ].includes(statusCode);
 
-                    if (fatalCodes.includes(statusCode)) {
-                        logger.error('Fatal disconnect - clearing session');
+                    if (requiresFreshPairing) {
+                        logger.warn('Session became invalid. Clearing local auth files and waiting for new pairing...');
                         await fs.remove(SESSION_PATH).catch(() => {});
                         await fs.ensureDir(SESSION_PATH);
                         await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
-                        setTimeout(() => process.exit(1), 2000);
-                    } else {
-                        console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
-                        handleReconnect(resolve, reject);
+                        cachedPairingNumber = null;
+                        reconnectAttempts = 0;
+                        generatedSessionSaved = false;
+                        forcePairingPrompt = true;
                     }
+
+                    console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
+                    handleReconnect(resolve, reject);
                 }
             });
 
