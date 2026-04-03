@@ -79,6 +79,24 @@ function parseTranslateTarget(input = '') {
     return normalizeLang(hit?.[1] || 'en');
 }
 
+async function getRecentHistory({ from, sender }) {
+    const fromHistory = global.messageHistory?.[from];
+    if (!Array.isArray(fromHistory)) return [];
+    return fromHistory
+        .filter((item) => item?.sender === sender || item?.sender === String(sender).split(':')[0])
+        .slice(-10)
+        .map((item) => String(item?.text || '').trim())
+        .filter(Boolean);
+}
+
+function inferUserStyle(history = []) {
+    const sample = history.join(' ').trim();
+    if (!sample) return 'casual';
+    if (sample.length < 60) return 'short';
+    if (sample.includes('?')) return 'curious';
+    return 'casual';
+}
+
 async function findFileByName(fileName, base = process.cwd()) {
     const stack = [base];
     const deny = new Set(['node_modules', '.git', 'temp', 'logs']);
@@ -126,7 +144,8 @@ export default {
         const state = await loadState();
         const isPrivileged = isOwner || isSudo;
         const input = full.replace(ILOM_PREFIX_REGEX, '').trim();
-        const userStyle = 'casual';
+        const recentHistory = await getRecentHistory({ from, sender });
+        const userStyle = inferUserStyle(recentHistory);
         const quotedText = extractQuotedText(message);
 
         if (/^on$/i.test(input)) {
