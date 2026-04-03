@@ -1,4 +1,4 @@
-import { downloadContentFromMessage } from "@whiskeysockets/baileys";
+import { downloadContentFromMessage } from "@trashcore/baileys";
 
 async function downloadMedia(msg) {
     const messageType = Object.keys(msg)[0];
