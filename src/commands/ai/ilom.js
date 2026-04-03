@@ -72,6 +72,8 @@ export default {
         const state = await loadState();
         const isPrivileged = isOwner || isSudo;
         const input = full.replace(/^ilom\s*/i, '').trim();
+        const recentHistory = await getRecentHistory({ from, sender });
+        const userStyle = inferUserStyle(recentHistory);
 
         if (/^on$/i.test(input)) {
             if (!isPrivileged) return;
