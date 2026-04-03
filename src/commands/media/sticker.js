@@ -1,9 +1,8 @@
-import { downloadContentFromMessage } from "@trashcore/baileys";
-import pkg from 'wa-sticker-formatter';
+import { Sticker, StickerTypes } from "wa-sticker-formatter";
+import { downloadContentFromMessage } from "@whiskeysockets/baileys";
 import fs from 'fs-extra';
 import os from 'os';
 import path from 'path';
-const { Sticker, StickerTypes } = pkg;
 
 async function downloadMedia(msg) {
     const messageType = Object.keys(msg)[0];

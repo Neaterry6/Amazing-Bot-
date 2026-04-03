@@ -40,7 +40,6 @@ let connectionTimeout = null;
 let reconnectAttempts = 0;
 let cachedPairingNumber = null;
 let generatedSessionSaved = false;
-let forcePairingPrompt = false;
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 10;
@@ -58,50 +57,6 @@ function getSessionIdentifier() {
         config.session?.sessionId ||
         ''
     ).trim().replace(/^['"]|['"]$/g, '');
-}
-
-function getEnvPairingNumber() {
-    const raw = (
-        process.env.PAIRING_NUMBER ||
-        process.env.PAIR_NUMBER ||
-        process.env.WA_PAIR_NUMBER ||
-        ''
-    ).trim();
-    const normalized = raw.replace(/\D/g, '');
-    return normalized.length >= 10 ? normalized : null;
-}
-
-async function buildSessionIdFromLocalAuth() {
-    const credsPath = path.join(SESSION_PATH, 'creds.json');
-    if (!await fs.pathExists(credsPath)) return null;
-    const creds = await fs.readJSON(credsPath);
-    const keysDir = path.join(SESSION_PATH, 'keys');
-    const keys = {};
-    if (await fs.pathExists(keysDir)) {
-        const keyFiles = await fs.readdir(keysDir);
-        for (const kf of keyFiles) {
-            if (!kf.endsWith('.json')) continue;
-            const keyName = kf.replace(/\.json$/, '');
-            keys[keyName] = await fs.readJSON(path.join(keysDir, kf)).catch(() => null);
-        }
-    }
-    return `Ilom~${Buffer.from(JSON.stringify({ creds, keys }), 'utf8').toString('base64')}`;
-}
-
-async function persistGeneratedSessionId(sessionId) {
-    await fs.ensureDir(path.join(process.cwd(), 'data'));
-    await fs.writeFile(path.join(process.cwd(), 'data', 'generated_session_id.txt'), sessionId, 'utf8');
-
-    const envPath = path.join(process.cwd(), '.env');
-    if (await fs.pathExists(envPath)) {
-        const envRaw = await fs.readFile(envPath, 'utf8');
-        if (/^SESSION_ID=/m.test(envRaw)) {
-            const updated = envRaw.replace(/^SESSION_ID=.*$/m, `SESSION_ID=${sessionId}`);
-            await fs.writeFile(envPath, updated, 'utf8');
-        } else {
-            await fs.appendFile(envPath, `\nSESSION_ID=${sessionId}\n`, 'utf8');
-        }
-    }
 }
 
 function box(content) {
@@ -555,18 +510,13 @@ async function setupEventHandlers(sock, saveCreds) {
 
 async function promptPairingNumber() {
     if (cachedPairingNumber) return cachedPairingNumber;
-    if (getSessionIdentifier() && !forcePairingPrompt) return null;
-
-    const envPairNumber = getEnvPairingNumber();
-    if (envPairNumber) {
-        cachedPairingNumber = envPairNumber;
-        logger.info(`Using PAIRING_NUMBER from env: +${envPairNumber}`);
-        return envPairNumber;
-    }
-
     if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
         logger.warn('Pairing required but console input is not available.');
-        logger.warn('Set PAIRING_NUMBER in .env to auto-generate pairing code without console input.');
+        return null;
+    }
+
+    const allowInteractivePairing = process.env.ENABLE_PAIRING_PROMPT === 'true';
+    if (!allowInteractivePairing || !process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') {
         return null;
     }
 
@@ -589,7 +539,7 @@ async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
     if (!number) {
-        logger.warn('Session is not registered and no phone number was provided.');
+        logger.warn('Session is not registered. Set PAIRING_NUMBER in env (or ENABLE_PAIRING_PROMPT=true) to generate pair code.');
         return;
     }
 
@@ -600,7 +550,6 @@ async function requestPairingCodeIfNeeded(sock, isRegistered) {
             console.log(chalk.greenBright('\n  ✅ Pairing code generated successfully\n'));
             console.log(chalk.hex('#FBBF24')(`  🔑 Pairing Code: ${code}\n`));
             console.log(chalk.hex('#C4B5FD')('  Guide: WhatsApp > Linked Devices > Link with phone number > Enter code above.\n'));
-            console.log(chalk.hex('#34D399')('  After successful link, the bot will auto-save SESSION_ID to .env and deploy.\n'));
             return;
         } catch (error) {
             logger.warn(`Pairing code attempt ${i}/5 failed: ${error.message}`);
@@ -621,11 +570,9 @@ async function establishWhatsAppConnection() {
 
             logger.info(`Connecting with Baileys v${version.join('.')}`);
 
-            const browserProfile =
-                (typeof Browsers?.ubuntu === 'function' && Browsers.ubuntu('Chrome')) ||
-                (typeof Browsers?.macOS === 'function' && Browsers.macOS('Chrome')) ||
-                (typeof Browsers?.windows === 'function' && Browsers.windows('Chrome')) ||
-                ['Ubuntu', 'Chrome', '120.0.0'];
+            const browserProfile = typeof Browsers?.ubuntu === 'function'
+                ? Browsers.ubuntu('Chrome')
+                : Browsers.macOS('Chrome');
 
             sock = makeWASocket({
                 auth: {
@@ -693,13 +640,12 @@ async function establishWhatsAppConnection() {
                     global.sock = sock;
                     await sendBotStatusUpdate(sock).catch(() => {});
 
-                    if ((!getSessionIdentifier() || forcePairingPrompt) && !generatedSessionSaved) {
+                    if (!getSessionIdentifier() && !generatedSessionSaved) {
                         try {
                             const generated = await buildSessionIdFromLocalAuth();
                             if (generated) {
                                 await persistGeneratedSessionId(generated);
                                 generatedSessionSaved = true;
-                                forcePairingPrompt = false;
                                 logger.info('New session paired. SESSION_ID saved to data/generated_session_id.txt and .env');
                             }
                         } catch (saveErr) {
@@ -719,7 +665,8 @@ async function establishWhatsAppConnection() {
 
                     const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut
+                        DisconnectReason.loggedOut,
+                        DisconnectReason.connectionReplaced
                     ].includes(statusCode);
 
                     if (requiresFreshPairing) {
@@ -729,8 +676,6 @@ async function establishWhatsAppConnection() {
                         await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
                         cachedPairingNumber = null;
                         reconnectAttempts = 0;
-                        generatedSessionSaved = false;
-                        forcePairingPrompt = true;
                     }
 
                     console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
