@@ -315,7 +315,7 @@ export default {
 
                     let buffer;
                     try {
-                        const { downloadMediaMessage } = await import('@trashcore/baileys');
+                        const { downloadMediaMessage } = await import('@whiskeysockets/baileys');
                         buffer = await downloadMediaMessage({ message: quotedMsg, key: quotedKey }, 'buffer', {});
                     } catch (e) {
                         return await sock.sendMessage(from, { text: errorBox('Download failed', e.message) }, { quoted: message });

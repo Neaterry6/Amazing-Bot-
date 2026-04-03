@@ -69,6 +69,7 @@
     "@google/generative-ai": "^0.24.1",
     "@hapi/boom": "^10.0.1",
     "@napi-rs/canvas": "^0.1.95",
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
     "aki-api": "npm:@aqul/akinator-api@3.0.1",
     "api-qasim": "^4.0.2",
     "archiver": "^7.0.1",
@@ -153,8 +154,7 @@
     "xmlhttprequest": "^1.8.0",
     "yargs": "^18.0.0",
     "yt-search": "^2.13.1",
-    "ytdl-core": "npm:@distube/ytdl-core@latest",
-    "@trashcore/baileys": "latest"
+    "ytdl-core": "npm:@distube/ytdl-core@latest"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

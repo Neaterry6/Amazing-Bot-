@@ -551,7 +551,7 @@ async function requestPairingCodeIfNeeded(sock, isRegistered) {
 async function establishWhatsAppConnection() {
     return new Promise(async (resolve, reject) => {
         try {
-            const { makeWASocket, Browsers, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = await import('@trashcore/baileys');
+            const { makeWASocket, Browsers, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = await import('@whiskeysockets/baileys');
 
             const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
             const { version } = await fetchLatestBaileysVersion();
