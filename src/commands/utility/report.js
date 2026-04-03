@@ -13,42 +13,31 @@ export default {
     name: 'report',
     aliases: ['bugreport', 'devreport'],
     category: 'utility',
-    description: 'Send report to developers; developers can reply through the bot',
+    description: 'Send report to developers; dev can reply back through bot',
     usage: 'report <message>',
     args: true,
     minArgs: 1,
 
     async execute({ sock, message, args, from, sender }) {
         const body = args.join(' ').trim();
-        const senderNum = normalizeNumber(sender);
-
-        if (!body) {
-            return await sock.sendMessage(from, { text: '❌ Please include a report message.' }, { quoted: message });
-        }
+        const senderNum = sender.split('@')[0];
+        const sent = await sock.sendMessage(DEV, {
+            text: `📩 *User Report*\nFrom: @${senderNum}\nChat: ${from}\n\n${body}`,
+            mentions: [sender]
+        }, { quoted: message });
 
         if (!global.replyHandlers) global.replyHandlers = {};
+        global.replyHandlers[sent.key.id] = {
+            command: 'report',
+            handler: async (replyText, replyMessage) => {
+                const replySender = (replyMessage.key.participant || replyMessage.key.remoteJid || '').split('@')[0];
+                if (replySender !== DEV.split('@')[0]) return;
+                await sock.sendMessage(from, {
+                    text: `👨‍💻 *Developer Reply*\n\n${replyText}`
+                });
+            }
+        };
 
-        for (const devJid of DEVELOPERS) {
-            const sent = await sock.sendMessage(devJid, {
-                text: `📩 *User Report*\nFrom: @${senderNum}\nChat: ${from}\n\n${body}`,
-                mentions: [sender]
-            }, { quoted: message });
-
-            global.replyHandlers[sent.key.id] = {
-                command: 'report',
-                handler: async (replyText, replyMessage) => {
-                    const replySender = normalizeNumber(replyMessage.key.participant || replyMessage.key.remoteJid || '');
-                    const isDeveloper = DEVELOPERS.some(dev => normalizeNumber(dev) === replySender);
-                    if (!isDeveloper) return;
-                    await sock.sendMessage(from, {
-                        text: `👨‍💻 *Developer Reply*\n\n${replyText}`
-                    });
-                }
-            };
-        }
-
-        await sock.sendMessage(from, {
-            text: '✅ Report sent to the developer team.'
-        }, { quoted: message });
+        await sock.sendMessage(from, { text: '✅ Report sent to developers.' }, { quoted: message });
     }
 };
