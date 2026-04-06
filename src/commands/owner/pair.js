@@ -9,6 +9,16 @@ export default {
     minArgs: 0,
 
     async execute({ sock, message, args, from }) {
+        const isSocketConnected = Boolean(sock?.user) && sock?.ws?.readyState === 1;
+        if (!isSocketConnected) {
+            return await sock.sendMessage(from, {
+                text: [
+                    '❌ Baileys is not connected yet.',
+                    'Wait until the bot is fully online, then run this command again.'
+                ].join('\n')
+            }, { quoted: message });
+        }
+
         const number = (args[0] || '').replace(/\D/g, '');
         if (!number) {
             return await sock.sendMessage(from, {
