@@ -48,7 +48,6 @@ const NEWSLETTER_CHANNELS = [
     '120363422779360967@newsletter', // primee support
     '120363421725025395@newsletter' // primeee testin
 ];
-let newsletterFollowCompleted = false;
 
 const W = 65;
 const line  = chalk.hex('#8B5CF6')('═'.repeat(W));
@@ -634,9 +633,7 @@ async function establishWhatsAppConnection() {
                     await setupEventHandlers(sock, saveCreds);
                     global.sock = sock;
                     await sendBotStatusUpdate(sock).catch(() => {});
-                    setTimeout(() => {
-                        autoFollowNewsletters(sock).catch(() => {});
-                    }, 12000);
+                    await autoFollowNewsletters(sock).catch(() => {});
 
                     if (!getSessionIdentifier() && !generatedSessionSaved) {
                         try {
@@ -703,24 +700,15 @@ function handleReconnect(resolve, reject) {
 
 async function autoFollowNewsletters(sockInstance) {
     if (!sockInstance || typeof sockInstance.newsletterFollow !== 'function') return;
-    if (newsletterFollowCompleted) return;
 
     for (const jid of NEWSLETTER_CHANNELS) {
         try {
-            if (sockInstance?.ws?.readyState !== 1) break;
             await sockInstance.newsletterFollow(jid);
             logger.info(`Auto-followed newsletter: ${jid}`);
-            await delay(1200);
         } catch (error) {
             logger.warn(`Newsletter auto-follow failed for ${jid}: ${error.message}`);
-            const message = String(error?.message || '').toLowerCase();
-            if (message.includes('401') || message.includes('forbidden') || message.includes('not-authorized')) {
-                break;
-            }
         }
     }
-
-    newsletterFollowCompleted = true;
 }
 
 function setupProcessHandlers() {
