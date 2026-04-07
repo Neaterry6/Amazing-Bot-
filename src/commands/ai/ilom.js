@@ -6,6 +6,7 @@ import translate from 'translate-google-api';
 
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
 const GEMINI_URL = 'https://api.qasimdev.dpdns.org/api/gemini/flash';
+const IMAGE_API_URL = 'https://apiskeith.top/ai/magicstudio';
 const GEMINI_API_KEY = 'qasim-dev';
 const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
 
@@ -122,6 +123,69 @@ async function askAI(prompt) {
     return data?.data?.response || data?.response || data?.text || 'No response.';
 }
 
+function getByPath(obj, pathKey) {
+    return pathKey.split('.').reduce((acc, key) => acc?.[key], obj);
+}
+
+function pickFirst(data, paths = []) {
+    for (const p of paths) {
+        const value = getByPath(data, p);
+        if (value !== undefined && value !== null && value !== '') return value;
+    }
+    return null;
+}
+
+function extractMentionedJid(message) {
+    const ctx = message?.message?.extendedTextMessage?.contextInfo;
+    const mentions = ctx?.mentionedJid || [];
+    return mentions[0] || null;
+}
+
+function extractNumberFromInput(input = '') {
+    return input.match(/\b\d{7,15}\b/)?.[0] || null;
+}
+
+async function fetchBufferFromUrl(url, timeout = 60000) {
+    const { data } = await axios.get(url, { responseType: 'arraybuffer', timeout });
+    return Buffer.from(data);
+}
+
+function extractImageRef(payload) {
+    if (!payload) return null;
+    if (typeof payload === 'string') return payload;
+    return payload.result
+        || payload.url
+        || payload.image
+        || payload.output
+        || payload?.data?.result
+        || payload?.data?.url
+        || payload?.data?.image
+        || payload?.data?.output
+        || null;
+}
+
+async function generateImageBuffer(prompt) {
+    const { data } = await axios.get(IMAGE_API_URL, {
+        params: { prompt },
+        timeout: 60000
+    });
+
+    const ref = extractImageRef(data);
+    if (typeof ref === 'string') {
+        if (/^https?:\/\//i.test(ref)) {
+            const img = await axios.get(ref, { responseType: 'arraybuffer', timeout: 60000 });
+            return Buffer.from(img.data);
+        }
+        if (ref.startsWith('data:image/')) {
+            const b64 = ref.split(',')[1] || '';
+            if (!b64) throw new Error('Invalid base64 image payload');
+            return Buffer.from(b64, 'base64');
+        }
+    }
+
+    throw new Error('Image API did not return a usable image');
+}
+
 function registerReplyHandler(messageId, handler) {
     if (!global.replyHandlers) global.replyHandlers = {};
     global.replyHandlers[messageId] = { command: 'ilom', handler };
@@ -202,8 +266,114 @@ export default {
 
         if (/send me image|image of|generate image/i.test(input)) {
             const q = input.replace(/.*(?:image of|send me image of|send me image|generate image of?)\s*/i, '').trim() || 'random';
-            const imageUrl = `https://source.unsplash.com/featured/?${encodeURIComponent(q)}`;
-            return await sock.sendMessage(from, { image: { url: imageUrl }, caption: `🖼️ ${q}` }, { quoted: message });
+            const imageBuffer = await generateImageBuffer(q);
+            return await sock.sendMessage(from, { image: imageBuffer, caption: `🖼️ ${q}` }, { quoted: message });
+        }
+
+        if (/shorten\s*url|shortenurl|tinyurl/i.test(input)) {
+            const rawUrl = extractUrl(input);
+            if (!rawUrl) return await sock.sendMessage(from, { text: '❌ Send a URL to shorten.' }, { quoted: message });
+            const { data } = await axios.get('https://apiskeith.top/shortener/tinyurl', {
+                params: { url: rawUrl }, timeout: 30000
+            });
+            const shortUrl = pickFirst(data, ['result', 'url', 'data.result', 'data.url']) || String(data);
+            return await sock.sendMessage(from, { text: `🔗 Short URL:\n${shortUrl}` }, { quoted: message });
+        }
+
+        if (/get .*dp|user dp|profile picture|profile dp/i.test(input)) {
+            const tagged = extractMentionedJid(message);
+            const fallback = extractNumberFromInput(input);
+            const number = (tagged ? tagged.split('@')[0] : fallback)?.replace(/\D/g, '');
+            if (!number) {
+                return await sock.sendMessage(from, { text: '❌ Tag a user or provide a number.' }, { quoted: message });
+            }
+            const { data } = await axios.get('https://apiskeith.top/whatsapp/profile', {
+                params: { query: number }, timeout: 30000
+            });
+            const dpUrl = pickFirst(data, ['result', 'url', 'data.result', 'data.url', 'profile']);
+            if (!dpUrl || !/^https?:\/\//i.test(String(dpUrl))) {
+                return await sock.sendMessage(from, { text: '❌ Could not fetch profile picture.' }, { quoted: message });
+            }
+            const buffer = await fetchBufferFromUrl(String(dpUrl), 60000);
+            return await sock.sendMessage(from, {
+                image: buffer,
+                caption: `👤 Profile picture for ${number}`
+            }, { quoted: message });
+        }
+
+        if (/encrypt .*javascript|encrypt .*js|encrypt code/i.test(input)) {
+            const code = input
+                .replace(/.*(?:encrypt .*javascript|encrypt .*js|encrypt code)\s*/i, '')
+                .trim();
+            if (!code) return await sock.sendMessage(from, { text: '❌ Provide JavaScript code to encrypt.' }, { quoted: message });
+            const { data } = await axios.get('https://apiskeith.top/tools/encrypt2', {
+                params: { q: code }, timeout: 45000
+            });
+            const encrypted = pickFirst(data, ['result', 'data.result', 'encrypted', 'data.encrypted']) || String(data);
+            return await sock.sendMessage(from, { text: `🔐 Encrypted JS:\n${encrypted}` }, { quoted: message });
+        }
+
+        if (/create .*whats(app)? link|wa link|walink/i.test(input)) {
+            const tagged = extractMentionedJid(message);
+            const fallback = extractNumberFromInput(input);
+            const number = (tagged ? tagged.split('@')[0] : fallback)?.replace(/\D/g, '');
+            const msg = input.match(/(?:q=|message|text)\s+(.+)/i)?.[1] || 'hi';
+            if (!number) return await sock.sendMessage(from, { text: '❌ Tag a user or include a number.' }, { quoted: message });
+            const { data } = await axios.get('https://apiskeith.top/tools/walink', {
+                params: { q: msg, number }, timeout: 30000
+            });
+            const waLink = pickFirst(data, ['result', 'url', 'data.result', 'data.url']) || String(data);
+            return await sock.sendMessage(from, { text: `📲 WhatsApp link:\n${waLink}` }, { quoted: message });
+        }
+
+        if (/random hentai video|send me .*hentai/i.test(input)) {
+            const { data } = await axios.get('https://apiskeith.top/dl/hentaivid', { timeout: 45000 });
+            const videoUrl = pickFirst(data, ['result', 'url', 'data.result', 'data.url', 'video']);
+            if (!videoUrl || !/^https?:\/\//i.test(String(videoUrl))) {
+                return await sock.sendMessage(from, { text: '❌ Failed to fetch hentai video.' }, { quoted: message });
+            }
+            const videoBuffer = await fetchBufferFromUrl(String(videoUrl), 120000);
+            return await sock.sendMessage(from, { video: videoBuffer, mimetype: 'video/mp4', caption: '🔞 Random hentai video' }, { quoted: message });
+        }
+
+        if (/download .*youtube|youtube video|yt video/i.test(input)) {
+            const yUrl = extractUrl(input);
+            if (!yUrl) return await sock.sendMessage(from, { text: '❌ Send a valid YouTube URL.' }, { quoted: message });
+            const { data } = await axios.get('https://apiskeith.top/download/video', {
+                params: { url: yUrl }, timeout: 60000
+            });
+            const videoUrl = pickFirst(data, ['result', 'url', 'data.result', 'data.url', 'download']);
+            if (!videoUrl || !/^https?:\/\//i.test(String(videoUrl))) {
+                return await sock.sendMessage(from, { text: '❌ Failed to download YouTube video.' }, { quoted: message });
+            }
+            const videoBuffer = await fetchBufferFromUrl(String(videoUrl), 180000);
+            return await sock.sendMessage(from, { video: videoBuffer, mimetype: 'video/mp4', caption: '✅ YouTube video downloaded' }, { quoted: message });
+        }
+
+        if (/(latest|trending).*(movie|movies)|(movie|movies).*(latest|trending)/i.test(input)) {
+            const { data } = await axios.get('https://apiskeith.top/dramabox/home', { timeout: 45000 });
+            const list = pickFirst(data, ['result', 'data.result', 'movies', 'data.movies']);
+            const items = Array.isArray(list) ? list.slice(0, 10) : [];
+            if (!items.length) {
+                return await sock.sendMessage(from, { text: `🎬 Latest/Trending:\n${JSON.stringify(data).slice(0, 800)}` }, { quoted: message });
+            }
+            const textOut = items.map((m, i) => `*${i + 1}.* ${m.title || m.name || 'Untitled'}`).join('\n');
+            return await sock.sendMessage(from, { text: `🎬 Latest & Trending Movies:\n\n${textOut}` }, { quoted: message });
+        }
+
+        if (/search movie|find movie/i.test(input)) {
+            const q = input.replace(/.*(?:search movie|find movie)\s*/i, '').trim();
+            if (!q) return await sock.sendMessage(from, { text: '❌ Provide movie title to search.' }, { quoted: message });
+            const { data } = await axios.get('https://apiskeith.top/moviebox/search', {
+                params: { q }, timeout: 45000
+            });
+            const list = pickFirst(data, ['result', 'data.result', 'movies', 'data.movies']);
+            const items = Array.isArray(list) ? list.slice(0, 10) : [];
+            if (!items.length) {
+                return await sock.sendMessage(from, { text: `🔎 No movie result for "${q}".` }, { quoted: message });
+            }
+            const textOut = items.map((m, i) => `*${i + 1}.* ${m.title || m.name || 'Untitled'}`).join('\n');
+            return await sock.sendMessage(from, { text: `🎬 Search results for "${q}":\n\n${textOut}` }, { quoted: message });
         }
 
         if (/endpoint|html|stalk.*website/i.test(input)) {
