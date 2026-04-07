@@ -4,7 +4,6 @@ import axios from 'axios';
 import yts from 'yt-search';
 import translate from 'translate-google-api';
 import CryptoJS from 'crypto-js';
-import { commandHandler } from '../../handlers/commandHandler.js';
 
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
 const SESSION_FILE = path.join(process.cwd(), 'data', 'ilom-sessions.json');
@@ -168,84 +167,6 @@ async function findFileByName(fileName, base = process.cwd()) {
         }
     }
     return null;
-}
-
-function sanitizeRelativePath(inputPath = '') {
-    const normalized = path.normalize(String(inputPath).replace(/^([./\\])+/, ''));
-    const full = path.join(process.cwd(), normalized);
-    if (!full.startsWith(process.cwd())) return null;
-    return full;
-}
-
-function sanitizeCommandPath(inputPath = '') {
-    const normalized = path.normalize(String(inputPath).replace(/^([./\\])+/, ''));
-    const full = path.join(COMMAND_ROOT, normalized);
-    if (!full.startsWith(COMMAND_ROOT)) return null;
-    return full;
-}
-
-function buildCommandTemplate({ category, name, description }) {
-    return `import formatResponse from '../../utils/formatUtils.js';
-
-export default {
-    name: '${name}',
-    aliases: [],
-    category: '${category}',
-    description: '${description || 'Describe your command'}',
-    usage: '${name} <input>',
-    example: '${name} hello',
-    cooldown: 3,
-    permissions: ['user'],
-    minArgs: 0,
-
-    async execute({ sock, message, args, from, sender }) {
-        try {
-            const input = args.join(' ').trim();
-            await sock.sendMessage(from, {
-                text: \`╭──⟦ ✅ ${name.toUpperCase()} READY ⟧
-│
-│ 👤 User: @\${sender.split('@')[0]}
-│ 📝 Input: \${input || 'none'}
-│ 📅 Date: \${new Date().toLocaleDateString()}
-│ ⏰ Time: \${new Date().toLocaleTimeString()}
-│
-╰────────────⟦\`,
-                mentions: [sender]
-            }, { quoted: message });
-        } catch (error) {
-            await sock.sendMessage(from, {
-                text: formatResponse.error('EXECUTION FAILED', 'An error occurred while executing the command', error.message)
-            }, { quoted: message });
-        }
-    }
-};`;
-}
-
-function adaptCommandSource(sourceCode, { category, name, description }) {
-    let code = String(sourceCode || '').trim();
-    if (!code) return '';
-    code = code.replace(/name:\s*['"`][^'"`]+['"`]/, `name: '${name}'`);
-    code = code.replace(/category:\s*['"`][^'"`]+['"`]/, `category: '${category}'`);
-    if (description) {
-        if (/description:\s*['"`][^'"`]*['"`]/.test(code)) {
-            code = code.replace(/description:\s*['"`][^'"`]*['"`]/, `description: '${description.replace(/'/g, "\\'")}'`);
-        }
-    }
-    if (!/export\s+default\s*\{/.test(code)) {
-        return '';
-    }
-    return code;
-}
-
-async function listAllCommands() {
-    const catalog = {};
-    for (const cat of VALID_CATEGORIES) {
-        const dir = path.join(COMMAND_ROOT, cat);
-        if (!(await fs.pathExists(dir))) continue;
-        const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.js'));
-        catalog[cat] = files;
-    }
-    return catalog;
 }
 
 function encryptTextPayload(payload, keySeed = '') {
