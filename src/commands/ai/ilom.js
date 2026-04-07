@@ -3,8 +3,10 @@ import path from 'path';
 import axios from 'axios';
 import yts from 'yt-search';
 import translate from 'translate-google-api';
+import CryptoJS from 'crypto-js';
 
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
+const SESSION_FILE = path.join(process.cwd(), 'data', 'ilom-sessions.json');
 const GEMINI_URLS = [
     'https://api.qasimdev.dpdns.org/api/gemini/flash',
     'https://api.qasimdev.dpdns.org/api/gemini/pro',
@@ -67,6 +69,14 @@ function extractQuotedText(message) {
     return quoted.conversation || quoted.extendedTextMessage?.text || quoted.imageMessage?.caption || quoted.videoMessage?.caption || '';
 }
 
+function getContextInfo(message) {
+    return message?.message?.extendedTextMessage?.contextInfo
+        || message?.message?.imageMessage?.contextInfo
+        || message?.message?.videoMessage?.contextInfo
+        || message?.message?.documentMessage?.contextInfo
+        || null;
+}
+
 function extractUrl(text) {
     const m = text.match(/https?:\/\/[^\s]+/i);
     return m?.[0] || null;
@@ -94,6 +104,42 @@ async function getRecentHistory({ from, sender }) {
         .filter(Boolean);
 }
 
+function toSessionId(sender = '', from = '') {
+    const cleanSender = String(sender || '').split(':')[0];
+    return `${from}::${cleanSender}`;
+}
+
+async function loadSessions() {
+    try {
+        const data = await fs.readJSON(SESSION_FILE);
+        return data && typeof data === 'object' ? data : {};
+    } catch {
+        return {};
+    }
+}
+
+async function saveSessions(sessions) {
+    await fs.ensureDir(path.dirname(SESSION_FILE));
+    await fs.writeJSON(SESSION_FILE, sessions, { spaces: 2 });
+}
+
+async function getSession(sessionId) {
+    const sessions = await loadSessions();
+    return sessions[sessionId] || { history: [], lastBotMessageId: null, updatedAt: Date.now() };
+}
+
+async function upsertSession(sessionId, patch = {}) {
+    const sessions = await loadSessions();
+    const current = sessions[sessionId] || { history: [], lastBotMessageId: null };
+    sessions[sessionId] = {
+        ...current,
+        ...patch,
+        updatedAt: Date.now()
+    };
+    await saveSessions(sessions);
+    return sessions[sessionId];
+}
+
 function inferUserStyle(history = []) {
     const sample = history.join(' ').trim();
     if (!sample) return 'casual';
@@ -118,6 +164,11 @@ async function findFileByName(fileName, base = process.cwd()) {
         }
     }
     return null;
+}
+
+function encryptTextPayload(payload, keySeed = '') {
+    const secret = process.env.ILOM_FILE_SECRET || process.env.CEREBRAS_API_KEY || keySeed || 'ilom-default-secret';
+    return CryptoJS.AES.encrypt(payload, secret).toString();
 }
 
 async function askAI(prompt) {
@@ -161,6 +212,21 @@ function extractMentionedJid(message) {
     const ctx = message?.message?.extendedTextMessage?.contextInfo;
     const mentions = ctx?.mentionedJid || [];
     return mentions[0] || null;
+}
+
+function resolveReplyOrMentionTarget(message) {
+    const contextInfo = getContextInfo(message);
+    const quotedUser = contextInfo?.participant;
+    const mentionedUsers = contextInfo?.mentionedJid || [];
+
+    let targetJid = null;
+    if (quotedUser) {
+        targetJid = quotedUser;
+    } else if (mentionedUsers.length > 0) {
+        targetJid = mentionedUsers[0];
+    }
+
+    return { quotedUser, mentionedUsers, targetJid };
 }
 
 function extractNumberFromInput(input = '') {
@@ -214,6 +280,14 @@ function registerReplyHandler(messageId, handler) {
     setTimeout(() => { if (global.replyHandlers?.[messageId]) delete global.replyHandlers[messageId]; }, 15 * 60 * 1000);
 }
 
+async function sendIlomMessage(sock, from, message, text, { sender, targetJid = null, forceMention = false } = {}) {
+    const mentions = [];
+    if (forceMention || targetJid) mentions.push(sender);
+    if (targetJid) mentions.push(targetJid);
+    const payload = mentions.length ? { text, mentions: [...new Set(mentions)] } : { text };
+    return sock.sendMessage(from, payload, { quoted: message });
+}
+
 export default {
     name: 'ilom',
     aliases: ['ilomai', '@ilom'],
@@ -225,27 +299,33 @@ export default {
     async execute({ sock, message, args, from, sender, isGroup, isBotAdmin, isOwner, isSudo }) {
         const text = extractText(message).trim();
         const full = text || `ilom ${args.join(' ')}`;
-        if (!ILOM_PREFIX_REGEX.test(full)) return;
+        const contextInfo = getContextInfo(message);
+        const isReplyToBot = !!contextInfo?.stanzaId && !!global.replyHandlers?.[contextInfo.stanzaId];
+        const shouldHandleSessionMessage = !ILOM_PREFIX_REGEX.test(full) && isReplyToBot;
+        if (!ILOM_PREFIX_REGEX.test(full) && !shouldHandleSessionMessage) return;
 
         const state = await loadState();
         const isPrivileged = isOwner || isSudo;
-        const input = full.replace(ILOM_PREFIX_REGEX, '').trim();
+        const input = ILOM_PREFIX_REGEX.test(full) ? full.replace(ILOM_PREFIX_REGEX, '').trim() : full.trim();
         const recentHistory = await getRecentHistory({ from, sender });
         const userStyle = inferUserStyle(recentHistory);
         const quotedText = extractQuotedText(message);
+        const sessionId = toSessionId(sender, from);
+        const session = await getSession(sessionId);
+        const { targetJid } = resolveReplyOrMentionTarget(message);
 
         if (/^on$/i.test(input)) {
             if (!isPrivileged) return;
             state.public = true;
             await saveState(state);
-            return await sock.sendMessage(from, { text: '✅ @ilom public mode is ON' }, { quoted: message });
+            return await sendIlomMessage(sock, from, message, '✅ @ilom public mode is ON', { sender, targetJid });
         }
 
         if (/^off$/i.test(input)) {
             if (!isPrivileged) return;
             state.public = false;
             await saveState(state);
-            return await sock.sendMessage(from, { text: '✅ @ilom public mode is OFF' }, { quoted: message });
+            return await sendIlomMessage(sock, from, message, '✅ @ilom public mode is OFF', { sender, targetJid });
         }
 
         if (!state.public && !isPrivileged) return;
@@ -265,12 +345,27 @@ export default {
             return await sock.sendMessage(from, { text: `✅ Kicked @${target.split('@')[0]}`, mentions: [target] }, { quoted: message });
         }
 
-        if (/send me\s+.+\.(js|json|txt|md|env)$/i.test(input) && isPrivileged) {
-            const fileName = input.match(/send me\s+([^\s]+\.(?:js|json|txt|md|env))/i)?.[1];
+        if (/send me (file|my file)|send me\s+.+\.(js|json|txt|md|env)$/i.test(input) && isPrivileged) {
+            const fileName = input.match(/send me(?:\s+file)?\s+([^\s]+\.(?:js|json|txt|md|env))/i)?.[1];
             const found = await findFileByName(fileName || '');
-            if (!found) return await sock.sendMessage(from, { text: '❌ File not found.' }, { quoted: message });
+            if (!found) return await sendIlomMessage(sock, from, message, '❌ File not found.', { sender, targetJid });
+
+            const shouldEncrypt = /\bencrypt(ed)?\b|\bencrypt before sending\b/i.test(input);
+            const fileBuffer = await fs.readFile(found);
+
+            if (shouldEncrypt) {
+                const encrypted = encryptTextPayload(fileBuffer.toString('base64'), sender);
+                const encryptedBuffer = Buffer.from(encrypted, 'utf8');
+                return await sock.sendMessage(from, {
+                    document: encryptedBuffer,
+                    fileName: `${path.basename(found)}.enc.txt`,
+                    mimetype: 'text/plain',
+                    caption: '🔐 Encrypted file'
+                }, { quoted: message });
+            }
+
             return await sock.sendMessage(from, {
-                document: await fs.readFile(found),
+                document: fileBuffer,
                 fileName: path.basename(found),
                 mimetype: 'text/plain'
             }, { quoted: message });
@@ -412,16 +507,29 @@ export default {
             const result = await translate(quotedText, { to: target });
             const translated = Array.isArray(result) ? result.join('') : String(result || '').trim();
             if (!translated) {
-                return await sock.sendMessage(from, { text: '❌ Translation failed. Try again.' }, { quoted: message });
+                return await sendIlomMessage(sock, from, message, '❌ Translation failed. Try again.', { sender, targetJid });
             }
-            return await sock.sendMessage(from, {
-                text: `🌐 *@ilom Translation*\n\n📝 Original: ${quotedText}\n\n✅ Translated (${target}): ${translated}`
-            }, { quoted: message });
+            return await sendIlomMessage(
+                sock,
+                from,
+                message,
+                `🌐 *@ilom Translation*\n\n📝 Original: ${quotedText}\n\n✅ Translated (${target}): ${translated}`,
+                { sender, targetJid, forceMention: !!targetJid }
+            );
         }
 
         try {
-            const aiReply = await askAI(`You are Ilom, an assistant for WhatsApp chats. User style: ${userStyle}. User: ${input || 'hello'}`);
-            const sent = await sock.sendMessage(from, { text: aiReply }, { quoted: message });
+            const history = Array.isArray(session.history) ? session.history.slice(-12) : [];
+            const prompt = [
+                'You are Ilom, an assistant for WhatsApp chats.',
+                `User style: ${userStyle}.`,
+                history.length ? `Recent chat history:\n${history.join('\n')}` : '',
+                `User: ${input || 'hello'}`
+            ].filter(Boolean).join('\n');
+            const aiReply = await askAI(prompt);
+            const sent = await sendIlomMessage(sock, from, message, aiReply, { sender, targetJid, forceMention: !!targetJid });
+            const nextHistory = [...history, `User: ${input || 'hello'}`, `Ilom: ${aiReply}`].slice(-20);
+            await upsertSession(sessionId, { history: nextHistory, lastBotMessageId: sent?.key?.id || null, user: sender });
             const chain = async (replyText, replyMessage) => {
                 const sub = (replyText || '').trim();
                 if (!sub) return;
@@ -430,20 +538,26 @@ export default {
                     if (String(replySender).split(':')[0] !== String(sender).split(':')[0] && !isPrivileged) return;
                 }
                 try {
-                    const follow = await askAI(`Continue as Ilom. User style: ${userStyle}. User: ${sub}`);
-                    const s2 = await sock.sendMessage(from, { text: follow }, { quoted: replyMessage });
+                    const liveSession = await getSession(sessionId);
+                    const liveHistory = Array.isArray(liveSession.history) ? liveSession.history.slice(-12) : [];
+                    const followPrompt = [
+                        'Continue as Ilom in the same conversation.',
+                        `User style: ${userStyle}.`,
+                        liveHistory.length ? `Recent chat history:\n${liveHistory.join('\n')}` : '',
+                        `User: ${sub}`
+                    ].filter(Boolean).join('\n');
+                    const follow = await askAI(followPrompt);
+                    const s2 = await sendIlomMessage(sock, from, replyMessage, follow, { sender, targetJid, forceMention: !!targetJid });
+                    const mergedHistory = [...liveHistory, `User: ${sub}`, `Ilom: ${follow}`].slice(-20);
+                    await upsertSession(sessionId, { history: mergedHistory, lastBotMessageId: s2?.key?.id || null, user: sender });
                     registerReplyHandler(s2.key.id, chain);
                 } catch (err) {
-                    await sock.sendMessage(from, {
-                        text: `❌ Error: ${err.message || 'Could not get AI response right now.'}`
-                    }, { quoted: replyMessage });
+                    await sendIlomMessage(sock, from, replyMessage, `❌ Error: ${err.message || 'Could not get AI response right now.'}`, { sender, targetJid });
                 }
             };
             registerReplyHandler(sent.key.id, chain);
         } catch (err) {
-            return await sock.sendMessage(from, {
-                text: `❌ Error: ${err.message || 'Could not get AI response right now.'}`
-            }, { quoted: message });
+            return await sendIlomMessage(sock, from, message, `❌ Error: ${err.message || 'Could not get AI response right now.'}`, { sender, targetJid });
         }
     }
 };
