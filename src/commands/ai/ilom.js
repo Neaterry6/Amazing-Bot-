@@ -339,7 +339,7 @@ export default {
             return await sock.sendMessage(from, { text: `📢 ${input.replace(/\btag\b/i, '').trim() || 'Attention everyone!'}`, mentions }, { quoted: message });
         }
 
-        if (/\bkick\b/i.test(input) && isGroup && isBotAdmin && isPrivileged) {
+        if (/^kick\b/i.test(input) && isGroup && isBotAdmin && isPrivileged) {
             const mentioned = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
             const rawNum = input.match(/\b\d{7,15}\b/)?.[0];
             const target = mentioned[0] || (rawNum ? `${rawNum}@s.whatsapp.net` : null);
