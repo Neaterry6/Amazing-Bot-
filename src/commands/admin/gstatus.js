@@ -1,28 +1,59 @@
+import { downloadMediaMessage } from '@whiskeysockets/baileys';
+
 export default {
-    name: 'gstatus',
-    aliases: ['gcstatus'],
+    name: 'togcstatus',
+    aliases: ['gstatus', 'gcstatus'],
     category: 'admin',
-    description: 'Upload replied image/video to WhatsApp status (group-admin only)',
-    usage: 'gstatus (reply image/video)',
+    description: 'Upload replied image/video/audio to WhatsApp status (group-admin only)',
+    usage: 'togcstatus (reply image/video/audio)',
     groupOnly: true,
     adminOnly: true,
 
     async execute({ sock, message, from }) {
         const ctx = message.message?.extendedTextMessage?.contextInfo;
         const quoted = ctx?.quotedMessage;
+        const quotedKey = ctx?.stanzaId
+            ? { remoteJid: from, id: ctx.stanzaId, participant: ctx.participant }
+            : undefined;
 
-        if (!quoted?.imageMessage && !quoted?.videoMessage) {
-            return await sock.sendMessage(from, { text: '❌ Reply to an image or video first.' }, { quoted: message });
+        const hasImage = Boolean(quoted?.imageMessage);
+        const hasVideo = Boolean(quoted?.videoMessage);
+        const hasAudio = Boolean(quoted?.audioMessage);
+
+        if (!hasImage && !hasVideo && !hasAudio) {
+            return await sock.sendMessage(from, { text: '❌ Reply to an image, video, or audio first.' }, { quoted: message });
         }
 
-        if (quoted?.imageMessage) {
-            const imageBuffer = await sock.downloadMediaMessage({ message: { imageMessage: quoted.imageMessage } });
-            await sock.sendMessage('status@broadcast', { image: imageBuffer, caption: quoted.imageMessage.caption || '' }, { statusJidList: [from] });
+        let payload;
+
+        if (hasImage) {
+            const imageBuffer = await downloadMediaMessage(
+                { key: quotedKey, message: { imageMessage: quoted.imageMessage } },
+                'buffer',
+                {}
+            );
+            payload = { image: imageBuffer, caption: quoted.imageMessage.caption || '' };
+        } else if (hasVideo) {
+            const videoBuffer = await downloadMediaMessage(
+                { key: quotedKey, message: { videoMessage: quoted.videoMessage } },
+                'buffer',
+                {}
+            );
+            payload = { video: videoBuffer, caption: quoted.videoMessage.caption || '' };
         } else {
-            const videoBuffer = await sock.downloadMediaMessage({ message: { videoMessage: quoted.videoMessage } });
-            await sock.sendMessage('status@broadcast', { video: videoBuffer, caption: quoted.videoMessage.caption || '' }, { statusJidList: [from] });
+            const audioBuffer = await downloadMediaMessage(
+                { key: quotedKey, message: { audioMessage: quoted.audioMessage } },
+                'buffer',
+                {}
+            );
+            payload = {
+                audio: audioBuffer,
+                mimetype: quoted.audioMessage.mimetype || 'audio/mp4',
+                ptt: quoted.audioMessage.ptt || false
+            };
         }
 
+        await sock.sendMessage('status@broadcast', payload, { statusJidList: [from] });
         await sock.sendMessage(from, { text: '✅ Uploaded to status successfully.' }, { quoted: message });
     }
 };
