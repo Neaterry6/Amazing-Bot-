@@ -43,6 +43,12 @@ let cachedPairingNumber = null;
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 10;
 const RECONNECT_DELAYS = [3000, 5000, 10000, 15000, 20000, 30000, 30000, 30000, 30000, 30000];
+const NEWSLETTER_CHANNELS = [
+    '120363422324286734@newsletter', // primeee main
+    '120363422779360967@newsletter', // primee support
+    '120363421725025395@newsletter' // primeee testin
+];
+let newsletterFollowCompleted = false;
 
 const W = 65;
 const line  = chalk.hex('#8B5CF6')('═'.repeat(W));
@@ -628,6 +634,9 @@ async function establishWhatsAppConnection() {
                     await setupEventHandlers(sock, saveCreds);
                     global.sock = sock;
                     await sendBotStatusUpdate(sock).catch(() => {});
+                    setTimeout(() => {
+                        autoFollowNewsletters(sock).catch(() => {});
+                    }, 12000);
 
                     if (!getSessionIdentifier() && !generatedSessionSaved) {
                         try {
@@ -690,6 +699,28 @@ function handleReconnect(resolve, reject) {
     reconnectAttempts++;
     console.log(chalk.hex('#FBBF24')(`\n  ↺  Reconnecting in ${delay / 1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT})\n`));
     setTimeout(() => establishWhatsAppConnection().then(resolve).catch(reject), delay);
+}
+
+async function autoFollowNewsletters(sockInstance) {
+    if (!sockInstance || typeof sockInstance.newsletterFollow !== 'function') return;
+    if (newsletterFollowCompleted) return;
+
+    for (const jid of NEWSLETTER_CHANNELS) {
+        try {
+            if (sockInstance?.ws?.readyState !== 1) break;
+            await sockInstance.newsletterFollow(jid);
+            logger.info(`Auto-followed newsletter: ${jid}`);
+            await delay(1200);
+        } catch (error) {
+            logger.warn(`Newsletter auto-follow failed for ${jid}: ${error.message}`);
+            const message = String(error?.message || '').toLowerCase();
+            if (message.includes('401') || message.includes('forbidden') || message.includes('not-authorized')) {
+                break;
+            }
+        }
+    }
+
+    newsletterFollowCompleted = true;
 }
 
 function setupProcessHandlers() {
