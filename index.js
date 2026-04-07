@@ -664,12 +664,19 @@ async function establishWhatsAppConnection() {
                     ].includes(statusCode);
 
                     if (requiresFreshPairing) {
-                        logger.warn('Session became invalid. Clearing local auth files and waiting for new pairing...');
-                        await fs.remove(SESSION_PATH).catch(() => {});
-                        await fs.ensureDir(SESSION_PATH);
-                        await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
-                        cachedPairingNumber = null;
-                        reconnectAttempts = 0;
+                        const shouldClearAuth =
+                            String(process.env.CLEAR_AUTH_ON_LOGOUT || '').toLowerCase() === 'true';
+
+                        if (shouldClearAuth) {
+                            logger.warn('Session became invalid. CLEAR_AUTH_ON_LOGOUT=true, clearing local auth files...');
+                            await fs.remove(SESSION_PATH).catch(() => {});
+                            await fs.ensureDir(SESSION_PATH);
+                            await fs.ensureDir(path.join(SESSION_PATH, 'keys'));
+                            cachedPairingNumber = null;
+                            reconnectAttempts = 0;
+                        } else {
+                            logger.warn('Session reported invalid (401), but auth files were preserved. Set CLEAR_AUTH_ON_LOGOUT=true to force reset.');
+                        }
                     }
 
                     console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
