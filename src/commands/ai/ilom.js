@@ -121,23 +121,6 @@ async function findFileByName(fileName, base = process.cwd()) {
 }
 
 async function askAI(prompt) {
-    if (process.env.CEREBRAS_API_KEY) {
-        try {
-            const Cerebras = (await import('@cerebras/cerebras_cloud_sdk')).default;
-            const client = new Cerebras({ apiKey: process.env.CEREBRAS_API_KEY, warmTCPConnection: false });
-            const resp = await client.chat.completions.create({
-                model: process.env.CEREBRAS_MODEL || 'llama-3.3-70b',
-                messages: [
-                    { role: 'system', content: 'You are Ilom, an assistant for WhatsApp chats. Keep answers clear and helpful.' },
-                    { role: 'user', content: prompt }
-                ],
-                stream: false
-            });
-            const text = resp?.choices?.[0]?.message?.content?.trim();
-            if (text) return text;
-        } catch {}
-    }
-
     let lastError = null;
 
     for (const url of GEMINI_URLS) {
