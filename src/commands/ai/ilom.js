@@ -3,8 +3,11 @@ import path from 'path';
 import axios from 'axios';
 import yts from 'yt-search';
 import translate from 'translate-google-api';
+import CryptoJS from 'crypto-js';
+import { commandHandler } from '../../handlers/commandHandler.js';
 
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
+const SESSION_FILE = path.join(process.cwd(), 'data', 'ilom-sessions.json');
 const GEMINI_URLS = [
     'https://api.qasimdev.dpdns.org/api/gemini/flash',
     'https://api.qasimdev.dpdns.org/api/gemini/pro',
@@ -13,6 +16,9 @@ const GEMINI_URLS = [
 const IMAGE_API_URL = 'https://apiskeith.top/ai/magicstudio';
 const GEMINI_API_KEY = 'qasim-dev';
 const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
+const COMMAND_ROOT = path.join(process.cwd(), 'src', 'commands');
+const VALID_CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
+const TEMPLATE_GUIDE_FILE = path.join(process.cwd(), 'COMMAND_GUIDE.md');
 
 const LANGUAGE_ALIASES = {
     english: 'en',
@@ -67,6 +73,14 @@ function extractQuotedText(message) {
     return quoted.conversation || quoted.extendedTextMessage?.text || quoted.imageMessage?.caption || quoted.videoMessage?.caption || '';
 }
 
+function getContextInfo(message) {
+    return message?.message?.extendedTextMessage?.contextInfo
+        || message?.message?.imageMessage?.contextInfo
+        || message?.message?.videoMessage?.contextInfo
+        || message?.message?.documentMessage?.contextInfo
+        || null;
+}
+
 function extractUrl(text) {
     const m = text.match(/https?:\/\/[^\s]+/i);
     return m?.[0] || null;
@@ -94,6 +108,42 @@ async function getRecentHistory({ from, sender }) {
         .filter(Boolean);
 }
 
+function toSessionId(sender = '', from = '') {
+    const cleanSender = String(sender || '').split(':')[0];
+    return `${from}::${cleanSender}`;
+}
+
+async function loadSessions() {
+    try {
+        const data = await fs.readJSON(SESSION_FILE);
+        return data && typeof data === 'object' ? data : {};
+    } catch {
+        return {};
+    }
+}
+
+async function saveSessions(sessions) {
+    await fs.ensureDir(path.dirname(SESSION_FILE));
+    await fs.writeJSON(SESSION_FILE, sessions, { spaces: 2 });
+}
+
+async function getSession(sessionId) {
+    const sessions = await loadSessions();
+    return sessions[sessionId] || { history: [], lastBotMessageId: null, updatedAt: Date.now() };
+}
+
+async function upsertSession(sessionId, patch = {}) {
+    const sessions = await loadSessions();
+    const current = sessions[sessionId] || { history: [], lastBotMessageId: null };
+    sessions[sessionId] = {
+        ...current,
+        ...patch,
+        updatedAt: Date.now()
+    };
+    await saveSessions(sessions);
+    return sessions[sessionId];
+}
+
 function inferUserStyle(history = []) {
     const sample = history.join(' ').trim();
     if (!sample) return 'casual';
@@ -118,6 +168,89 @@ async function findFileByName(fileName, base = process.cwd()) {
         }
     }
     return null;
+}
+
+function sanitizeRelativePath(inputPath = '') {
+    const normalized = path.normalize(String(inputPath).replace(/^([./\\])+/, ''));
+    const full = path.join(process.cwd(), normalized);
+    if (!full.startsWith(process.cwd())) return null;
+    return full;
+}
+
+function sanitizeCommandPath(inputPath = '') {
+    const normalized = path.normalize(String(inputPath).replace(/^([./\\])+/, ''));
+    const full = path.join(COMMAND_ROOT, normalized);
+    if (!full.startsWith(COMMAND_ROOT)) return null;
+    return full;
+}
+
+function buildCommandTemplate({ category, name, description }) {
+    return `import formatResponse from '../../utils/formatUtils.js';
+
+export default {
+    name: '${name}',
+    aliases: [],
+    category: '${category}',
+    description: '${description || 'Describe your command'}',
+    usage: '${name} <input>',
+    example: '${name} hello',
+    cooldown: 3,
+    permissions: ['user'],
+    minArgs: 0,
+
+    async execute({ sock, message, args, from, sender }) {
+        try {
+            const input = args.join(' ').trim();
+            await sock.sendMessage(from, {
+                text: \`╭──⟦ ✅ ${name.toUpperCase()} READY ⟧
+│
+│ 👤 User: @\${sender.split('@')[0]}
+│ 📝 Input: \${input || 'none'}
+│ 📅 Date: \${new Date().toLocaleDateString()}
+│ ⏰ Time: \${new Date().toLocaleTimeString()}
+│
+╰────────────⟦\`,
+                mentions: [sender]
+            }, { quoted: message });
+        } catch (error) {
+            await sock.sendMessage(from, {
+                text: formatResponse.error('EXECUTION FAILED', 'An error occurred while executing the command', error.message)
+            }, { quoted: message });
+        }
+    }
+};`;
+}
+
+function adaptCommandSource(sourceCode, { category, name, description }) {
+    let code = String(sourceCode || '').trim();
+    if (!code) return '';
+    code = code.replace(/name:\s*['"`][^'"`]+['"`]/, `name: '${name}'`);
+    code = code.replace(/category:\s*['"`][^'"`]+['"`]/, `category: '${category}'`);
+    if (description) {
+        if (/description:\s*['"`][^'"`]*['"`]/.test(code)) {
+            code = code.replace(/description:\s*['"`][^'"`]*['"`]/, `description: '${description.replace(/'/g, "\\'")}'`);
+        }
+    }
+    if (!/export\s+default\s*\{/.test(code)) {
+        return '';
+    }
+    return code;
+}
+
+async function listAllCommands() {
+    const catalog = {};
+    for (const cat of VALID_CATEGORIES) {
+        const dir = path.join(COMMAND_ROOT, cat);
+        if (!(await fs.pathExists(dir))) continue;
+        const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.js'));
+        catalog[cat] = files;
+    }
+    return catalog;
+}
+
+function encryptTextPayload(payload, keySeed = '') {
+    const secret = process.env.ILOM_FILE_SECRET || process.env.CEREBRAS_API_KEY || keySeed || 'ilom-default-secret';
+    return CryptoJS.AES.encrypt(payload, secret).toString();
 }
 
 async function askAI(prompt) {
@@ -161,6 +294,21 @@ function extractMentionedJid(message) {
     const ctx = message?.message?.extendedTextMessage?.contextInfo;
     const mentions = ctx?.mentionedJid || [];
     return mentions[0] || null;
+}
+
+function resolveReplyOrMentionTarget(message) {
+    const contextInfo = getContextInfo(message);
+    const quotedUser = contextInfo?.participant;
+    const mentionedUsers = contextInfo?.mentionedJid || [];
+
+    let targetJid = null;
+    if (quotedUser) {
+        targetJid = quotedUser;
+    } else if (mentionedUsers.length > 0) {
+        targetJid = mentionedUsers[0];
+    }
+
+    return { quotedUser, mentionedUsers, targetJid };
 }
 
 function extractNumberFromInput(input = '') {
@@ -214,6 +362,14 @@ function registerReplyHandler(messageId, handler) {
     setTimeout(() => { if (global.replyHandlers?.[messageId]) delete global.replyHandlers[messageId]; }, 15 * 60 * 1000);
 }
 
+async function sendIlomMessage(sock, from, message, text, { sender, targetJid = null, forceMention = false } = {}) {
+    const mentions = [];
+    if (forceMention || targetJid) mentions.push(sender);
+    if (targetJid) mentions.push(targetJid);
+    const payload = mentions.length ? { text, mentions: [...new Set(mentions)] } : { text };
+    return sock.sendMessage(from, payload, { quoted: message });
+}
+
 export default {
     name: 'ilom',
     aliases: ['ilomai', '@ilom'],
@@ -225,27 +381,33 @@ export default {
     async execute({ sock, message, args, from, sender, isGroup, isBotAdmin, isOwner, isSudo }) {
         const text = extractText(message).trim();
         const full = text || `ilom ${args.join(' ')}`;
-        if (!ILOM_PREFIX_REGEX.test(full)) return;
+        const contextInfo = getContextInfo(message);
+        const isReplyToBot = !!contextInfo?.stanzaId && !!global.replyHandlers?.[contextInfo.stanzaId];
+        const shouldHandleSessionMessage = !ILOM_PREFIX_REGEX.test(full) && isReplyToBot;
+        if (!ILOM_PREFIX_REGEX.test(full) && !shouldHandleSessionMessage) return;
 
         const state = await loadState();
         const isPrivileged = isOwner || isSudo;
-        const input = full.replace(ILOM_PREFIX_REGEX, '').trim();
+        const input = ILOM_PREFIX_REGEX.test(full) ? full.replace(ILOM_PREFIX_REGEX, '').trim() : full.trim();
         const recentHistory = await getRecentHistory({ from, sender });
         const userStyle = inferUserStyle(recentHistory);
         const quotedText = extractQuotedText(message);
+        const sessionId = toSessionId(sender, from);
+        const session = await getSession(sessionId);
+        const { targetJid } = resolveReplyOrMentionTarget(message);
 
         if (/^on$/i.test(input)) {
             if (!isPrivileged) return;
             state.public = true;
             await saveState(state);
-            return await sock.sendMessage(from, { text: '✅ @ilom public mode is ON' }, { quoted: message });
+            return await sendIlomMessage(sock, from, message, '✅ @ilom public mode is ON', { sender, targetJid });
         }
 
         if (/^off$/i.test(input)) {
             if (!isPrivileged) return;
             state.public = false;
             await saveState(state);
-            return await sock.sendMessage(from, { text: '✅ @ilom public mode is OFF' }, { quoted: message });
+            return await sendIlomMessage(sock, from, message, '✅ @ilom public mode is OFF', { sender, targetJid });
         }
 
         if (!state.public && !isPrivileged) return;
@@ -265,15 +427,146 @@ export default {
             return await sock.sendMessage(from, { text: `✅ Kicked @${target.split('@')[0]}`, mentions: [target] }, { quoted: message });
         }
 
-        if (/send me\s+.+\.(js|json|txt|md|env)$/i.test(input) && isPrivileged) {
-            const fileName = input.match(/send me\s+([^\s]+\.(?:js|json|txt|md|env))/i)?.[1];
+        if (/send me (file|my file)|send me\s+.+\.(js|json|txt|md|env)$/i.test(input) && isPrivileged) {
+            const fileName = input.match(/send me(?:\s+file)?\s+([^\s]+\.(?:js|json|txt|md|env))/i)?.[1];
             const found = await findFileByName(fileName || '');
-            if (!found) return await sock.sendMessage(from, { text: '❌ File not found.' }, { quoted: message });
+            if (!found) return await sendIlomMessage(sock, from, message, '❌ File not found.', { sender, targetJid });
+
+            const shouldEncrypt = /\bencrypt(ed)?\b|\bencrypt before sending\b/i.test(input);
+            const fileBuffer = await fs.readFile(found);
+
+            if (shouldEncrypt) {
+                const encrypted = encryptTextPayload(fileBuffer.toString('base64'), sender);
+                const encryptedBuffer = Buffer.from(encrypted, 'utf8');
+                return await sock.sendMessage(from, {
+                    document: encryptedBuffer,
+                    fileName: `${path.basename(found)}.enc.txt`,
+                    mimetype: 'text/plain',
+                    caption: '🔐 Encrypted file'
+                }, { quoted: message });
+            }
+
             return await sock.sendMessage(from, {
-                document: await fs.readFile(found),
+                document: fileBuffer,
                 fileName: path.basename(found),
                 mimetype: 'text/plain'
             }, { quoted: message });
+        }
+
+        if (/template guide|command template|how to create command/i.test(input)) {
+            const guideExists = await fs.pathExists(TEMPLATE_GUIDE_FILE);
+            if (!guideExists) {
+                return await sendIlomMessage(sock, from, message, '❌ Template guide file not found.', { sender, targetJid });
+            }
+            const guide = await fs.readFile(TEMPLATE_GUIDE_FILE, 'utf8');
+            const preview = guide.slice(0, 3500);
+            return await sendIlomMessage(
+                sock,
+                from,
+                message,
+                `📚 Command Template Guide loaded.\n\n${preview}\n\n(Reply: "ilom send full template guide" to get full file)`,
+                { sender, targetJid }
+            );
+        }
+
+        if (/send full template guide/i.test(input)) {
+            const guideExists = await fs.pathExists(TEMPLATE_GUIDE_FILE);
+            if (!guideExists) return await sendIlomMessage(sock, from, message, '❌ Template guide file not found.', { sender, targetJid });
+            return await sock.sendMessage(from, {
+                document: await fs.readFile(TEMPLATE_GUIDE_FILE),
+                fileName: 'COMMAND_GUIDE.md',
+                mimetype: 'text/markdown'
+            }, { quoted: message });
+        }
+
+        if (/list (all )?commands|show command list|help command/i.test(input)) {
+            const catalog = await listAllCommands();
+            const lines = Object.entries(catalog)
+                .map(([cat, files]) => `• ${cat} (${files.length}): ${files.slice(0, 10).map((f) => f.replace('.js', '')).join(', ') || 'none'}`)
+                .join('\n');
+            return await sendIlomMessage(sock, from, message, `🧩 Bot Command Index\n\n${lines}`, { sender, targetJid });
+        }
+
+        if (/create command(?! like)/i.test(input) && isPrivileged) {
+            const parsed = input.match(/create command\s+([a-z]+)\s+([a-z0-9_-]+)(?:\s*[:|-]\s*(.+))?/i);
+            if (!parsed) {
+                return await sendIlomMessage(sock, from, message, '❌ Usage: ilom create command <category> <name> : <description>', { sender, targetJid });
+            }
+            const category = parsed[1].toLowerCase();
+            const name = parsed[2].toLowerCase();
+            const description = parsed[3]?.trim() || 'Generated command template';
+            if (!VALID_CATEGORIES.includes(category)) {
+                return await sendIlomMessage(sock, from, message, `❌ Invalid category. Use: ${VALID_CATEGORIES.join(', ')}`, { sender, targetJid });
+            }
+            const filePath = sanitizeCommandPath(path.join(category, `${name}.js`));
+            if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid command path.', { sender, targetJid });
+            const code = buildCommandTemplate({ category, name, description });
+            await fs.ensureDir(path.dirname(filePath));
+            await fs.writeFile(filePath, code, 'utf8');
+            await commandHandler.loadCommands();
+            return await sendIlomMessage(sock, from, message, `✅ Command created: src/commands/${category}/${name}.js`, { sender, targetJid });
+        }
+
+        if (/create (this|that|same) command|create command like/i.test(input) && isPrivileged) {
+            const parsed = input.match(/(?:create (?:this|that|same) command|create command like(?: this)?)\s+([a-z]+)\s+([a-z0-9_-]+)(?:\s*[:|-]\s*(.+))?/i);
+            if (!parsed) {
+                return await sendIlomMessage(sock, from, message, '❌ Usage: reply with command code, then: ilom create command like <category> <name> : <description>', { sender, targetJid });
+            }
+            const category = parsed[1].toLowerCase();
+            const name = parsed[2].toLowerCase();
+            const description = parsed[3]?.trim() || '';
+            if (!VALID_CATEGORIES.includes(category)) {
+                return await sendIlomMessage(sock, from, message, `❌ Invalid category. Use: ${VALID_CATEGORIES.join(', ')}`, { sender, targetJid });
+            }
+            const source = extractQuotedText(message);
+            if (!source || !/export\s+default/.test(source)) {
+                return await sendIlomMessage(sock, from, message, '❌ Reply to a command source snippet that contains export default.', { sender, targetJid });
+            }
+            const remapped = adaptCommandSource(source, { category, name, description });
+            if (!remapped) {
+                return await sendIlomMessage(sock, from, message, '❌ Could not adapt that source. Reply with full command code.', { sender, targetJid });
+            }
+            const filePath = sanitizeCommandPath(path.join(category, `${name}.js`));
+            if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid command path.', { sender, targetJid });
+            await fs.ensureDir(path.dirname(filePath));
+            await fs.writeFile(filePath, remapped, 'utf8');
+            await commandHandler.loadCommands();
+            return await sendIlomMessage(sock, from, message, `✅ Command cloned from your reply: src/commands/${category}/${name}.js`, { sender, targetJid });
+        }
+
+        if (/install command from/i.test(input) && isPrivileged) {
+            const match = input.match(/install command from\s+(https?:\/\/\S+)\s+to\s+([a-z]+)/i);
+            if (!match) {
+                return await sendIlomMessage(sock, from, message, '❌ Usage: ilom install command from <url> to <category>', { sender, targetJid });
+            }
+            const [, url, categoryRaw] = match;
+            const category = categoryRaw.toLowerCase();
+            if (!VALID_CATEGORIES.includes(category)) {
+                return await sendIlomMessage(sock, from, message, `❌ Invalid category. Use: ${VALID_CATEGORIES.join(', ')}`, { sender, targetJid });
+            }
+            const { data } = await axios.get(url, { timeout: 45000 });
+            const code = String(data || '');
+            const commandName = code.match(/name:\s*['"`]([a-z0-9_-]+)['"`]/i)?.[1] || `installed_${Date.now()}`;
+            const filePath = sanitizeCommandPath(path.join(category, `${commandName}.js`));
+            if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid install path.', { sender, targetJid });
+            await fs.ensureDir(path.dirname(filePath));
+            await fs.writeFile(filePath, code, 'utf8');
+            await commandHandler.loadCommands();
+            return await sendIlomMessage(sock, from, message, `✅ Installed command: src/commands/${category}/${commandName}.js`, { sender, targetJid });
+        }
+
+        if (/delete (file|command)/i.test(input) && isPrivileged) {
+            const targetPath = input.replace(/.*delete (?:file|command)\s+/i, '').trim();
+            if (!targetPath) return await sendIlomMessage(sock, from, message, '❌ Provide file path to delete.', { sender, targetJid });
+            const resolved = targetPath.includes('src/commands')
+                ? sanitizeRelativePath(targetPath)
+                : sanitizeCommandPath(targetPath);
+            if (!resolved || !(await fs.pathExists(resolved))) {
+                return await sendIlomMessage(sock, from, message, '❌ File not found for deletion.', { sender, targetJid });
+            }
+            await fs.remove(resolved);
+            await commandHandler.loadCommands();
+            return await sendIlomMessage(sock, from, message, `🗑️ Deleted: ${path.relative(process.cwd(), resolved)}`, { sender, targetJid });
         }
 
         if (/send me (song|music)/i.test(input)) {
@@ -412,16 +705,29 @@ export default {
             const result = await translate(quotedText, { to: target });
             const translated = Array.isArray(result) ? result.join('') : String(result || '').trim();
             if (!translated) {
-                return await sock.sendMessage(from, { text: '❌ Translation failed. Try again.' }, { quoted: message });
+                return await sendIlomMessage(sock, from, message, '❌ Translation failed. Try again.', { sender, targetJid });
             }
-            return await sock.sendMessage(from, {
-                text: `🌐 *@ilom Translation*\n\n📝 Original: ${quotedText}\n\n✅ Translated (${target}): ${translated}`
-            }, { quoted: message });
+            return await sendIlomMessage(
+                sock,
+                from,
+                message,
+                `🌐 *@ilom Translation*\n\n📝 Original: ${quotedText}\n\n✅ Translated (${target}): ${translated}`,
+                { sender, targetJid, forceMention: !!targetJid }
+            );
         }
 
         try {
-            const aiReply = await askAI(`You are Ilom, an assistant for WhatsApp chats. User style: ${userStyle}. User: ${input || 'hello'}`);
-            const sent = await sock.sendMessage(from, { text: aiReply }, { quoted: message });
+            const history = Array.isArray(session.history) ? session.history.slice(-12) : [];
+            const prompt = [
+                'You are Ilom, an assistant for WhatsApp chats.',
+                `User style: ${userStyle}.`,
+                history.length ? `Recent chat history:\n${history.join('\n')}` : '',
+                `User: ${input || 'hello'}`
+            ].filter(Boolean).join('\n');
+            const aiReply = await askAI(prompt);
+            const sent = await sendIlomMessage(sock, from, message, aiReply, { sender, targetJid, forceMention: !!targetJid });
+            const nextHistory = [...history, `User: ${input || 'hello'}`, `Ilom: ${aiReply}`].slice(-20);
+            await upsertSession(sessionId, { history: nextHistory, lastBotMessageId: sent?.key?.id || null, user: sender });
             const chain = async (replyText, replyMessage) => {
                 const sub = (replyText || '').trim();
                 if (!sub) return;
@@ -430,20 +736,26 @@ export default {
                     if (String(replySender).split(':')[0] !== String(sender).split(':')[0] && !isPrivileged) return;
                 }
                 try {
-                    const follow = await askAI(`Continue as Ilom. User style: ${userStyle}. User: ${sub}`);
-                    const s2 = await sock.sendMessage(from, { text: follow }, { quoted: replyMessage });
+                    const liveSession = await getSession(sessionId);
+                    const liveHistory = Array.isArray(liveSession.history) ? liveSession.history.slice(-12) : [];
+                    const followPrompt = [
+                        'Continue as Ilom in the same conversation.',
+                        `User style: ${userStyle}.`,
+                        liveHistory.length ? `Recent chat history:\n${liveHistory.join('\n')}` : '',
+                        `User: ${sub}`
+                    ].filter(Boolean).join('\n');
+                    const follow = await askAI(followPrompt);
+                    const s2 = await sendIlomMessage(sock, from, replyMessage, follow, { sender, targetJid, forceMention: !!targetJid });
+                    const mergedHistory = [...liveHistory, `User: ${sub}`, `Ilom: ${follow}`].slice(-20);
+                    await upsertSession(sessionId, { history: mergedHistory, lastBotMessageId: s2?.key?.id || null, user: sender });
                     registerReplyHandler(s2.key.id, chain);
                 } catch (err) {
-                    await sock.sendMessage(from, {
-                        text: `❌ Error: ${err.message || 'Could not get AI response right now.'}`
-                    }, { quoted: replyMessage });
+                    await sendIlomMessage(sock, from, replyMessage, `❌ Error: ${err.message || 'Could not get AI response right now.'}`, { sender, targetJid });
                 }
             };
             registerReplyHandler(sent.key.id, chain);
         } catch (err) {
-            return await sock.sendMessage(from, {
-                text: `❌ Error: ${err.message || 'Could not get AI response right now.'}`
-            }, { quoted: message });
+            return await sendIlomMessage(sock, from, message, `❌ Error: ${err.message || 'Could not get AI response right now.'}`, { sender, targetJid });
         }
     }
 };
