@@ -13,6 +13,7 @@ const GEMINI_URLS = [
     'https://api.qasimdev.dpdns.org/api/gemini'
 ];
 const IMAGE_API_URL = 'https://apiskeith.top/ai/magicstudio';
+const IMAGE_FALLBACK_URL = 'https://theone-fast-image-gen.vercel.app/download-image';
 const GEMINI_API_KEY = 'qasim-dev';
 const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
 const COMMAND_ROOT = path.join(process.cwd(), 'src', 'commands');
@@ -241,40 +242,110 @@ async function fetchBufferFromUrl(url, timeout = 60000) {
     return Buffer.from(data);
 }
 
+function looksLikeImageBuffer(buffer) {
+    if (!Buffer.isBuffer(buffer) || buffer.length < 12) return false;
+    const png = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+    const jpg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+    const webp = buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+    const gif = buffer.toString('ascii', 0, 3) === 'GIF';
+    return png || jpg || webp || gif;
+}
+
+function pickImageUrlFromText(text = '') {
+    if (!text) return null;
+    const clean = String(text).trim();
+    const direct = clean.match(/https?:\/\/[^\s'"<>]+\.(?:png|jpe?g|webp|gif)(?:\?[^\s'"<>]*)?/i);
+    if (direct?.[0]) return direct[0];
+    const generic = clean.match(/https?:\/\/[^\s'"<>]+/i);
+    return generic?.[0] || null;
+}
+
 function extractImageRef(payload) {
     if (!payload) return null;
     if (typeof payload === 'string') return payload;
     return payload.result
         || payload.url
+        || payload.imageUrl
+        || payload.image_url
+        || payload.output_url
         || payload.image
+        || payload.base64
+        || payload.b64
         || payload.output
+        || payload.message
+        || payload.data
         || payload?.data?.result
         || payload?.data?.url
+        || payload?.data?.imageUrl
+        || payload?.data?.image_url
         || payload?.data?.image
+        || payload?.data?.base64
+        || payload?.data?.b64
         || payload?.data?.output
         || null;
 }
 
 async function generateImageBuffer(prompt) {
-    const { data } = await axios.get(IMAGE_API_URL, {
-        params: { prompt },
-        timeout: 60000
-    });
+    const attempts = [
+        async () => {
+            const { data } = await axios.get(IMAGE_API_URL, {
+                params: { prompt },
+                timeout: 60000
+            });
 
-    const ref = extractImageRef(data);
-    if (typeof ref === 'string') {
-        if (/^https?:\/\//i.test(ref)) {
-            const img = await axios.get(ref, { responseType: 'arraybuffer', timeout: 60000 });
-            return Buffer.from(img.data);
+            const ref = extractImageRef(data);
+            if (Buffer.isBuffer(ref) && looksLikeImageBuffer(ref)) return ref;
+            if (typeof ref === 'string') {
+                const maybeUrl = /^https?:\/\//i.test(ref) ? ref : pickImageUrlFromText(ref);
+                if (maybeUrl) {
+                    const img = await fetchBufferFromUrl(maybeUrl, 60000);
+                    if (looksLikeImageBuffer(img)) return img;
+                }
+
+                if (ref.startsWith('data:image/')) {
+                    const b64 = ref.split(',')[1] || '';
+                    const image = Buffer.from(b64, 'base64');
+                    if (looksLikeImageBuffer(image)) return image;
+                }
+
+                const normalized = ref.replace(/\s+/g, '');
+                if (/^[A-Za-z0-9+/=]+$/.test(normalized) && normalized.length > 100) {
+                    const image = Buffer.from(normalized, 'base64');
+                    if (looksLikeImageBuffer(image)) return image;
+                }
+            }
+
+            throw new Error('Primary image API returned non-image content');
+        },
+        async () => {
+            const { data } = await axios.get(IMAGE_FALLBACK_URL, {
+                params: {
+                    prompt,
+                    expires: Date.now() + 15000,
+                    size: '1:1'
+                },
+                responseType: 'arraybuffer',
+                timeout: 60000
+            });
+
+            const image = Buffer.from(data);
+            if (!looksLikeImageBuffer(image)) {
+                throw new Error('Fallback image API did not return image bytes');
+            }
+            return image;
         }
-        if (ref.startsWith('data:image/')) {
-            const b64 = ref.split(',')[1] || '';
-            if (!b64) throw new Error('Invalid base64 image payload');
-            return Buffer.from(b64, 'base64');
+    ];
+
+    let lastError = null;
+    for (const attempt of attempts) {
+        try {
+            return await attempt();
+        } catch (error) {
+            lastError = error;
         }
     }
 
-    throw new Error('Image API did not return a usable image');
+    throw new Error(lastError?.message || 'Image API did not return a usable image');
 }
 
 function registerReplyHandler(messageId, handler) {
@@ -492,11 +563,26 @@ export default {
 
         if (/send me (song|music)/i.test(input)) {
             const q = input.replace(/.*send me (song|music)\s*/i, '').trim();
+            if (!q) {
+                return await sock.sendMessage(from, {
+                    text: '❌ Tell me the song name, for example: "@ilom send me song blinding lights"'
+                }, { quoted: message });
+            }
             const video = (await yts(q)).videos?.[0];
             if (!video) return await sock.sendMessage(from, { text: '❌ Song not found.' }, { quoted: message });
             const api = `https://apiskeith.top/download/audio?url=${encodeURIComponent(video.url)}`;
             const { data } = await axios.get(api, { timeout: 30000 });
             if (!data?.result) throw new Error('Song API failed');
+            const details = [
+                '🎵 *Song details*',
+                `• Title: ${video.title || 'Unknown'}`,
+                `• Channel: ${video.author?.name || 'Unknown'}`,
+                `• Duration: ${video.timestamp || 'Unknown'}`,
+                `• Views: ${Number(video.views || 0).toLocaleString()}`,
+                `• Link: ${video.url}`
+            ].join('\n');
+
+            await sock.sendMessage(from, { text: details }, { quoted: message });
             return await sock.sendMessage(from, { audio: { url: data.result }, mimetype: 'audio/mpeg' }, { quoted: message });
         }
 

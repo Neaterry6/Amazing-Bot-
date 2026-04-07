@@ -6,7 +6,7 @@ async function resolveYoutube(input) {
     const search = await yts(input);
     const first = search?.videos?.[0];
     if (!first) throw new Error('Song not found');
-    return first.url;
+    return first;
 }
 
 export default {
@@ -22,10 +22,25 @@ export default {
     async execute({ sock, message, args, from }) {
         try {
             const query = args.join(' ').trim();
-            const url = await resolveYoutube(query);
+            if (!query) throw new Error('Please provide a song name');
+
+            const resolved = await resolveYoutube(query);
+            const video = typeof resolved === 'string' ? { url: resolved } : resolved;
+            const url = video.url;
             const api = `https://apiskeith.top/download/audio?url=${encodeURIComponent(url)}`;
             const { data } = await axios.get(api, { timeout: 30000 });
             if (!data?.status || !data?.result) throw new Error('Audio not available');
+
+            if (video?.title) {
+                const details = [
+                    '🎵 *Now Playing*',
+                    `• Title: ${video.title || 'Unknown'}`,
+                    `• Artist: ${video.author?.name || 'Unknown'}`,
+                    `• Duration: ${video.timestamp || 'Unknown'}`,
+                    `• Link: ${video.url}`
+                ].join('\n');
+                await sock.sendMessage(from, { text: details }, { quoted: message });
+            }
 
             await sock.sendMessage(from, {
                 audio: { url: data.result },
