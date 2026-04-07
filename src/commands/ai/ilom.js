@@ -15,6 +15,9 @@ const GEMINI_URLS = [
 const IMAGE_API_URL = 'https://apiskeith.top/ai/magicstudio';
 const GEMINI_API_KEY = 'qasim-dev';
 const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
+const COMMAND_ROOT = path.join(process.cwd(), 'src', 'commands');
+const VALID_CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
+const TEMPLATE_GUIDE_FILE = path.join(process.cwd(), 'COMMAND_GUIDE.md');
 
 const LANGUAGE_ALIASES = {
     english: 'en',
@@ -369,6 +372,122 @@ export default {
                 fileName: path.basename(found),
                 mimetype: 'text/plain'
             }, { quoted: message });
+        }
+
+        if (/template guide|command template|how to create command/i.test(input)) {
+            const guideExists = await fs.pathExists(TEMPLATE_GUIDE_FILE);
+            if (!guideExists) {
+                return await sendIlomMessage(sock, from, message, '❌ Template guide file not found.', { sender, targetJid });
+            }
+            const guide = await fs.readFile(TEMPLATE_GUIDE_FILE, 'utf8');
+            const preview = guide.slice(0, 3500);
+            return await sendIlomMessage(
+                sock,
+                from,
+                message,
+                `📚 Command Template Guide loaded.\n\n${preview}\n\n(Reply: "ilom send full template guide" to get full file)`,
+                { sender, targetJid }
+            );
+        }
+
+        if (/send full template guide/i.test(input)) {
+            const guideExists = await fs.pathExists(TEMPLATE_GUIDE_FILE);
+            if (!guideExists) return await sendIlomMessage(sock, from, message, '❌ Template guide file not found.', { sender, targetJid });
+            return await sock.sendMessage(from, {
+                document: await fs.readFile(TEMPLATE_GUIDE_FILE),
+                fileName: 'COMMAND_GUIDE.md',
+                mimetype: 'text/markdown'
+            }, { quoted: message });
+        }
+
+        if (/list (all )?commands|show command list|help command/i.test(input)) {
+            const catalog = await listAllCommands();
+            const lines = Object.entries(catalog)
+                .map(([cat, files]) => `• ${cat} (${files.length}): ${files.slice(0, 10).map((f) => f.replace('.js', '')).join(', ') || 'none'}`)
+                .join('\n');
+            return await sendIlomMessage(sock, from, message, `🧩 Bot Command Index\n\n${lines}`, { sender, targetJid });
+        }
+
+        if (/create command(?! like)/i.test(input) && isPrivileged) {
+            const parsed = input.match(/create command\s+([a-z]+)\s+([a-z0-9_-]+)(?:\s*[:|-]\s*(.+))?/i);
+            if (!parsed) {
+                return await sendIlomMessage(sock, from, message, '❌ Usage: ilom create command <category> <name> : <description>', { sender, targetJid });
+            }
+            const category = parsed[1].toLowerCase();
+            const name = parsed[2].toLowerCase();
+            const description = parsed[3]?.trim() || 'Generated command template';
+            if (!VALID_CATEGORIES.includes(category)) {
+                return await sendIlomMessage(sock, from, message, `❌ Invalid category. Use: ${VALID_CATEGORIES.join(', ')}`, { sender, targetJid });
+            }
+            const filePath = sanitizeCommandPath(path.join(category, `${name}.js`));
+            if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid command path.', { sender, targetJid });
+            const code = buildCommandTemplate({ category, name, description });
+            await fs.ensureDir(path.dirname(filePath));
+            await fs.writeFile(filePath, code, 'utf8');
+            await commandHandler.loadCommands();
+            return await sendIlomMessage(sock, from, message, `✅ Command created: src/commands/${category}/${name}.js`, { sender, targetJid });
+        }
+
+        if (/create (this|that|same) command|create command like/i.test(input) && isPrivileged) {
+            const parsed = input.match(/(?:create (?:this|that|same) command|create command like(?: this)?)\s+([a-z]+)\s+([a-z0-9_-]+)(?:\s*[:|-]\s*(.+))?/i);
+            if (!parsed) {
+                return await sendIlomMessage(sock, from, message, '❌ Usage: reply with command code, then: ilom create command like <category> <name> : <description>', { sender, targetJid });
+            }
+            const category = parsed[1].toLowerCase();
+            const name = parsed[2].toLowerCase();
+            const description = parsed[3]?.trim() || '';
+            if (!VALID_CATEGORIES.includes(category)) {
+                return await sendIlomMessage(sock, from, message, `❌ Invalid category. Use: ${VALID_CATEGORIES.join(', ')}`, { sender, targetJid });
+            }
+            const source = extractQuotedText(message);
+            if (!source || !/export\s+default/.test(source)) {
+                return await sendIlomMessage(sock, from, message, '❌ Reply to a command source snippet that contains export default.', { sender, targetJid });
+            }
+            const remapped = adaptCommandSource(source, { category, name, description });
+            if (!remapped) {
+                return await sendIlomMessage(sock, from, message, '❌ Could not adapt that source. Reply with full command code.', { sender, targetJid });
+            }
+            const filePath = sanitizeCommandPath(path.join(category, `${name}.js`));
+            if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid command path.', { sender, targetJid });
+            await fs.ensureDir(path.dirname(filePath));
+            await fs.writeFile(filePath, remapped, 'utf8');
+            await commandHandler.loadCommands();
+            return await sendIlomMessage(sock, from, message, `✅ Command cloned from your reply: src/commands/${category}/${name}.js`, { sender, targetJid });
+        }
+
+        if (/install command from/i.test(input) && isPrivileged) {
+            const match = input.match(/install command from\s+(https?:\/\/\S+)\s+to\s+([a-z]+)/i);
+            if (!match) {
+                return await sendIlomMessage(sock, from, message, '❌ Usage: ilom install command from <url> to <category>', { sender, targetJid });
+            }
+            const [, url, categoryRaw] = match;
+            const category = categoryRaw.toLowerCase();
+            if (!VALID_CATEGORIES.includes(category)) {
+                return await sendIlomMessage(sock, from, message, `❌ Invalid category. Use: ${VALID_CATEGORIES.join(', ')}`, { sender, targetJid });
+            }
+            const { data } = await axios.get(url, { timeout: 45000 });
+            const code = String(data || '');
+            const commandName = code.match(/name:\s*['"`]([a-z0-9_-]+)['"`]/i)?.[1] || `installed_${Date.now()}`;
+            const filePath = sanitizeCommandPath(path.join(category, `${commandName}.js`));
+            if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid install path.', { sender, targetJid });
+            await fs.ensureDir(path.dirname(filePath));
+            await fs.writeFile(filePath, code, 'utf8');
+            await commandHandler.loadCommands();
+            return await sendIlomMessage(sock, from, message, `✅ Installed command: src/commands/${category}/${commandName}.js`, { sender, targetJid });
+        }
+
+        if (/delete (file|command)/i.test(input) && isPrivileged) {
+            const targetPath = input.replace(/.*delete (?:file|command)\s+/i, '').trim();
+            if (!targetPath) return await sendIlomMessage(sock, from, message, '❌ Provide file path to delete.', { sender, targetJid });
+            const resolved = targetPath.includes('src/commands')
+                ? sanitizeRelativePath(targetPath)
+                : sanitizeCommandPath(targetPath);
+            if (!resolved || !(await fs.pathExists(resolved))) {
+                return await sendIlomMessage(sock, from, message, '❌ File not found for deletion.', { sender, targetJid });
+            }
+            await fs.remove(resolved);
+            await commandHandler.loadCommands();
+            return await sendIlomMessage(sock, from, message, `🗑️ Deleted: ${path.relative(process.cwd(), resolved)}`, { sender, targetJid });
         }
 
         if (/send me (song|music)/i.test(input)) {
