@@ -48,7 +48,7 @@
     "npm": ">=10"
   },
   "scripts": {
-    "start": "node index.js",
+    "start": "node scripts/bootstrap-start.js",
     "dev": "nodemon index.js",
     "test": "jest --coverage",
     "build": "npm install",
