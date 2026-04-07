@@ -5,7 +5,11 @@ import yts from 'yt-search';
 import translate from 'translate-google-api';
 
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
-const GEMINI_URL = 'https://api.qasimdev.dpdns.org/api/gemini/flash';
+const GEMINI_URLS = [
+    'https://api.qasimdev.dpdns.org/api/gemini/flash',
+    'https://api.qasimdev.dpdns.org/api/gemini/pro',
+    'https://api.qasimdev.dpdns.org/api/gemini'
+];
 const IMAGE_API_URL = 'https://apiskeith.top/ai/magicstudio';
 const GEMINI_API_KEY = 'qasim-dev';
 const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
@@ -117,10 +121,45 @@ async function findFileByName(fileName, base = process.cwd()) {
 }
 
 async function askAI(prompt) {
-    const { data } = await axios.get(GEMINI_URL, {
-        params: { apiKey: GEMINI_API_KEY, text: prompt }, timeout: 30000
-    });
-    return data?.data?.response || data?.response || data?.text || 'No response.';
+    if (process.env.CEREBRAS_API_KEY) {
+        try {
+            const Cerebras = (await import('@cerebras/cerebras_cloud_sdk')).default;
+            const client = new Cerebras({ apiKey: process.env.CEREBRAS_API_KEY, warmTCPConnection: false });
+            const resp = await client.chat.completions.create({
+                model: process.env.CEREBRAS_MODEL || 'llama-3.3-70b',
+                messages: [
+                    { role: 'system', content: 'You are Ilom, an assistant for WhatsApp chats. Keep answers clear and helpful.' },
+                    { role: 'user', content: prompt }
+                ],
+                stream: false
+            });
+            const text = resp?.choices?.[0]?.message?.content?.trim();
+            if (text) return text;
+        } catch {}
+    }
+
+    let lastError = null;
+
+    for (const url of GEMINI_URLS) {
+        try {
+            const { data } = await axios.get(url, {
+                params: { apiKey: GEMINI_API_KEY, text: prompt },
+                timeout: 30000
+            });
+            const text = data?.data?.response || data?.response || data?.text || data?.result || '';
+            if (text) return text;
+        } catch (error) {
+            lastError = error;
+            continue;
+        }
+    }
+
+    const status = lastError?.response?.status;
+    if (status) {
+        throw new Error(`AI service is temporarily unavailable (HTTP ${status}). Please try again in a moment.`);
+    }
+
+    throw new Error('AI service is temporarily unavailable. Please try again in a moment.');
 }
 
 function getByPath(obj, pathKey) {
@@ -397,19 +436,31 @@ export default {
             }, { quoted: message });
         }
 
-        const aiReply = await askAI(`You are Ilom, an assistant for WhatsApp chats. User style: ${userStyle}. User: ${input || 'hello'}`);
-        const sent = await sock.sendMessage(from, { text: aiReply }, { quoted: message });
-        const chain = async (replyText, replyMessage) => {
-            const sub = (replyText || '').trim();
-            if (!sub) return;
-            if (!state.public) {
-                const replySender = replyMessage.key.participant || replyMessage.key.remoteJid;
-                if (String(replySender).split(':')[0] !== String(sender).split(':')[0] && !isPrivileged) return;
-            }
-            const follow = await askAI(`Continue as Ilom. User style: ${userStyle}. User: ${sub}`);
-            const s2 = await sock.sendMessage(from, { text: follow }, { quoted: replyMessage });
-            registerReplyHandler(s2.key.id, chain);
-        };
-        registerReplyHandler(sent.key.id, chain);
+        try {
+            const aiReply = await askAI(`You are Ilom, an assistant for WhatsApp chats. User style: ${userStyle}. User: ${input || 'hello'}`);
+            const sent = await sock.sendMessage(from, { text: aiReply }, { quoted: message });
+            const chain = async (replyText, replyMessage) => {
+                const sub = (replyText || '').trim();
+                if (!sub) return;
+                if (!state.public) {
+                    const replySender = replyMessage.key.participant || replyMessage.key.remoteJid;
+                    if (String(replySender).split(':')[0] !== String(sender).split(':')[0] && !isPrivileged) return;
+                }
+                try {
+                    const follow = await askAI(`Continue as Ilom. User style: ${userStyle}. User: ${sub}`);
+                    const s2 = await sock.sendMessage(from, { text: follow }, { quoted: replyMessage });
+                    registerReplyHandler(s2.key.id, chain);
+                } catch (err) {
+                    await sock.sendMessage(from, {
+                        text: `❌ Error: ${err.message || 'Could not get AI response right now.'}`
+                    }, { quoted: replyMessage });
+                }
+            };
+            registerReplyHandler(sent.key.id, chain);
+        } catch (err) {
+            return await sock.sendMessage(from, {
+                text: `❌ Error: ${err.message || 'Could not get AI response right now.'}`
+            }, { quoted: message });
+        }
     }
 };

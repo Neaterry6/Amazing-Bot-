@@ -660,8 +660,7 @@ async function establishWhatsAppConnection() {
 
                     const requiresFreshPairing = [
                         DisconnectReason.badSession,
-                        DisconnectReason.loggedOut,
-                        DisconnectReason.connectionReplaced
+                        DisconnectReason.loggedOut
                     ].includes(statusCode);
 
                     if (requiresFreshPairing) {
