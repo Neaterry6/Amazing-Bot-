@@ -9,13 +9,12 @@ export default {
     minArgs: 0,
 
     async execute({ sock, message, args, from }) {
-        const isSocketConnected = Boolean(sock?.user) && sock?.ws?.readyState === 1;
-        if (!isSocketConnected) {
+        const socketState = Number(sock?.ws?.readyState);
+        const hasActiveIdentity = Boolean(sock?.user?.id || sock?.authState?.creds?.registered);
+        const isSocketUsable = hasActiveIdentity || socketState === 0 || socketState === 1;
+        if (!isSocketUsable || typeof sock?.requestPairingCode !== 'function') {
             return await sock.sendMessage(from, {
-                text: [
-                    '❌ Baileys is not connected yet.',
-                    'Wait until the bot is fully online, then run this command again.'
-                ].join('\n')
+                text: '❌ Pairing service is not ready yet. Please wait a few seconds and try again.'
             }, { quoted: message });
         }
 
