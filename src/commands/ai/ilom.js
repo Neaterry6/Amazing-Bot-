@@ -4,7 +4,6 @@ import axios from 'axios';
 import yts from 'yt-search';
 import translate from 'translate-google-api';
 import CryptoJS from 'crypto-js';
-import { commandHandler } from '../../handlers/commandHandler.js';
 
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
 const SESSION_FILE = path.join(process.cwd(), 'data', 'ilom-sessions.json');
@@ -19,7 +18,6 @@ const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
 const COMMAND_ROOT = path.join(process.cwd(), 'src', 'commands');
 const VALID_CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
 const TEMPLATE_GUIDE_FILE = path.join(process.cwd(), 'COMMAND_GUIDE.md');
-const SAFE_FILE_ROOTS = [COMMAND_ROOT, path.join(process.cwd(), 'docs'), process.cwd()];
 
 const LANGUAGE_ALIASES = {
     english: 'en',
@@ -169,94 +167,6 @@ async function findFileByName(fileName, base = process.cwd()) {
         }
     }
     return null;
-}
-
-function sanitizeRelativePath(inputPath = '') {
-    const normalized = path.normalize(String(inputPath).replace(/^([./\\])+/, ''));
-    const full = path.join(process.cwd(), normalized);
-    if (!full.startsWith(process.cwd())) return null;
-    if (full.includes(`${path.sep}auth${path.sep}`) || full.includes(`${path.sep}sessions${path.sep}`) || /creds\.json$/i.test(full)) return null;
-    return full;
-}
-
-function sanitizeCommandPath(inputPath = '') {
-    const normalized = path.normalize(String(inputPath).replace(/^([./\\])+/, ''));
-    const full = path.join(COMMAND_ROOT, normalized);
-    if (!full.startsWith(COMMAND_ROOT)) return null;
-    return full;
-}
-
-function isSafeReadableFile(fullPath = '') {
-    if (!fullPath) return false;
-    const resolved = path.resolve(fullPath);
-    if (resolved.includes(`${path.sep}auth${path.sep}`) || resolved.includes(`${path.sep}sessions${path.sep}`) || /creds\.json$/i.test(resolved)) {
-        return false;
-    }
-    return SAFE_FILE_ROOTS.some((root) => resolved.startsWith(path.resolve(root)));
-}
-
-function buildCommandTemplate({ category, name, description }) {
-    return `import formatResponse from '../../utils/formatUtils.js';
-
-export default {
-    name: '${name}',
-    aliases: [],
-    category: '${category}',
-    description: '${description || 'Describe your command'}',
-    usage: '${name} <input>',
-    example: '${name} hello',
-    cooldown: 3,
-    permissions: ['user'],
-    minArgs: 0,
-
-    async execute({ sock, message, args, from, sender }) {
-        try {
-            const input = args.join(' ').trim();
-            await sock.sendMessage(from, {
-                text: \`╭──⟦ ✅ ${name.toUpperCase()} READY ⟧
-│
-│ 👤 User: @\${sender.split('@')[0]}
-│ 📝 Input: \${input || 'none'}
-│ 📅 Date: \${new Date().toLocaleDateString()}
-│ ⏰ Time: \${new Date().toLocaleTimeString()}
-│
-╰────────────⟦\`,
-                mentions: [sender]
-            }, { quoted: message });
-        } catch (error) {
-            await sock.sendMessage(from, {
-                text: formatResponse.error('EXECUTION FAILED', 'An error occurred while executing the command', error.message)
-            }, { quoted: message });
-        }
-    }
-};`;
-}
-
-function adaptCommandSource(sourceCode, { category, name, description }) {
-    let code = String(sourceCode || '').trim();
-    if (!code) return '';
-    code = code.replace(/name:\s*['"`][^'"`]+['"`]/, `name: '${name}'`);
-    code = code.replace(/category:\s*['"`][^'"`]+['"`]/, `category: '${category}'`);
-    if (description) {
-        if (/description:\s*['"`][^'"`]*['"`]/.test(code)) {
-            code = code.replace(/description:\s*['"`][^'"`]*['"`]/, `description: '${description.replace(/'/g, "\\'")}'`);
-        }
-    }
-    if (!/export\s+default\s*\{/.test(code)) {
-        return '';
-    }
-    return code;
-}
-
-async function listAllCommands() {
-    const catalog = {};
-    for (const cat of VALID_CATEGORIES) {
-        const dir = path.join(COMMAND_ROOT, cat);
-        if (!(await fs.pathExists(dir))) continue;
-        const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.js'));
-        catalog[cat] = files;
-    }
-    return catalog;
 }
 
 function encryptTextPayload(payload, keySeed = '') {
@@ -440,11 +350,7 @@ export default {
 
         if (/send me (file|my file)|send me\s+.+\.(js|json|txt|md|env)$/i.test(input) && isPrivileged) {
             const fileName = input.match(/send me(?:\s+file)?\s+([^\s]+\.(?:js|json|txt|md|env))/i)?.[1];
-            const normalizedPath = fileName?.includes('/') ? sanitizeRelativePath(fileName) : null;
-            const found = normalizedPath && await fs.pathExists(normalizedPath) ? normalizedPath : await findFileByName(fileName || '', COMMAND_ROOT);
-            if (found && !isSafeReadableFile(found)) {
-                return await sendIlomMessage(sock, from, message, '❌ Access to that file is blocked for safety.', { sender, targetJid });
-            }
+            const found = await findFileByName(fileName || '');
             if (!found) return await sendIlomMessage(sock, from, message, '❌ File not found.', { sender, targetJid });
 
             const shouldEncrypt = /\bencrypt(ed)?\b|\bencrypt before sending\b/i.test(input);
@@ -518,7 +424,7 @@ export default {
             const code = buildCommandTemplate({ category, name, description });
             await fs.ensureDir(path.dirname(filePath));
             await fs.writeFile(filePath, code, 'utf8');
-            try { await commandHandler.loadCommands(); } catch {}
+            await commandHandler.loadCommands();
             return await sendIlomMessage(sock, from, message, `✅ Command created: src/commands/${category}/${name}.js`, { sender, targetJid });
         }
 
@@ -545,7 +451,7 @@ export default {
             if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid command path.', { sender, targetJid });
             await fs.ensureDir(path.dirname(filePath));
             await fs.writeFile(filePath, remapped, 'utf8');
-            try { await commandHandler.loadCommands(); } catch {}
+            await commandHandler.loadCommands();
             return await sendIlomMessage(sock, from, message, `✅ Command cloned from your reply: src/commands/${category}/${name}.js`, { sender, targetJid });
         }
 
@@ -566,19 +472,21 @@ export default {
             if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid install path.', { sender, targetJid });
             await fs.ensureDir(path.dirname(filePath));
             await fs.writeFile(filePath, code, 'utf8');
-            try { await commandHandler.loadCommands(); } catch {}
+            await commandHandler.loadCommands();
             return await sendIlomMessage(sock, from, message, `✅ Installed command: src/commands/${category}/${commandName}.js`, { sender, targetJid });
         }
 
         if (/delete (file|command)/i.test(input) && isPrivileged) {
             const targetPath = input.replace(/.*delete (?:file|command)\s+/i, '').trim();
             if (!targetPath) return await sendIlomMessage(sock, from, message, '❌ Provide file path to delete.', { sender, targetJid });
-            const resolved = sanitizeCommandPath(targetPath.replace(/^src\/commands\//i, ''));
+            const resolved = targetPath.includes('src/commands')
+                ? sanitizeRelativePath(targetPath)
+                : sanitizeCommandPath(targetPath);
             if (!resolved || !(await fs.pathExists(resolved))) {
                 return await sendIlomMessage(sock, from, message, '❌ File not found for deletion.', { sender, targetJid });
             }
             await fs.remove(resolved);
-            try { await commandHandler.loadCommands(); } catch {}
+            await commandHandler.loadCommands();
             return await sendIlomMessage(sock, from, message, `🗑️ Deleted: ${path.relative(process.cwd(), resolved)}`, { sender, targetJid });
         }
 
