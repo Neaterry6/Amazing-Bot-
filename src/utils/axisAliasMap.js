@@ -42,7 +42,8 @@ const AXIS_ALIAS_MAP = {
   checkadmin: 'groupinfo',
   listonline: 'listonline',
   listadmin: 'listadmin',
-  gstatus: 'gstatus',
+  gstatus: 'togcstatus',
+  gcstatus: 'togcstatus',
   save: 'save',
   pair: 'pair',
 
