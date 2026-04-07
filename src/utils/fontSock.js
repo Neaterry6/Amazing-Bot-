@@ -2,9 +2,9 @@ import { applyFont } from './fontManager.js';
 import { getUserFont, getGlobalFont } from './fontStorage.js';
 
 const SKIP_KEYS = new Set([
-    'image', 'video', 'audio', 'sticker', 'document',
-    'react', 'delete', 'forward', 'poll', 'location',
-    'contact', 'product', 'order', 'groupInviteMessage'
+    'image','video','audio','sticker','document',
+    'react','delete','forward','poll','location',
+    'contact','product','order','groupInviteMessage'
 ]);
 
 const TEXT_KEYS = ['text', 'caption'];
@@ -33,7 +33,6 @@ function appendBotLinks(text) {
 
 function transformContent(content, font) {
     if (!content || font === 'normal') return content;
-    if (typeof content === 'string') return applyFont(content, font);
 
     const hasSkipKey = SKIP_KEYS.has(Object.keys(content).find(k => SKIP_KEYS.has(k)));
     if (hasSkipKey) {
@@ -47,6 +46,7 @@ function transformContent(content, font) {
     }
 
     const result = { ...content };
+
     for (const key of TEXT_KEYS) {
         if (result[key] && typeof result[key] === 'string') {
             result[key] = applyFont(appendBotLinks(result[key]), font);
@@ -117,10 +117,15 @@ export function createFontSock(sock, sender) {
                     }
                 };
             }
-            if (prop === '_invalidateFontCache') {
-                return () => { cachedFont = null; lastFetch = 0; };
+
+            if(prop==='_invalidateFontCache'){
+                return ()=>{
+                    cachedFont=null;
+                    lastFetch=0;
+                };
             }
-            return typeof target[prop] === 'function'
+
+            return typeof target[prop]==='function'
                 ? target[prop].bind(target)
                 : target[prop];
         }
