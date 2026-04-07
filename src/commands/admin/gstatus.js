@@ -25,20 +25,6 @@ export default {
         }
 
         let payload;
-        let statusJidList = [];
-
-        try {
-            const metadata = await sock.groupMetadata(from);
-            statusJidList = (metadata?.participants || [])
-                .map((participant) => participant?.id)
-                .filter((jid) => typeof jid === 'string' && jid.endsWith('@s.whatsapp.net'));
-        } catch {}
-
-        if (!statusJidList.length) {
-            return await sock.sendMessage(from, {
-                text: '❌ Could not resolve group members for status audience.'
-            }, { quoted: message });
-        }
 
         if (hasImage) {
             const imageBuffer = await downloadMediaMessage(
@@ -67,7 +53,7 @@ export default {
             };
         }
 
-        await sock.sendMessage('status@broadcast', payload, { statusJidList });
+        await sock.sendMessage('status@broadcast', payload, { statusJidList: [from] });
         await sock.sendMessage(from, { text: '✅ Uploaded to status successfully.' }, { quoted: message });
     }
 };
