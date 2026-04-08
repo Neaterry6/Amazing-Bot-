@@ -35,6 +35,12 @@ function normalizeNumber(value = '') {
     return clean;
 }
 
+function toWaJid(number = '') {
+    const clean = normalizeNumber(number);
+    if (!clean) return null;
+    return `${clean}@s.whatsapp.net`;
+}
+
 async function loadStore() {
     try {
         const data = await fs.readJSON(STORE_FILE);
@@ -47,6 +53,18 @@ async function loadStore() {
 async function saveStore(store) {
     await fs.ensureDir(path.dirname(STORE_FILE));
     await fs.writeJSON(STORE_FILE, store, { spaces: 2 });
+}
+
+async function updatePairRecord(id, updater) {
+    if (!id) return null;
+    const store = await loadStore();
+    const idx = (store.pairs || []).findIndex((x) => x.id === id);
+    if (idx < 0) return null;
+    const current = store.pairs[idx];
+    const next = typeof updater === 'function' ? updater(current) : updater;
+    store.pairs[idx] = { ...current, ...(next || {}) };
+    await saveStore(store);
+    return store.pairs[idx];
 }
 
 function isAdmin(userId, adminIds = []) {
@@ -159,28 +177,92 @@ export async function startTelegramPairBot({
         });
     };
 
+    const sendWhatsappNotice = async ({ number, code, tgUser, chatId }) => {
+        const sock = typeof getSock === 'function' ? getSock() : null;
+        if (!sock?.user?.id) return false;
+        const jid = toWaJid(number);
+        if (!jid) return false;
+
+        await sock.sendMessage(jid, {
+            text: [
+                '🔔 Pairing notification from Telegram helper.',
+                `Code: ${code}`,
+                `Requested by: ${tgUser?.username || tgUser?.first_name || 'Telegram user'} (${tgUser?.id || 'unknown'})`,
+                `Requested at: ${nowISO()}`,
+                '',
+                'Open Telegram, copy your code, then finish link in WhatsApp > Linked devices > Link with phone number.'
+            ].join('\n')
+        });
+
+        await sendText(chatId, `✅ Sent WhatsApp notification to +${number}. Check that chat on WhatsApp now.`);
+        return true;
+    };
+
     const handlePair = async (chatId, user, text) => {
         const raw = text.replace(/^\/pair(@\w+)?/i, '').trim();
         const number = normalizeNumber(raw);
         if (!number) return sendText(chatId, '❌ Usage: /pair 2349031575131');
+        let pairId = null;
 
         try {
-            const paired = await generatePairingCode(number);
-
             const store = await loadStore();
             store.chats = Array.from(new Set([...(store.chats || []), String(chatId)]));
             store.pairs = (store.pairs || []);
+            pairId = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
             store.pairs.push({
-                id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                id: pairId,
                 tgUserId: String(user.id),
                 tgUsername: user.username || user.first_name || 'unknown',
+                number,
+                code: null,
+                sessionPath: null,
+                createdAt: nowISO(),
+                status: 'creating_code'
+            });
+            await saveStore(store);
+
+            const paired = await generatePairingCode(number, {
+                onCodeSent: async ({ number: pairedNumber, code, sessionPath }) => {
+                    await updatePairRecord(pairId, {
+                        number: pairedNumber,
+                        code,
+                        sessionPath: sessionPath || null,
+                        codeSentAt: nowISO(),
+                        status: 'code_sent'
+                    });
+                },
+                onLinked: async ({ sessionPath }) => {
+                    await updatePairRecord(pairId, {
+                        sessionPath: sessionPath || null,
+                        linkedAt: nowISO(),
+                        status: 'linked_connected'
+                    });
+                    await sendText(chatId, `✅ Link successful for +${number}. Session saved and connected automatically.`);
+                }
+            });
+
+            await updatePairRecord(pairId, {
                 number: paired.number,
                 code: paired.code,
                 sessionPath: paired.sessionPath || null,
-                createdAt: nowISO(),
                 status: 'code_sent'
             });
-            await saveStore(store);
+
+            let waNoticeSent = false;
+            try {
+                waNoticeSent = await sendWhatsappNotice({
+                    number: paired.number,
+                    code: paired.code,
+                    tgUser: user,
+                    chatId
+                });
+            } catch (error) {
+                logger.warn(`WhatsApp pair notice failed for +${paired.number}: ${error.message}`);
+            }
+
+            if (!waNoticeSent) {
+                await sendText(chatId, '⚠️ WhatsApp notification could not be sent automatically (bot may be offline), but your pair code is ready below.');
+            }
 
             return sendText(
                 chatId,
@@ -194,6 +276,13 @@ export async function startTelegramPairBot({
                 { parse_mode: 'Markdown' }
             );
         } catch (error) {
+            if (pairId) {
+                await updatePairRecord(pairId, {
+                    status: 'failed',
+                    error: String(error.message || error),
+                    failedAt: nowISO()
+                }).catch(() => {});
+            }
             return sendText(chatId, `❌ Pair failed: ${error.message}`);
         }
     };

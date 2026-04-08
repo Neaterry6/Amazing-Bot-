@@ -74,7 +74,11 @@ function attachSessionLifecycle(number, sock) {
     });
 }
 
-export async function generatePairingCode(rawNumber, { timeoutMs = 90000 } = {}) {
+export async function generatePairingCode(rawNumber, {
+    timeoutMs = 90000,
+    onCodeSent = null,
+    onLinked = null
+} = {}) {
     const number = normalizeNumber(rawNumber);
     if (!number) {
         throw new Error('Invalid phone number. Use 10-15 digits with country code.');
@@ -108,6 +112,13 @@ export async function generatePairingCode(rawNumber, { timeoutMs = 90000 } = {})
             }, timeoutMs);
 
             sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+                if (connection === 'open') {
+                    try {
+                        await onLinked?.({ number, sessionPath: authDir });
+                    } catch {
+                        // Ignore callback errors so pairing lifecycle can continue.
+                    }
+                }
                 if (connection === 'close' && !settled) {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
                     finish(reject, new Error(`Pairing connection closed (${statusCode ?? 'unknown'}).`));
@@ -117,7 +128,13 @@ export async function generatePairingCode(rawNumber, { timeoutMs = 90000 } = {})
             setTimeout(async () => {
                 try {
                     const rawCode = await sock.requestPairingCode(number);
-                    finish(resolve, formatCode(rawCode));
+                    const code = formatCode(rawCode);
+                    try {
+                        await onCodeSent?.({ number, code, sessionPath: authDir });
+                    } catch {
+                        // Ignore callback errors so pair code can still be returned.
+                    }
+                    finish(resolve, code);
                 } catch (error) {
                     finish(reject, error);
                 }
