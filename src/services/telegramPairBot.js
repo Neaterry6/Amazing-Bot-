@@ -14,6 +14,21 @@ function normalizeTelegramToken(value = '') {
     return String(value || '').trim().replace(/^bot/i, '').replace(/^:/, '');
 }
 
+function resolveTelegramToken(primaryToken = '', botId = '') {
+    const rawToken = String(primaryToken || '').trim();
+    const rawBotId = String(botId || '').trim().replace(/^bot/i, '').replace(/:$/, '');
+
+    if (!rawToken && !rawBotId) return '';
+
+    // Full BotFather token already provided
+    if (/^\d+:[A-Za-z0-9_-]{20,}$/.test(rawToken)) return rawToken;
+
+    const normalizedSecret = normalizeTelegramToken(rawToken);
+    if (rawBotId && normalizedSecret) return `${rawBotId}:${normalizedSecret}`;
+
+    return normalizedSecret;
+}
+
 function normalizeNumber(value = '') {
     const clean = String(value || '').replace(/\D/g, '');
     if (clean.length < 10 || clean.length > 15) return null;
@@ -82,10 +97,11 @@ async function tgCall(token, method, payload = {}) {
 export async function startTelegramPairBot({
     getSock,
     ownerNumbers = [],
-    token = normalizeTelegramToken(process.env.TELEGRAM_BOT_TOKEN),
+    token = process.env.TELEGRAM_BOT_TOKEN,
+    botId = process.env.TELEGRAM_BOT_ID,
     adminIds = (process.env.TELEGRAM_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean)
 } = {}) {
-    token = normalizeTelegramToken(token);
+    token = resolveTelegramToken(token, botId);
 
     if (!token) {
         logger.info('Telegram pair bot disabled (TELEGRAM_BOT_TOKEN not set)');
@@ -94,9 +110,7 @@ export async function startTelegramPairBot({
 
     if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) {
         logger.warn('Telegram pair bot disabled: invalid TELEGRAM_BOT_TOKEN format. Use full BotFather token like <bot_id>:<secret>.');
-        if (String(process.env.TELEGRAM_BOT_TOKEN || '').trim().startsWith(':')) {
-            logger.warn('Detected token secret without bot id. Set TELEGRAM_BOT_ID in env or paste the full token from BotFather.');
-        }
+        logger.warn('Tip: you can also set TELEGRAM_BOT_ID and TELEGRAM_BOT_TOKEN (secret only), and the bot will combine them automatically.');
         return null;
     }
 
