@@ -1,7 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import logger from '../utils/logger.js';
-import { generatePairingCode } from './pairingService.js';
+import { clearAllPairedSessions, generatePairingCode } from './pairingService.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const STORE_FILE = path.join(process.cwd(), 'data', 'telegram-pairs.json');
@@ -86,11 +86,15 @@ function buildMenu(user, runtimeText = '') {
         '│  /pair <number>',
         '│  /pairs',
         '│  /delpair <id>',
+        '│  /ilomai <prompt>',
+        '│  /tts <text>',
+        '│  /img <prompt>',
         '│',
         '├─────────────────❏',
         '│  🛡️ ADMIN COMMANDS',
         '│  /listpair',
         '│  /broadcast <text>',
+        '│  /clearsession',
         '│',
         '╰─────────────────❏',
         '│  Presented by ILOM BOT INC.',
@@ -117,6 +121,8 @@ function menuKeyboard() {
         keyboard: [
             [{ text: '/pair 2349031575131' }],
             [{ text: '/pairs' }, { text: '/delpair' }],
+            [{ text: '/ilomai Heyoo' }, { text: '/img Cute anime cat' }],
+            [{ text: '/tts Hello from ilom ai' }],
             [{ text: '/owners' }, { text: '/menu' }]
         ],
         resize_keyboard: true,
@@ -353,6 +359,99 @@ ${rows.join('\n')}`);
         return sendText(chatId, `✅ Broadcast sent to ${sent} chats.`);
     };
 
+    const handleClearSession = async (chatId, user) => {
+        if (!isAdmin(user.id, adminIds)) return sendText(chatId, '❌ Admin only.');
+
+        const store = await loadStore();
+        const totalPairs = (store.pairs || []).length;
+
+        await clearAllPairedSessions();
+        store.pairs = [];
+        await saveStore(store);
+
+        return sendText(chatId, `✅ Cleared all paired sessions and removed ${totalPairs} saved pair record(s).`);
+    };
+
+    const handleIlomAi = async (chatId, text) => {
+        const prompt = text.replace(/^\/ilomai(@\w+)?/i, '').trim();
+        if (!prompt) return sendText(chatId, '❌ Usage: /ilomai <prompt>');
+
+        try {
+            await tgCall(token, 'sendChatAction', { chat_id: chatId, action: 'typing' });
+            const payload = await omegatechRequest('Claude-pro', {
+                prompt,
+                sessionId: String(chatId)
+            });
+            const answer = pickTextFromApiResponse(payload) || '⚠️ AI returned an empty response.';
+            return sendText(chatId, `🤖 Ilom AI:\n\n${answer}`);
+        } catch (error) {
+            return sendText(chatId, `❌ Ilom AI error: ${error.message}`);
+        }
+    };
+
+    const handleTextToSpeech = async (chatId, text) => {
+        const prompt = text.replace(/^\/tts(@\w+)?/i, '').trim();
+        if (!prompt) return sendText(chatId, '❌ Usage: /tts <text>');
+
+        try {
+            await tgCall(token, 'sendChatAction', { chat_id: chatId, action: 'record_voice' });
+            const payload = await omegatechRequest('Gemini-tts', { text: prompt });
+            const audioUrl = pickUrlFromApiResponse(payload);
+            if (!audioUrl) {
+                const fallback = pickTextFromApiResponse(payload);
+                return sendText(chatId, fallback ? `🔊 TTS result:\n${fallback}` : '⚠️ TTS completed but no audio URL was returned.');
+            }
+
+            await tgCall(token, 'sendVoice', {
+                chat_id: chatId,
+                voice: audioUrl,
+                caption: '🔊 Gemini human-like voice (TTS)'
+            });
+            return null;
+        } catch (error) {
+            return sendText(chatId, `❌ TTS error: ${error.message}`);
+        }
+    };
+
+    const handleImageGen = async (chatId, text) => {
+        const prompt = text.replace(/^\/img(@\w+)?/i, '').trim();
+        if (!prompt) return sendText(chatId, '❌ Usage: /img <prompt>');
+
+        try {
+            await tgCall(token, 'sendChatAction', { chat_id: chatId, action: 'upload_photo' });
+            const payload = await omegatechRequest('nano-banana-pro', { prompt });
+            const imageUrl = pickUrlFromApiResponse(payload);
+            if (!imageUrl) {
+                const fallback = pickTextFromApiResponse(payload);
+                return sendText(chatId, fallback ? `🖼️ Image API response:\n${fallback}` : '⚠️ Image generation completed but no image URL was returned.');
+            }
+
+            await tgCall(token, 'sendPhoto', {
+                chat_id: chatId,
+                photo: imageUrl,
+                caption: `🖼️ Prompt: ${prompt}`
+            });
+            return null;
+        } catch (error) {
+            return sendText(chatId, `❌ Image generation error: ${error.message}`);
+        }
+    };
+
+    const handleNormalChatAi = async (chatId, text) => {
+        if (!text || text.startsWith('/')) return null;
+        try {
+            await tgCall(token, 'sendChatAction', { chat_id: chatId, action: 'typing' });
+            const payload = await omegatechRequest('Claude-pro', {
+                prompt: text,
+                sessionId: String(chatId)
+            });
+            const answer = pickTextFromApiResponse(payload) || '⚠️ AI returned an empty response.';
+            return sendText(chatId, `🤖 ${answer}`);
+        } catch (error) {
+            return sendText(chatId, `❌ Chat AI error: ${error.message}`);
+        }
+    };
+
     const handleUpdate = async (update) => {
         const msg = update?.message;
         const text = msg?.text || '';
@@ -368,7 +467,12 @@ ${rows.join('\n')}`);
         if (/^\/pairs\b/i.test(text)) return handlePairs(chatId, user);
         if (/^\/listpair\b/i.test(text)) return handleListPair(chatId, user);
         if (/^\/broadcast\b/i.test(text)) return handleBroadcast(chatId, user, text);
+        if (/^\/clearsession\b/i.test(text)) return handleClearSession(chatId, user);
+        if (/^\/ilomai\b/i.test(text)) return handleIlomAi(chatId, text);
+        if (/^\/tts\b/i.test(text)) return handleTextToSpeech(chatId, text);
+        if (/^\/img\b/i.test(text)) return handleImageGen(chatId, text);
         if (/^\/owners\b/i.test(text)) return sendText(chatId, `👑 Owners:\n${ownerNumbers.join('\n')}`);
+        return handleNormalChatAi(chatId, text);
     };
 
     const loop = async () => {
