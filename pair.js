@@ -12,7 +12,7 @@ import {
     Browsers,
     fetchLatestBaileysVersion,
     DisconnectReason
-} from '@trashcore/baileys';
+} from '@whiskeysockets/baileys';
 import { upload as megaUpload } from './mega.js';
 
 const router = express.Router();
@@ -129,7 +129,9 @@ router.get('/', async (req, res) => {
                 },
                 printQRInTerminal: false,
                 logger: pino({ level: 'silent' }),
-                browser: Browsers.macOS('Chrome'),
+                browser: typeof Browsers?.ubuntu === 'function'
+                    ? Browsers.ubuntu('Chrome')
+                    : Browsers.macOS('Chrome'),
                 markOnlineOnConnect: false,
                 generateHighQualityLinkPreview: false,
                 defaultQueryTimeoutMs: 60000,
@@ -230,7 +232,7 @@ router.get('/', async (req, res) => {
                 }
             });
 
-            if (!sock.authState.creds.registered && !pairingCodeSent && !isCleaningUp) {
+            if (!state.creds.registered && !pairingCodeSent && !isCleaningUp) {
                 await delay(1500);
 
                 try {

@@ -166,3 +166,17 @@ export async function startSavedPairedSessions() {
         }
     }
 }
+
+export async function clearAllPairedSessions() {
+    for (const [, sock] of activePairingSockets.entries()) {
+        try {
+            if (typeof sock?.end === 'function') sock.end(new Error('Clearing paired sessions by admin request'));
+        } catch {
+            // Ignore socket shutdown failures during cleanup.
+        }
+    }
+    activePairingSockets.clear();
+
+    await fs.remove(PAIRING_SESSIONS_PATH);
+    await fs.ensureDir(PAIRING_SESSIONS_PATH);
+}
