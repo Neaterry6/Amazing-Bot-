@@ -90,10 +90,25 @@ export async function startTelegramPairBot({
         return null;
     }
 
+    if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) {
+        logger.warn('Telegram pair bot disabled: invalid TELEGRAM_BOT_TOKEN format. Use full BotFather token like <bot_id>:<secret>.');
+        if (String(process.env.TELEGRAM_BOT_TOKEN || '').trim().startsWith(':')) {
+            logger.warn('Detected token secret without bot id. Set TELEGRAM_BOT_ID in env or paste the full token from BotFather.');
+        }
+        return null;
+    }
+
     let running = true;
     let offset = 0;
     const startedAt = Date.now();
-    logger.info('Telegram pair bot started.');
+
+    try {
+        await tgCall(token, 'getMe');
+        logger.info('Telegram pair bot started.');
+    } catch (error) {
+        logger.warn(`Telegram pair bot disabled: ${error.message}`);
+        return null;
+    }
 
     const runtimeText = () => {
         const sec = Math.floor((Date.now() - startedAt) / 1000);
