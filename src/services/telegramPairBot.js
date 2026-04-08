@@ -130,60 +130,6 @@ function menuKeyboard() {
     };
 }
 
-async function omegatechRequest(endpoint, params = {}) {
-    const url = new URL(`https://omegatech-api.dixonomega.tech/api/ai/${endpoint}`);
-    for (const [key, value] of Object.entries(params)) {
-        if (value !== undefined && value !== null && String(value).trim() !== '') {
-            url.searchParams.set(key, String(value));
-        }
-    }
-
-    const response = await fetch(url.toString());
-    const contentType = response.headers.get('content-type') || '';
-    if (!response.ok) {
-        const errorBody = await response.text().catch(() => '');
-        throw new Error(`API request failed (${response.status}): ${errorBody || response.statusText}`);
-    }
-
-    if (!contentType.includes('application/json')) {
-        return { raw: await response.text() };
-    }
-
-    return response.json();
-}
-
-function pickTextFromApiResponse(payload) {
-    if (!payload) return '';
-    if (typeof payload === 'string') return payload;
-    if (typeof payload?.response === 'string') return payload.response;
-    if (typeof payload?.result === 'string') return payload.result;
-    if (typeof payload?.message === 'string') return payload.message;
-    if (typeof payload?.data?.response === 'string') return payload.data.response;
-    if (typeof payload?.data?.result === 'string') return payload.data.result;
-    if (typeof payload?.data?.message === 'string') return payload.data.message;
-    if (typeof payload?.raw === 'string') return payload.raw;
-    return '';
-}
-
-function pickUrlFromApiResponse(payload) {
-    if (!payload || typeof payload !== 'object') return '';
-    const candidates = [
-        payload.url,
-        payload.image,
-        payload.imageUrl,
-        payload.audio,
-        payload.audioUrl,
-        payload.result,
-        payload.data?.url,
-        payload.data?.image,
-        payload.data?.imageUrl,
-        payload.data?.audio,
-        payload.data?.audioUrl
-    ].filter((value) => typeof value === 'string' && /^https?:\/\//i.test(value));
-
-    return candidates[0] || '';
-}
-
 async function waitForConnectedSock(getSock, {
     timeoutMs = 20000,
     pollMs = 500
