@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import logger from '../utils/logger.js';
+import { generatePairingCode } from './pairingService.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const STORE_FILE = path.join(process.cwd(), 'data', 'telegram-pairs.json');
@@ -50,7 +51,8 @@ function buildMenu(user, runtimeText = '') {
         '├─────────────────❏',
         '│  📱 USER COMMANDS',
         '│  /pair <number>',
-        '│  /delpair',
+        '│  /pairs',
+        '│  /delpair <id>',
         '│',
         '├─────────────────❏',
         '│  🛡️ ADMIN COMMANDS',
@@ -126,44 +128,61 @@ export async function startTelegramPairBot({
         const number = normalizeNumber(raw);
         if (!number) return sendText(chatId, '❌ Usage: /pair 2349031575131');
 
-        const sock = getSock?.();
-        if (!sock || typeof sock.requestPairingCode !== 'function') {
-            return sendText(chatId, '❌ WhatsApp socket not ready. Try again shortly.');
+        try {
+            const paired = await generatePairingCode(number);
+
+            const store = await loadStore();
+            store.chats = Array.from(new Set([...(store.chats || []), String(chatId)]));
+            store.pairs = (store.pairs || []);
+            store.pairs.push({
+                id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                tgUserId: String(user.id),
+                tgUsername: user.username || user.first_name || 'unknown',
+                number: paired.number,
+                code: paired.code,
+                createdAt: nowISO(),
+                status: 'code_sent'
+            });
+            await saveStore(store);
+
+            return sendText(
+                chatId,
+                [
+                    `🔐 Pair code for +${paired.number}:`,
+                    `*${paired.code}*`,
+                    '',
+                    'Open WhatsApp > Linked devices > Link with phone number, then enter this code.'
+                ].join('\n')
+            );
+        } catch (error) {
+            return sendText(chatId, `❌ Pair failed: ${error.message}`);
         }
-
-        const codeRaw = await sock.requestPairingCode(number);
-        const code = codeRaw?.match(/.{1,4}/g)?.join('-') || codeRaw;
-
-        const store = await loadStore();
-        store.chats = Array.from(new Set([...(store.chats || []), String(chatId)]));
-        store.pairs = (store.pairs || []).filter((x) => x.tgUserId !== String(user.id));
-        store.pairs.push({
-            tgUserId: String(user.id),
-            tgUsername: user.username || user.first_name || 'unknown',
-            number,
-            code,
-            createdAt: nowISO(),
-            status: 'code_sent'
-        });
-        await saveStore(store);
-
-        return sendText(
-            chatId,
-            [
-                `🔐 Pair code for +${number}:`,
-                `*${code}*`,
-                '',
-                'Open WhatsApp > Linked devices > Link with phone number, then enter this code.'
-            ].join('\n')
-        );
     };
 
-    const handleDeletePair = async (chatId, user) => {
+    const handleDeletePair = async (chatId, user, text) => {
+        const id = text.replace(/^\/delpair(@\w+)?/i, '').trim();
         const store = await loadStore();
         const before = store.pairs?.length || 0;
-        store.pairs = (store.pairs || []).filter((x) => x.tgUserId !== String(user.id));
+
+        if (id) {
+            store.pairs = (store.pairs || []).filter((x) => x.id !== id || x.tgUserId !== String(user.id));
+        } else {
+            store.pairs = (store.pairs || []).filter((x) => x.tgUserId !== String(user.id));
+        }
+
         await saveStore(store);
         return sendText(chatId, before === store.pairs.length ? 'ℹ️ No saved pair record found.' : '✅ Pair record removed.');
+    };
+
+
+    const handlePairs = async (chatId, user) => {
+        const store = await loadStore();
+        const mine = (store.pairs || []).filter((x) => x.tgUserId === String(user.id)).slice(-25).reverse();
+        if (!mine.length) return sendText(chatId, 'ℹ️ You have no saved pair records yet.');
+        const rows = mine.map((x, i) => `${i + 1}. ${x.number} • ${x.status} • id:${x.id}`);
+        return sendText(chatId, `📄 Your pair records:
+
+${rows.join('\n')}`);
     };
 
     const handleListPair = async (chatId, user) => {
@@ -201,7 +220,8 @@ export async function startTelegramPairBot({
             return sendText(chatId, buildMenu(user, runtimeText()));
         }
         if (/^\/pair\b/i.test(text)) return handlePair(chatId, user, text);
-        if (/^\/delpair\b/i.test(text)) return handleDeletePair(chatId, user);
+        if (/^\/delpair\b/i.test(text)) return handleDeletePair(chatId, user, text);
+        if (/^\/pairs\b/i.test(text)) return handlePairs(chatId, user);
         if (/^\/listpair\b/i.test(text)) return handleListPair(chatId, user);
         if (/^\/broadcast\b/i.test(text)) return handleBroadcast(chatId, user, text);
         if (/^\/owners\b/i.test(text)) return sendText(chatId, `👑 Owners:\n${ownerNumbers.join('\n')}`);
