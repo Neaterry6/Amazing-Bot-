@@ -176,6 +176,7 @@ export async function startTelegramPairBot({
                 tgUsername: user.username || user.first_name || 'unknown',
                 number: paired.number,
                 code: paired.code,
+                sessionPath: paired.sessionPath || null,
                 createdAt: nowISO(),
                 status: 'code_sent'
             });
@@ -187,7 +188,8 @@ export async function startTelegramPairBot({
                     `🔐 Pair code for +${paired.number}:`,
                     `*${paired.code}*`,
                     '',
-                    'Open WhatsApp > Linked devices > Link with phone number, then enter this code.'
+                    'Open WhatsApp > Linked devices > Link with phone number, then enter this code.',
+                    'After success, this number gets its own saved session folder automatically.'
                 ].join('\n'),
                 { parse_mode: 'Markdown' }
             );
