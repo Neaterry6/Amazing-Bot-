@@ -9,6 +9,17 @@ function nowISO() {
     return new Date().toISOString();
 }
 
+function normalizeTelegramToken(value = '', botId = process.env.TELEGRAM_BOT_ID) {
+    const raw = String(value || '').trim().replace(/^bot/i, '');
+    const id = String(botId || '').trim();
+
+    if (!raw) return '';
+    if (raw.includes(':')) return raw.replace(/^:/, '');
+    if (id) return `${id}:${raw.replace(/^:/, '')}`;
+
+    return raw.replace(/^:/, '');
+}
+
 function normalizeNumber(value = '') {
     const clean = String(value || '').replace(/\D/g, '');
     if (clean.length < 10 || clean.length > 15) return null;
@@ -76,18 +87,35 @@ async function tgCall(token, method, payload = {}) {
 export async function startTelegramPairBot({
     getSock,
     ownerNumbers = [],
-    token = process.env.TELEGRAM_BOT_TOKEN,
+    token = normalizeTelegramToken(process.env.TELEGRAM_BOT_TOKEN),
     adminIds = (process.env.TELEGRAM_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean)
 } = {}) {
+    token = normalizeTelegramToken(token);
+
     if (!token) {
         logger.info('Telegram pair bot disabled (TELEGRAM_BOT_TOKEN not set)');
+        return null;
+    }
+
+    if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) {
+        logger.warn('Telegram pair bot disabled: invalid TELEGRAM_BOT_TOKEN format. Use full BotFather token like <bot_id>:<secret>.');
+        if (String(process.env.TELEGRAM_BOT_TOKEN || '').trim().startsWith(':')) {
+            logger.warn('Detected token secret without bot id. Set TELEGRAM_BOT_ID in env or paste the full token from BotFather.');
+        }
         return null;
     }
 
     let running = true;
     let offset = 0;
     const startedAt = Date.now();
-    logger.info('Telegram pair bot started.');
+
+    try {
+        await tgCall(token, 'getMe');
+        logger.info('Telegram pair bot started.');
+    } catch (error) {
+        logger.warn(`Telegram pair bot disabled: ${error.message}`);
+        return null;
+    }
 
     const runtimeText = () => {
         const sec = Math.floor((Date.now() - startedAt) / 1000);
