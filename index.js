@@ -515,6 +515,7 @@ async function setupEventHandlers(sock, saveCreds) {
 }
 
 async function promptPairingNumber() {
+    if (String(process.env.ENABLE_PANEL_PAIRING || '').toLowerCase() !== 'true') return null;
     if (cachedPairingNumber) return cachedPairingNumber;
 
     const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
@@ -538,6 +539,7 @@ async function promptPairingNumber() {
         rl.close();
     }
 }
+
 
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
