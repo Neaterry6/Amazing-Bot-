@@ -94,6 +94,18 @@ async function tgCall(token, method, payload = {}) {
     return data.result;
 }
 
+function menuKeyboard() {
+    return {
+        keyboard: [
+            [{ text: '/pair 2349031575131' }],
+            [{ text: '/pairs' }, { text: '/delpair' }],
+            [{ text: '/owners' }, { text: '/menu' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: false
+    };
+}
+
 export async function startTelegramPairBot({
     getSock,
     ownerNumbers = [],
@@ -133,8 +145,18 @@ export async function startTelegramPairBot({
         return `${min}m ${rem}s`;
     };
 
-    const sendText = async (chatId, text) => {
-        await tgCall(token, 'sendMessage', { chat_id: chatId, text });
+    const sendText = async (chatId, text, extra = {}) => {
+        await tgCall(token, 'sendMessage', {
+            chat_id: chatId,
+            text,
+            ...extra
+        });
+    };
+
+    const sendMenu = async (chatId, user) => {
+        await sendText(chatId, buildMenu(user, runtimeText()), {
+            reply_markup: menuKeyboard()
+        });
     };
 
     const handlePair = async (chatId, user, text) => {
@@ -166,7 +188,8 @@ export async function startTelegramPairBot({
                     `*${paired.code}*`,
                     '',
                     'Open WhatsApp > Linked devices > Link with phone number, then enter this code.'
-                ].join('\n')
+                ].join('\n'),
+                { parse_mode: 'Markdown' }
             );
         } catch (error) {
             return sendText(chatId, `❌ Pair failed: ${error.message}`);
@@ -231,7 +254,7 @@ ${rows.join('\n')}`);
         if (!chatId || !text || !user) return;
 
         if (/^\/start/i.test(text) || /^\/menu/i.test(text)) {
-            return sendText(chatId, buildMenu(user, runtimeText()));
+            return sendMenu(chatId, user);
         }
         if (/^\/pair\b/i.test(text)) return handlePair(chatId, user, text);
         if (/^\/delpair\b/i.test(text)) return handleDeletePair(chatId, user, text);
