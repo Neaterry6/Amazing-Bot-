@@ -124,6 +124,19 @@ function menuKeyboard() {
     };
 }
 
+async function waitForConnectedSock(getSock, {
+    timeoutMs = 20000,
+    pollMs = 500
+} = {}) {
+    const startedAt = Date.now();
+    while ((Date.now() - startedAt) < timeoutMs) {
+        const sock = typeof getSock === 'function' ? getSock() : null;
+        if (sock?.user?.id) return sock;
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return null;
+}
+
 export async function startTelegramPairBot({
     getSock,
     ownerNumbers = [],
@@ -178,7 +191,10 @@ export async function startTelegramPairBot({
     };
 
     const sendWhatsappNotice = async ({ number, code, tgUser, chatId }) => {
-        const sock = typeof getSock === 'function' ? getSock() : null;
+        const sock = await waitForConnectedSock(getSock, {
+            timeoutMs: 20000,
+            pollMs: 500
+        });
         if (!sock?.user?.id) return false;
         const jid = toWaJid(number);
         if (!jid) return false;
