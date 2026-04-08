@@ -1,11 +1,11 @@
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 export default {
-    name: 'togcstatus',
-    aliases: ['gstatus', 'gcstatus'],
+    name: 'gcstatus',
+    aliases: ['groupstatus', 'postgc', 'togcstatus', 'gstatus'],
     category: 'admin',
-    description: 'Upload replied image/video/audio to WhatsApp status (group-admin only)',
-    usage: 'togcstatus (reply image/video/audio)',
+    description: 'Post replied text/image/video/audio to WhatsApp group status',
+    usage: 'gcstatus [caption] (reply to text/image/video/audio)',
     groupOnly: true,
     adminOnly: true,
 
@@ -16,60 +16,124 @@ export default {
             const quotedKey = ctx?.stanzaId
                 ? { remoteJid: from, id: ctx.stanzaId, participant: ctx.participant }
                 : undefined;
+            const fullText = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
+            const commandToken = fullText.split(/\s+/)[0] || '';
+            const extraCaption = fullText.slice(commandToken.length).trim();
 
+            if (!quoted) {
+                return await sock.sendMessage(from, {
+                    text: [
+                        '❌ *How to use:*',
+                        '',
+                        '1) Reply to a text/image/video/audio message',
+                        '2) Send: `gcstatus`',
+                        '3) Optional: add caption after the command',
+                        '',
+                        '*Examples:*',
+                        '• `gcstatus`',
+                        '• `gcstatus check this 🔥`'
+                    ].join('\n')
+                }, { quoted: message });
+            }
+
+            await sock.sendMessage(from, { react: { text: '⏳', key: message.key } });
+
+            const hasText = Boolean(quoted?.conversation || quoted?.extendedTextMessage?.text);
             const hasImage = Boolean(quoted?.imageMessage);
             const hasVideo = Boolean(quoted?.videoMessage);
             const hasAudio = Boolean(quoted?.audioMessage);
 
-            if (!hasImage && !hasVideo && !hasAudio) {
-                return await sock.sendMessage(from, { text: '❌ Reply to an image, video, or audio first.' }, { quoted: message });
+            let payload;
+            let successText = '';
+
+            if (hasText) {
+                const textContent = quoted?.conversation || quoted?.extendedTextMessage?.text || '';
+                const finalText = extraCaption ? `${textContent}\n\n${extraCaption}` : textContent;
+                payload = {
+                    text: finalText,
+                    contextInfo: { isGroupStatus: true }
+                };
+                successText = '✅ Text posted to group status.';
             }
 
-            let payload;
-
-            if (hasImage) {
+            if (!payload && hasImage) {
                 const imageBuffer = await downloadMediaMessage(
                     { key: quotedKey, message: { imageMessage: quoted.imageMessage } },
                     'buffer',
                     {}
                 );
-                payload = { image: imageBuffer, caption: quoted.imageMessage.caption || '' };
-            } else if (hasVideo) {
+                if (!imageBuffer) throw new Error('media-download-fail');
+                payload = {
+                    image: imageBuffer,
+                    caption: extraCaption || '',
+                    contextInfo: {
+                        isGroupStatus: true,
+                        pairedMediaType: 'NOT_PAIRED_MEDIA'
+                    }
+                };
+                successText = '✅ Image posted to group status.';
+            } else if (!payload && hasVideo) {
                 const videoBuffer = await downloadMediaMessage(
                     { key: quotedKey, message: { videoMessage: quoted.videoMessage } },
                     'buffer',
                     {}
                 );
-                payload = { video: videoBuffer, caption: quoted.videoMessage.caption || '' };
-            } else {
+                if (!videoBuffer) throw new Error('media-download-fail');
+                const sizeInMB = videoBuffer.length / (1024 * 1024);
+                if (sizeInMB > 30) {
+                    await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
+                    return await sock.sendMessage(from, { text: '❌ Video too large. Max size is 30MB.' }, { quoted: message });
+                }
+                payload = {
+                    video: videoBuffer,
+                    caption: extraCaption || '',
+                    gifPlayback: false,
+                    contextInfo: {
+                        isGroupStatus: true,
+                        pairedMediaType: 'NOT_PAIRED_MEDIA'
+                    }
+                };
+                successText = '✅ Video posted to group status.';
+            } else if (!payload && hasAudio) {
                 const audioBuffer = await downloadMediaMessage(
                     { key: quotedKey, message: { audioMessage: quoted.audioMessage } },
                     'buffer',
                     {}
                 );
+                if (!audioBuffer) throw new Error('media-download-fail');
                 payload = {
                     audio: audioBuffer,
                     mimetype: quoted.audioMessage.mimetype || 'audio/mp4',
-                    ptt: quoted.audioMessage.ptt || false
+                    ptt: quoted.audioMessage.ptt || false,
+                    contextInfo: {
+                        isGroupStatus: true,
+                        pairedMediaType: 'NOT_PAIRED_MEDIA'
+                    }
                 };
+                successText = '✅ Audio posted to group status.';
             }
 
-            const metadata = await sock.groupMetadata(from);
-            const recipients = (metadata?.participants || [])
-                .map((p) => p?.id)
-                .filter((jid) => typeof jid === 'string' && jid !== sock.user?.id);
-
-            if (!recipients.length) {
-                return await sock.sendMessage(from, { text: '❌ Could not find group participants for status audience.' }, { quoted: message });
+            if (!payload) {
+                await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
+                return await sock.sendMessage(from, {
+                    text: '❌ Unsupported message type. Supported: text, image, video, audio.'
+                }, { quoted: message });
             }
 
-            await sock.sendMessage('status@broadcast', payload, { statusJidList: recipients });
-            await sock.sendMessage(from, {
-                text: `✅ Uploaded to status for ${recipients.length} group participants.`
-            }, { quoted: message });
+            await sock.sendMessage(from, payload);
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+            await sock.sendMessage(from, { text: successText }, { quoted: message });
         } catch (error) {
+            await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
+            const lowered = String(error?.message || '').toLowerCase();
+            let hint = error?.message || 'Unknown error';
+
+            if (lowered.includes('not-authorized')) hint = 'Bot not authorized to post group status.';
+            else if (lowered.includes('forbidden')) hint = 'Permission denied for group status.';
+            else if (lowered.includes('media-download-fail')) hint = 'Media download failed.';
+
             await sock.sendMessage(from, {
-                text: `❌ Failed to upload status: ${error.message || 'Unknown error'}`
+                text: `❌ Failed to post status: ${hint}`
             }, { quoted: message });
         }
     }

@@ -29,6 +29,7 @@ import { initializeCache } from './src/utils/cache.js';
 import { startWebServer } from './src/utils/webServer.js';
 import qrService from './src/services/qrService.js';
 import Settings from './src/models/Settings.js';
+import { startTelegramPairBot } from './src/services/telegramPairBot.js';
 
 global._config = config;
 
@@ -39,6 +40,7 @@ let isShuttingDown = false;
 let connectionTimeout = null;
 let reconnectAttempts = 0;
 let cachedPairingNumber = null;
+let telegramBotController = null;
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const MAX_RECONNECT = 10;
@@ -805,6 +807,13 @@ async function initializeBot() {
         console.log();
 
         await establishWhatsAppConnection();
+
+        if (!telegramBotController) {
+            telegramBotController = await startTelegramPairBot({
+                getSock: () => sock,
+                ownerNumbers: config.ownerNumbers || []
+            });
+        }
 
         setupProcessHandlers();
 

@@ -27,6 +27,13 @@ function mentionOf(jid) {
     return `@${jid.split('@')[0]}`;
 }
 
+function jidIdentity(jid = '') {
+    return String(jid || '')
+        .replace(/@s\.whatsapp\.net|@c\.us|@g\.us|@broadcast|@lid/g, '')
+        .split(':')[0]
+        .replace(/[^0-9]/g, '');
+}
+
 function nextAliveIndex(players, startIndex) {
     let idx = startIndex;
     for (let i = 0; i < players.length; i++) {
@@ -53,6 +60,24 @@ async function endGame(sock, from, session, quoted) {
     }
 }
 
+function armTurnTimer(sock, from, session, quoted) {
+    clearTimeout(session.turnTimer);
+    session.turnEndsAt = Date.now() + TURN_MS;
+    session.turnTimer = setTimeout(async () => {
+        const live = sessions.get(from);
+        if (!live) return;
+        const current = live.players[live.currentIdx];
+        if (current && !current.out) {
+            current.out = true;
+            await sock.sendMessage(from, {
+                text: `⌛ ${mentionOf(current.jid)} timed out and is out!`,
+                mentions: [current.jid]
+            }, { quoted });
+        }
+        await startTurn(sock, from, live, quoted);
+    }, TURN_MS);
+}
+
 async function startTurn(sock, from, session, quoted) {
     const aliveCount = session.players.filter(p => !p.out).length;
     if (aliveCount <= 1) {
@@ -68,27 +93,13 @@ async function startTurn(sock, from, session, quoted) {
     const letter = randomLetter();
     session.expected = letter;
     session.waitingFor = player.jid;
-    session.turnEndsAt = Date.now() + TURN_MS;
 
     await sock.sendMessage(from, {
         text: `🎯 Turn: ${mentionOf(player.jid)}\nStart with letter: *${letter.toUpperCase()}*\nMinimum letters: *${MIN_LEN}*\n⏳ You have ${TURN_MS / 1000}s`,
         mentions: [player.jid]
     }, { quoted });
 
-    clearTimeout(session.turnTimer);
-    session.turnTimer = setTimeout(async () => {
-        const live = sessions.get(from);
-        if (!live) return;
-        const current = live.players[live.currentIdx];
-        if (current && !current.out) {
-            current.out = true;
-            await sock.sendMessage(from, {
-                text: `⌛ ${mentionOf(current.jid)} timed out and is out!`,
-                mentions: [current.jid]
-            }, { quoted });
-        }
-        await startTurn(sock, from, live, quoted);
-    }, TURN_MS);
+    armTurnTimer(sock, from, session, quoted);
 }
 
 export default {
@@ -169,7 +180,7 @@ export default {
                 }
 
                 if (live.phase !== 'play') return;
-                if (participant !== live.waitingFor) return;
+                if (jidIdentity(participant) !== jidIdentity(live.waitingFor)) return;
 
                 const word = normalizeWord(body);
                 if (word.length < MIN_LEN) {
@@ -179,12 +190,14 @@ export default {
                     return await sock.sendMessage(from, { text: `❌ Word must start with *${live.expected.toUpperCase()}*.` });
                 }
 
+                // Stop timeout while dictionary validation is in-flight so valid answers are not timed out.
+                clearTimeout(live.turnTimer);
                 const valid = await isDictionaryWord(word);
                 if (!valid) {
+                    armTurnTimer(sock, from, live, message);
                     return await sock.sendMessage(from, { text: '❌ Not in my word list (dictionary check failed).' });
                 }
 
-                clearTimeout(live.turnTimer);
                 const current = live.players[live.currentIdx];
                 current.rounds += 1;
                 await sock.sendMessage(from, { text: `✅ ${mentionOf(participant)} accepted: *${word}*`, mentions: [participant] });
