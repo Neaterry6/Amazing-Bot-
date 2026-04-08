@@ -541,14 +541,6 @@ async function promptPairingNumber() {
 }
 
 
-function shouldUsePairingCodeFlow() {
-    if (String(process.env.ENABLE_PANEL_PAIRING || '').toLowerCase() === 'true') return true;
-    const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
-    return envNumber.length >= 10;
-}
-
-
-
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
     const number = await promptPairingNumber();
