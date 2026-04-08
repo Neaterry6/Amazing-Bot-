@@ -4,6 +4,11 @@ import axios from 'axios';
 import yts from 'yt-search';
 import translate from 'translate-google-api';
 import CryptoJS from 'crypto-js';
+import { exec as execCb } from 'child_process';
+import { promisify } from 'util';
+import { cache } from '../../utils/cache.js';
+import { commandManager } from '../../utils/commandManager.js';
+import config from '../../config.js';
 
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
 const SESSION_FILE = path.join(process.cwd(), 'data', 'ilom-sessions.json');
@@ -19,6 +24,7 @@ const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
 const COMMAND_ROOT = path.join(process.cwd(), 'src', 'commands');
 const VALID_CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
 const TEMPLATE_GUIDE_FILE = path.join(process.cwd(), 'COMMAND_GUIDE.md');
+const execAsync = promisify(execCb);
 
 const LANGUAGE_ALIASES = {
     english: 'en',
@@ -113,6 +119,13 @@ function toSessionId(sender = '', from = '') {
     return `${from}::${cleanSender}`;
 }
 
+function jidToNumber(jid = '') {
+    return String(jid || '')
+        .replace(/@s\.whatsapp\.net|@c\.us|@g\.us|@broadcast|@lid/g, '')
+        .split(':')[0]
+        .replace(/[^0-9]/g, '');
+}
+
 async function loadSessions() {
     try {
         const data = await fs.readJSON(SESSION_FILE);
@@ -170,9 +183,56 @@ async function findFileByName(fileName, base = process.cwd()) {
     return null;
 }
 
+async function listDirectorySafe(relativeInput = '.') {
+    const root = process.cwd();
+    const targetInput = (relativeInput || '.').trim();
+    const normalized = path.normalize(targetInput);
+    const resolved = path.resolve(root, normalized);
+
+    if (!resolved.startsWith(root)) {
+        throw new Error('Access denied: path is outside project root.');
+    }
+
+    const stat = await fs.stat(resolved).catch(() => null);
+    if (!stat || !stat.isDirectory()) {
+        throw new Error('Directory not found.');
+    }
+
+    const entries = await fs.readdir(resolved, { withFileTypes: true });
+    return entries
+        .filter((entry) => !entry.name.startsWith('.'))
+        .sort((a, b) => {
+            if (a.isDirectory() && !b.isDirectory()) return -1;
+            if (!a.isDirectory() && b.isDirectory()) return 1;
+            return a.name.localeCompare(b.name);
+        })
+        .map((entry) => ({ name: entry.name, type: entry.isDirectory() ? 'dir' : 'file' }));
+}
+
 function encryptTextPayload(payload, keySeed = '') {
     const secret = process.env.ILOM_FILE_SECRET || process.env.CEREBRAS_API_KEY || keySeed || 'ilom-default-secret';
     return CryptoJS.AES.encrypt(payload, secret).toString();
+}
+
+async function runLocalCommand(rawCmd = '') {
+    const command = String(rawCmd || '').trim();
+    if (!command) throw new Error('No command provided.');
+
+    const blocked = ['rm -rf /', 'shutdown', 'reboot', ':(){:|:&};:', 'mkfs', 'dd if='];
+    const lowered = command.toLowerCase();
+    if (blocked.some((word) => lowered.includes(word))) {
+        throw new Error('Blocked command for safety.');
+    }
+
+    const { stdout, stderr } = await execAsync(command, {
+        cwd: process.cwd(),
+        timeout: 20_000,
+        maxBuffer: 1024 * 1024
+    });
+
+    const out = String(stdout || '').trim();
+    const err = String(stderr || '').trim();
+    return { out, err };
 }
 
 async function askAI(prompt) {
@@ -387,6 +447,10 @@ export default {
         const sessionId = toSessionId(sender, from);
         const session = await getSession(sessionId);
         const { targetJid } = resolveReplyOrMentionTarget(message);
+        const mainOwner = config.ownerNumbers?.[0] || '';
+        const isMainOwner = jidToNumber(sender) && jidToNumber(sender) === jidToNumber(mainOwner);
+
+        if (!isMainOwner) return;
 
         if (/^on$/i.test(input)) {
             if (!isPrivileged) return;
@@ -479,6 +543,59 @@ export default {
             return await sendIlomMessage(sock, from, message, `🧩 Bot Command Index\n\n${lines}`, { sender, targetJid });
         }
 
+        if (/^ls(?:\s+.+)?$/i.test(input)) {
+            const dirArg = input.replace(/^ls/i, '').trim() || '.';
+            try {
+                const entries = await listDirectorySafe(dirArg);
+                if (!entries.length) {
+                    return await sendIlomMessage(sock, from, message, '📂 Directory is empty.', { sender, targetJid });
+                }
+
+                const relDir = dirArg === '.' ? '.' : dirArg;
+                const rendered = entries
+                    .slice(0, 120)
+                    .map((entry) => `- ${entry.type === 'dir' ? '📁' : '📄'} ${entry.name}`)
+                    .join('\n');
+                const truncated = entries.length > 120 ? `\n\n…and ${entries.length - 120} more entries.` : '';
+                return await sendIlomMessage(
+                    sock,
+                    from,
+                    message,
+                    `Here are the contents of \`${relDir}\`:\n\n${rendered}${truncated}`,
+                    { sender, targetJid }
+                );
+            } catch (error) {
+                return await sendIlomMessage(sock, from, message, `❌ ls failed: ${error.message}`, { sender, targetJid });
+            }
+        }
+
+        if (/^clear cache$/i.test(input)) {
+            try {
+                const [cacheCleared] = await Promise.allSettled([
+                    cache.flush(),
+                    commandManager.initializeCommands()
+                ]);
+
+                if (global.replyHandlers && typeof global.replyHandlers === 'object') {
+                    global.replyHandlers = {};
+                }
+
+                if (cacheCleared.status === 'rejected') {
+                    throw cacheCleared.reason;
+                }
+
+                return await sendIlomMessage(
+                    sock,
+                    from,
+                    message,
+                    '✅ Cache cleared and command registry refreshed.\nIf you need a full process reboot, run the `restart` owner command.',
+                    { sender, targetJid }
+                );
+            } catch (error) {
+                return await sendIlomMessage(sock, from, message, `❌ Clear cache failed: ${error.message}`, { sender, targetJid });
+            }
+        }
+
         if (/create command(?! like)/i.test(input) && isPrivileged) {
             const parsed = input.match(/create command\s+([a-z]+)\s+([a-z0-9_-]+)(?:\s*[:|-]\s*(.+))?/i);
             if (!parsed) {
@@ -495,8 +612,45 @@ export default {
             const code = buildCommandTemplate({ category, name, description });
             await fs.ensureDir(path.dirname(filePath));
             await fs.writeFile(filePath, code, 'utf8');
-            await commandHandler.loadCommands();
+            await commandManager.reloadAllCommands();
             return await sendIlomMessage(sock, from, message, `✅ Command created: src/commands/${category}/${name}.js`, { sender, targetJid });
+        }
+
+        if (/^(create|build|generate)\s+command\s+(?:from\s+)?description/i.test(input) && isPrivileged) {
+            const parsed = input.match(/(?:create|build|generate)\s+command\s+(?:from\s+)?description\s+([a-z]+)\s+([a-z0-9_-]+)\s*[:|-]\s*(.+)$/i);
+            if (!parsed) {
+                return await sendIlomMessage(sock, from, message, '❌ Usage: ilom create command from description <category> <name> : <what it should do>', { sender, targetJid });
+            }
+
+            const category = parsed[1].toLowerCase();
+            const name = parsed[2].toLowerCase();
+            const description = parsed[3].trim();
+
+            if (!VALID_CATEGORIES.includes(category)) {
+                return await sendIlomMessage(sock, from, message, `❌ Invalid category. Use: ${VALID_CATEGORIES.join(', ')}`, { sender, targetJid });
+            }
+
+            const filePath = sanitizeCommandPath(path.join(category, `${name}.js`));
+            if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid command path.', { sender, targetJid });
+
+            const prompt = [
+                'Generate a WhatsApp bot command file in JavaScript.',
+                'Must use default export object: { name, aliases, category, description, usage, async execute(...) }.',
+                `Command category: ${category}`,
+                `Command name: ${name}`,
+                `Behavior description: ${description}`,
+                'Return only raw JS code.'
+            ].join('\n');
+
+            let generated = await askAI(prompt);
+            if (!/export\s+default/.test(generated)) {
+                generated = buildCommandTemplate({ category, name, description });
+            }
+
+            await fs.ensureDir(path.dirname(filePath));
+            await fs.writeFile(filePath, generated.trim(), 'utf8');
+            await commandManager.reloadAllCommands();
+            return await sendIlomMessage(sock, from, message, `✅ Generated and saved: src/commands/${category}/${name}.js`, { sender, targetJid });
         }
 
         if (/create (this|that|same) command|create command like/i.test(input) && isPrivileged) {
@@ -522,7 +676,7 @@ export default {
             if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid command path.', { sender, targetJid });
             await fs.ensureDir(path.dirname(filePath));
             await fs.writeFile(filePath, remapped, 'utf8');
-            await commandHandler.loadCommands();
+            await commandManager.reloadAllCommands();
             return await sendIlomMessage(sock, from, message, `✅ Command cloned from your reply: src/commands/${category}/${name}.js`, { sender, targetJid });
         }
 
@@ -543,7 +697,7 @@ export default {
             if (!filePath) return await sendIlomMessage(sock, from, message, '❌ Invalid install path.', { sender, targetJid });
             await fs.ensureDir(path.dirname(filePath));
             await fs.writeFile(filePath, code, 'utf8');
-            await commandHandler.loadCommands();
+            await commandManager.reloadAllCommands();
             return await sendIlomMessage(sock, from, message, `✅ Installed command: src/commands/${category}/${commandName}.js`, { sender, targetJid });
         }
 
@@ -557,8 +711,25 @@ export default {
                 return await sendIlomMessage(sock, from, message, '❌ File not found for deletion.', { sender, targetJid });
             }
             await fs.remove(resolved);
-            await commandHandler.loadCommands();
+            await commandManager.reloadAllCommands();
             return await sendIlomMessage(sock, from, message, `🗑️ Deleted: ${path.relative(process.cwd(), resolved)}`, { sender, targetJid });
+        }
+
+        if (/^(cmd|run|terminal)\b/i.test(input) && isPrivileged) {
+            const rawCmd = input.replace(/^(cmd|run|terminal)\b/i, '').trim();
+            if (!rawCmd) {
+                return await sendIlomMessage(sock, from, message, '❌ Usage: ilom cmd <shell command>', { sender, targetJid });
+            }
+            try {
+                const result = await runLocalCommand(rawCmd);
+                const output = [`💻 Command: ${rawCmd}`];
+                if (result.out) output.push(`\n📤 stdout:\n${result.out.slice(0, 3500)}`);
+                if (result.err) output.push(`\n⚠️ stderr:\n${result.err.slice(0, 1200)}`);
+                if (!result.out && !result.err) output.push('\n✅ Done (no output).');
+                return await sendIlomMessage(sock, from, message, output.join('\n'), { sender, targetJid });
+            } catch (error) {
+                return await sendIlomMessage(sock, from, message, `❌ Command failed: ${error.message}`, { sender, targetJid });
+            }
         }
 
         if (/send me (song|music)/i.test(input)) {
