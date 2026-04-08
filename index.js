@@ -600,7 +600,7 @@ async function establishWhatsAppConnection() {
             }, 120000);
 
             sock.ev.on('connection.update', async ({ connection, lastDisconnect, qr }) => {
-                if (connection === 'connecting' && !state.creds?.registered && !pairingRequested) {
+                if (connection === 'connecting' && !state.creds?.registered && !pairingRequested && shouldUsePairingCodeFlow()) {
                     pairingRequested = true;
                     setTimeout(() => {
                         requestPairingCodeIfNeeded(sock, false).catch((e) => {
@@ -619,8 +619,6 @@ async function establishWhatsAppConnection() {
                         if (qrService.isQREnabled()) {
                             await qrService.generateQR(qr).catch(() => {});
                         }
-                    } else {
-                        logger.info('QR generated but waiting for pairing-code link flow.');
                     }
                 }
 
@@ -803,19 +801,19 @@ async function initializeBot() {
         await startWebServer(app);
         stepDone('🌐', 'Web Server', `Port ${config.server?.port || process.env.PORT || 5000}`);
 
-        console.log();
-        console.log(tline);
-        stepLoading('📡', 'WhatsApp');
-        console.log();
-
-        await establishWhatsAppConnection();
-
         if (!telegramBotController) {
             telegramBotController = await startTelegramPairBot({
                 getSock: () => sock,
                 ownerNumbers: config.ownerNumbers || []
             });
         }
+
+        console.log();
+        console.log(tline);
+        stepLoading('📡', 'WhatsApp');
+        console.log();
+
+        await establishWhatsAppConnection();
 
         setupProcessHandlers();
 
