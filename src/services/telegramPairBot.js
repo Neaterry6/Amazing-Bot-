@@ -9,15 +9,8 @@ function nowISO() {
     return new Date().toISOString();
 }
 
-function normalizeTelegramToken(value = '', botId = process.env.TELEGRAM_BOT_ID) {
-    const raw = String(value || '').trim().replace(/^bot/i, '');
-    const id = String(botId || '').trim();
-
-    if (!raw) return '';
-    if (raw.includes(':')) return raw.replace(/^:/, '');
-    if (id) return `${id}:${raw.replace(/^:/, '')}`;
-
-    return raw.replace(/^:/, '');
+function normalizeTelegramToken(value = '') {
+    return String(value || '').trim().replace(/^bot/i, '').replace(/^:/, '');
 }
 
 function normalizeNumber(value = '') {
