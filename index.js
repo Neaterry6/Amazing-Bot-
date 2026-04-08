@@ -40,6 +40,8 @@ let sock = null;
 let isShuttingDown = false;
 let connectionTimeout = null;
 let reconnectAttempts = 0;
+let reconnectTimer = null;
+let reconnectInProgress = false;
 let cachedPairingNumber = null;
 let telegramBotController = null;
 
@@ -565,6 +567,12 @@ async function requestPairingCodeIfNeeded(sock, isRegistered) {
 async function establishWhatsAppConnection() {
     return new Promise(async (resolve, reject) => {
         try {
+            reconnectInProgress = false;
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+
             const { makeWASocket, Browsers, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, DisconnectReason } = await import('@whiskeysockets/baileys');
 
             const { state, saveCreds } = await useMultiFileAuthState(SESSION_PATH);
@@ -622,6 +630,7 @@ async function establishWhatsAppConnection() {
                     clearTimeout(connectionTimeout);
                     connectionTimeout = null;
                     reconnectAttempts = 0;
+                    reconnectInProgress = false;
 
                     stepDone('📡', 'WhatsApp', chalk.greenBright('Connected!'));
                     console.log();
@@ -677,6 +686,15 @@ async function establishWhatsAppConnection() {
                         }
                     }
 
+                    try {
+                        sock?.ev?.removeAllListeners?.('connection.update');
+                        sock?.ev?.removeAllListeners?.('creds.update');
+                        sock?.ws?.close?.();
+                        sock?.end?.(lastDisconnect?.error || new Error(`connection_closed_${statusCode || 'unknown'}`));
+                    } catch {}
+                    sock = null;
+                    global.sock = null;
+
                     console.log(chalk.yellowBright(`\n  ⚠  Disconnected (${statusCode}) — reconnecting...\n`));
                     handleReconnect(resolve, reject);
                 }
@@ -693,13 +711,18 @@ async function establishWhatsAppConnection() {
 
 function handleReconnect(resolve, reject) {
     if (isShuttingDown) return resolve(null);
+    if (reconnectInProgress) return;
     if (reconnectAttempts >= MAX_RECONNECT) {
         return reject(new Error(`Max reconnection attempts (${MAX_RECONNECT}) reached`));
     }
     const delay = RECONNECT_DELAYS[reconnectAttempts] || 30000;
     reconnectAttempts++;
+    reconnectInProgress = true;
     console.log(chalk.hex('#FBBF24')(`\n  ↺  Reconnecting in ${delay / 1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT})\n`));
-    setTimeout(() => establishWhatsAppConnection().then(resolve).catch(reject), delay);
+    reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        establishWhatsAppConnection().then(resolve).catch(reject);
+    }, delay);
 }
 
 async function autoFollowNewsletters(sockInstance) {
