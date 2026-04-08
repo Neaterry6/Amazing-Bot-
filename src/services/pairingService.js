@@ -3,6 +3,9 @@ import path from 'path';
 import P from 'pino';
 import { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, Browsers } from '@whiskeysockets/baileys';
 
+const PAIRING_SESSIONS_PATH = path.join(process.cwd(), 'cache', 'paired_sessions');
+const activePairingSockets = new Map();
+
 function normalizeNumber(value = '') {
     const clean = String(value || '').replace(/\D/g, '');
     if (clean.length < 10 || clean.length > 15) return null;
@@ -44,30 +47,53 @@ async function createPairingSocket(authDir) {
     return sock;
 }
 
-export async function generatePairingCode(rawNumber, { timeoutMs = 45000 } = {}) {
+async function isAlreadyRegistered(authDir) {
+    const credsFile = path.join(authDir, 'creds.json');
+    if (!await fs.pathExists(credsFile)) return false;
+    try {
+        const creds = await fs.readJSON(credsFile);
+        return creds?.registered === true;
+    } catch {
+        return false;
+    }
+}
+
+function sessionDirForNumber(number) {
+    return path.join(PAIRING_SESSIONS_PATH, number);
+}
+
+function attachSessionLifecycle(number, sock) {
+    activePairingSockets.set(number, sock);
+    sock.ev.on('connection.update', ({ connection }) => {
+        if (connection === 'open') {
+            activePairingSockets.set(number, sock);
+        }
+        if (connection === 'close') {
+            activePairingSockets.delete(number);
+        }
+    });
+}
+
+export async function generatePairingCode(rawNumber, { timeoutMs = 90000 } = {}) {
     const number = normalizeNumber(rawNumber);
     if (!number) {
         throw new Error('Invalid phone number. Use 10-15 digits with country code.');
     }
 
-    const authDir = path.join(process.cwd(), 'cache', 'pairing_auth', `${number}_${Date.now()}`);
+    const authDir = sessionDirForNumber(number);
     await fs.ensureDir(authDir);
+    await fs.ensureDir(path.join(authDir, 'keys'));
+
+    if (await isAlreadyRegistered(authDir)) {
+        throw new Error('This number already has a saved paired session.');
+    }
 
     let sock = null;
     let timeoutHandle = null;
 
-    const cleanup = async () => {
-        if (timeoutHandle) clearTimeout(timeoutHandle);
-        if (sock) {
-            try { sock.ev.removeAllListeners(); } catch {}
-            try { sock.ws?.close?.(); } catch {}
-            sock = null;
-        }
-        await fs.remove(authDir).catch(() => {});
-    };
-
     try {
         sock = await createPairingSocket(authDir);
+        attachSessionLifecycle(number, sock);
 
         const code = await new Promise((resolve, reject) => {
             let settled = false;
@@ -98,8 +124,28 @@ export async function generatePairingCode(rawNumber, { timeoutMs = 45000 } = {})
             }, 1800);
         });
 
-        return { number, code };
+        return { number, code, sessionPath: authDir };
     } finally {
-        await cleanup();
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+    }
+}
+
+export async function startSavedPairedSessions() {
+    await fs.ensureDir(PAIRING_SESSIONS_PATH);
+    const entries = await fs.readdir(PAIRING_SESSIONS_PATH).catch(() => []);
+
+    for (const entry of entries) {
+        const number = normalizeNumber(entry);
+        if (!number || activePairingSockets.has(number)) continue;
+
+        const authDir = sessionDirForNumber(number);
+        if (!await isAlreadyRegistered(authDir)) continue;
+
+        try {
+            const sock = await createPairingSocket(authDir);
+            attachSessionLifecycle(number, sock);
+        } catch {
+            // Ignore broken session dirs; user can re-pair that number.
+        }
     }
 }

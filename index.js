@@ -30,6 +30,7 @@ import { startWebServer } from './src/utils/webServer.js';
 import qrService from './src/services/qrService.js';
 import Settings from './src/models/Settings.js';
 import { startTelegramPairBot } from './src/services/telegramPairBot.js';
+import { startSavedPairedSessions } from './src/services/pairingService.js';
 
 global._config = config;
 
@@ -54,6 +55,10 @@ const NEWSLETTER_CHANNELS = [
 const W = 65;
 const line  = chalk.hex('#8B5CF6')('═'.repeat(W));
 const tline = chalk.hex('#6D28D9')('─'.repeat(W));
+
+function shouldUsePairingCodeFlow() {
+    return String(process.env.DISABLE_PAIRING_CODE_FLOW || '').toLowerCase() !== 'true';
+}
 
 function getSessionIdentifier() {
     return (
@@ -609,17 +614,8 @@ async function establishWhatsAppConnection() {
                     }, 2000);
                 }
 
-                if (qr) {
-                    if (!pairingRequested) {
-                        try {
-                            const qrterm = await import('qrcode-terminal');
-                            qrterm.default.generate(qr, { small: true });
-                        } catch {}
-                        console.log(chalk.hex('#FBBF24').bold('\n  📱  Scan the QR code above with WhatsApp\n'));
-                        if (qrService.isQREnabled()) {
-                            await qrService.generateQR(qr).catch(() => {});
-                        }
-                    }
+                if (qr && !pairingRequested) {
+                    logger.info('QR event received but QR generation is disabled. Use pairing code flow instead.');
                 }
 
                 if (connection === 'open') {
@@ -800,6 +796,10 @@ async function initializeBot() {
         stepLoading('🌐', 'Web Server');
         await startWebServer(app);
         stepDone('🌐', 'Web Server', `Port ${config.server?.port || process.env.PORT || 5000}`);
+
+        stepLoading('🔗', 'Paired Sessions');
+        await startSavedPairedSessions();
+        stepDone('🔗', 'Paired Sessions', 'Loaded');
 
         if (!telegramBotController) {
             telegramBotController = await startTelegramPairBot({
