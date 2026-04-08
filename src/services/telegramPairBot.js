@@ -5,6 +5,7 @@ import { clearAllPairedSessions, generatePairingCode } from './pairingService.js
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const STORE_FILE = path.join(process.cwd(), 'data', 'telegram-pairs.json');
+const OMEGA_DEFAULT_TIMEOUT_MS = 120000;
 
 function nowISO() {
     return new Date().toISOString();
@@ -128,6 +129,143 @@ function menuKeyboard() {
         resize_keyboard: true,
         one_time_keyboard: false
     };
+}
+
+function cleanAiReply(text = '') {
+    return String(text || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => {
+            if (!line) return false;
+            return !/(powered by|creator|api by|provided by|qasim|omegatech|visit|follow .*telegram)/i.test(line);
+        })
+        .join('\n')
+        .trim();
+}
+
+function deepValues(input, bucket = []) {
+    if (input == null) return bucket;
+    if (typeof input === 'string' || typeof input === 'number' || typeof input === 'boolean') {
+        bucket.push(String(input));
+        return bucket;
+    }
+    if (Array.isArray(input)) {
+        for (const item of input) deepValues(item, bucket);
+        return bucket;
+    }
+    if (typeof input === 'object') {
+        for (const value of Object.values(input)) deepValues(value, bucket);
+    }
+    return bucket;
+}
+
+function pickTextFromApiResponse(payload) {
+    if (!payload) return '';
+    const preferred = [
+        payload?.response,
+        payload?.answer,
+        payload?.data?.response,
+        payload?.data?.answer,
+        payload?.data?.text,
+        payload?.result?.response,
+        payload?.result?.text,
+        payload?.text,
+        payload?.message
+    ].find((x) => typeof x === 'string' && x.trim());
+
+    if (preferred) return cleanAiReply(preferred);
+
+    const values = deepValues(payload)
+        .map((x) => x.trim())
+        .filter((x) => x.length > 0 && x.length < 6000);
+
+    const best = values.find((x) => /[a-z0-9]/i.test(x) && !/^https?:\/\//i.test(x));
+    return cleanAiReply(best || '');
+}
+
+function pickUrlFromApiResponse(payload) {
+    const values = deepValues(payload);
+    const direct = values.find((x) => /^https?:\/\/\S+/i.test(String(x).trim()));
+    if (direct) return String(direct).trim();
+
+    const embedded = values
+        .map((x) => String(x))
+        .map((x) => x.match(/https?:\/\/[^\s'"<>]+/i)?.[0] || '')
+        .find(Boolean);
+    const url = embedded || '';
+    return url ? String(url).trim() : '';
+}
+
+async function omegatechRequest(model, payload = {}, {
+    timeoutMs = OMEGA_DEFAULT_TIMEOUT_MS,
+    pollMs = 2500,
+    maxPolls = 20
+} = {}) {
+    const apiBase = (process.env.OMEGATECH_API_URL || process.env.OMEGATECH_ENDPOINT || '').trim();
+    const apiKey = (process.env.OMEGATECH_API_KEY || process.env.ILOM_API_KEY || '').trim();
+
+    if (apiBase) {
+        const headers = {
+            'content-type': 'application/json',
+            ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {})
+        };
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const res = await fetch(apiBase, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                    model,
+                    ...payload
+                }),
+                signal: controller.signal
+            });
+            if (!res.ok) throw new Error(`API request failed (${res.status})`);
+            let data = await res.json();
+
+            const initialStatus = String(data?.status || data?.state || '').toLowerCase();
+            const jobId = data?.jobId || data?.id || data?.taskId || null;
+            if (jobId && /(queued|pending|processing|running)/i.test(initialStatus)) {
+                const statusUrl = `${apiBase.replace(/\/$/, '')}/${jobId}`;
+                for (let i = 0; i < maxPolls; i += 1) {
+                    await new Promise((resolve) => setTimeout(resolve, pollMs));
+                    const statusRes = await fetch(statusUrl, { headers, signal: controller.signal });
+                    if (!statusRes.ok) continue;
+                    data = await statusRes.json();
+                    const s = String(data?.status || data?.state || '').toLowerCase();
+                    if (!/(queued|pending|processing|running)/i.test(s)) break;
+                }
+            }
+
+            return data;
+        } finally {
+            clearTimeout(timeout);
+        }
+    }
+
+    if (/claude|chat|ai/i.test(model)) {
+        const prompt = payload?.prompt || payload?.text;
+        const url = `https://api.qasimdev.dpdns.org/api/gemini/flash?apiKey=qasim-dev&text=${encodeURIComponent(prompt || '')}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`Chat API failed (${res.status})`);
+        return await res.json();
+    }
+
+    if (/image|nano|banana|img/i.test(model)) {
+        const prompt = payload?.prompt || payload?.text || '';
+        return {
+            url: `https://theone-fast-image-gen.vercel.app/download-image?prompt=${encodeURIComponent(prompt)}&expires=${Date.now() + 120000}&size=16%3A9`
+        };
+    }
+
+    if (/tts|voice|speech/i.test(model)) {
+        return {
+            text: payload?.text || ''
+        };
+    }
+
+    throw new Error('No AI endpoint configured. Set OMEGATECH_API_URL to enable Telegram AI/TTS/Image APIs.');
 }
 
 async function waitForConnectedSock(getSock, {
