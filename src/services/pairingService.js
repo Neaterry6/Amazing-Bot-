@@ -18,7 +18,7 @@ function formatCode(code = '') {
 
 async function createPairingSocket(authDir) {
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
-    const { version } = await fetchLatestBaileysVersion();
+    const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1025091844] }));
 
     const browserProfile = typeof Browsers?.ubuntu === 'function'
         ? Browsers.ubuntu('Chrome')
@@ -58,18 +58,29 @@ async function isAlreadyRegistered(authDir) {
     }
 }
 
-function sessionDirForNumber(number) {
-    return path.join(PAIRING_SESSIONS_PATH, number);
+function sessionDirForId(sessionId) {
+    return path.join(PAIRING_SESSIONS_PATH, sessionId);
 }
 
-function attachSessionLifecycle(number, sock) {
-    activePairingSockets.set(number, sock);
+function createSessionId(number) {
+    return `${number}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function writeSessionMeta(authDir, number) {
+    await fs.writeJSON(path.join(authDir, 'pairing-meta.json'), {
+        number,
+        createdAt: new Date().toISOString()
+    }, { spaces: 2 });
+}
+
+function attachSessionLifecycle(sessionId, sock) {
+    activePairingSockets.set(sessionId, sock);
     sock.ev.on('connection.update', ({ connection }) => {
         if (connection === 'open') {
-            activePairingSockets.set(number, sock);
+            activePairingSockets.set(sessionId, sock);
         }
         if (connection === 'close') {
-            activePairingSockets.delete(number);
+            activePairingSockets.delete(sessionId);
         }
     });
 }
@@ -84,20 +95,18 @@ export async function generatePairingCode(rawNumber, {
         throw new Error('Invalid phone number. Use 10-15 digits with country code.');
     }
 
-    const authDir = sessionDirForNumber(number);
+    const sessionId = createSessionId(number);
+    const authDir = sessionDirForId(sessionId);
     await fs.ensureDir(authDir);
     await fs.ensureDir(path.join(authDir, 'keys'));
-
-    if (await isAlreadyRegistered(authDir)) {
-        throw new Error('This number already has a saved paired session.');
-    }
+    await writeSessionMeta(authDir, number);
 
     let sock = null;
     let timeoutHandle = null;
 
     try {
         sock = await createPairingSocket(authDir);
-        attachSessionLifecycle(number, sock);
+        attachSessionLifecycle(sessionId, sock);
 
         const code = await new Promise((resolve, reject) => {
             let settled = false;
@@ -152,15 +161,13 @@ export async function startSavedPairedSessions() {
     const entries = await fs.readdir(PAIRING_SESSIONS_PATH).catch(() => []);
 
     for (const entry of entries) {
-        const number = normalizeNumber(entry);
-        if (!number || activePairingSockets.has(number)) continue;
-
-        const authDir = sessionDirForNumber(number);
+        const authDir = sessionDirForId(entry);
+        if (activePairingSockets.has(entry)) continue;
         if (!await isAlreadyRegistered(authDir)) continue;
 
         try {
             const sock = await createPairingSocket(authDir);
-            attachSessionLifecycle(number, sock);
+            attachSessionLifecycle(entry, sock);
         } catch {
             // Ignore broken session dirs; user can re-pair that number.
         }
