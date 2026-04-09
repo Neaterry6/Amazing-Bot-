@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const ENV_FILE = path.resolve(process.cwd(), '.env');
+const initialProcessEnvKeys = new Set(Object.keys(process.env));
 
 function parseEnvLine(line) {
     const trimmed = line.trim();
@@ -11,7 +11,7 @@ function parseEnvLine(line) {
     if (idx === -1) return null;
 
     const key = trimmed.slice(0, idx).trim();
-    if (!key || process.env[key] !== undefined) return null;
+    if (!key) return null;
 
     let value = trimmed.slice(idx + 1).trim();
     if (
@@ -25,14 +25,33 @@ function parseEnvLine(line) {
     return { key, value };
 }
 
-function loadEnvFromFile() {
-    if (!fs.existsSync(ENV_FILE)) return;
-    const content = fs.readFileSync(ENV_FILE, 'utf8');
+function loadEnvFromFile(filePath) {
+    if (!filePath || !fs.existsSync(filePath)) return;
+    const content = fs.readFileSync(filePath, 'utf8');
     for (const line of content.split(/\r?\n/)) {
         const parsed = parseEnvLine(line);
-        if (parsed) process.env[parsed.key] = parsed.value;
+        if (!parsed) continue;
+        if (initialProcessEnvKeys.has(parsed.key)) continue;
+        process.env[parsed.key] = parsed.value;
     }
 }
 
-loadEnvFromFile();
+function loadEnvFiles() {
+    const root = process.cwd();
+    const nodeEnv = String(process.env.NODE_ENV || '').trim();
+    const envCandidates = [
+        path.resolve(root, '.env'),
+        path.resolve(root, '.env.local'),
+        nodeEnv ? path.resolve(root, `.env.${nodeEnv}`) : null,
+        path.resolve(root, 'config', 'development.env'),
+        path.resolve(root, 'config', 'production.env'),
+        path.resolve(root, 'config', 'test.env'),
+        nodeEnv ? path.resolve(root, 'config', `${nodeEnv}.env`) : null
+    ].filter(Boolean);
 
+    for (const filePath of envCandidates) {
+        loadEnvFromFile(filePath);
+    }
+}
+
+loadEnvFiles();
