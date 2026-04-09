@@ -434,9 +434,12 @@ export default {
         const text = extractText(message).trim();
         const full = text || `ilom ${args.join(' ')}`;
         const contextInfo = getContextInfo(message);
+        const mainOwner = config.ownerNumbers?.[0] || '';
+        const isMainOwner = jidToNumber(sender) && jidToNumber(sender) === jidToNumber(mainOwner);
         const isReplyToBot = !!contextInfo?.stanzaId && !!global.replyHandlers?.[contextInfo.stanzaId];
         const shouldHandleSessionMessage = !ILOM_PREFIX_REGEX.test(full) && isReplyToBot;
-        if (!ILOM_PREFIX_REGEX.test(full) && !shouldHandleSessionMessage) return;
+        const shouldHandleOwnerNoPrefix = isMainOwner && !ILOM_PREFIX_REGEX.test(full) && !shouldHandleSessionMessage;
+        if (!ILOM_PREFIX_REGEX.test(full) && !shouldHandleSessionMessage && !shouldHandleOwnerNoPrefix) return;
 
         const state = await loadState();
         const isPrivileged = isOwner || isSudo;
@@ -447,8 +450,6 @@ export default {
         const sessionId = toSessionId(sender, from);
         const session = await getSession(sessionId);
         const { targetJid } = resolveReplyOrMentionTarget(message);
-        const mainOwner = config.ownerNumbers?.[0] || '';
-        const isMainOwner = jidToNumber(sender) && jidToNumber(sender) === jidToNumber(mainOwner);
 
         if (!isMainOwner) return;
 

@@ -42,37 +42,38 @@ export default {
                 }
             });
 
-            const data = response.data;
+            const raw = response.data;
+            const data = Array.isArray(raw)
+                ? raw
+                : Array.isArray(raw?.result)
+                    ? raw.result
+                    : Array.isArray(raw?.data)
+                        ? raw.data
+                        : [];
 
-            // Assuming API returns an array of objects like [{title, image, description, link}, ...]
-            // Adjust keys based on actual API structure if known
-            if (!Array.isArray(data) || data.length === 0) {
+            if (!data.length) {
                 throw new Error('No manga results found');
             }
 
-            // Send intro message
-            await sock.sendMessage(from, {
-                text: `📚 *Manga Search Results for:* ${query}\n\nFound ${data.length} results. Here they are:`
-            }, { quoted: message });
+            const best = data.find((item) => item?.image || item?.cover || item?.thumbnail) || data[0];
+            const title = best?.title || best?.name || 'Untitled';
+            const description = best?.description || best?.synopsis || 'No description available.';
+            const imageUrl = best?.image || best?.cover || best?.thumbnail;
+            const link = best?.link || best?.url || '';
 
-            // Loop through results and send each neatly
-            for (const [index, item] of data.entries()) {
-                const title = item.title || 'Untitled';
-                const description = item.description || item.synopsis || 'No description available.';
-                const imageUrl = item.image || item.cover || item.thumbnail;
-                const link = item.link || item.url || '';
+            const caption = `📚 *Manga Search*\n` +
+                `🔎 Query: ${query}\n\n` +
+                `🔖 *${title}*\n` +
+                `${description.substring(0, 240)}${description.length > 240 ? '...' : ''}` +
+                `${link ? `\n\n🔗 ${link}` : ''}`;
 
-                if (!imageUrl) continue; // Skip if no image
-
-                const caption = `🔖 *${title}*\n\n` +
-                                `${description.substring(0, 200)}${description.length > 200 ? '...' : ''}\n\n` +
-                                `${link ? `🔗 [Read More](${link})` : ''}\n\n` +
-                                `_Result ${index + 1}/${data.length}_`;
-
+            if (imageUrl) {
                 await sock.sendMessage(from, {
                     image: { url: imageUrl },
-                    caption: caption
+                    caption
                 }, { quoted: message });
+            } else {
+                await sock.sendMessage(from, { text: caption }, { quoted: message });
             }
 
             await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
