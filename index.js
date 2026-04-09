@@ -45,6 +45,7 @@ let reconnectInProgress = false;
 let cachedPairingNumber = null;
 let telegramBotController = null;
 let generatedSessionSaved = false;
+const pairedRuntimeSockets = new WeakSet();
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
 const GENERATED_SESSION_FILE = path.join(process.cwd(), 'data', 'generated_session_id.txt');
@@ -562,6 +563,8 @@ async function setupEventHandlers(sock, saveCreds) {
     sock.ev.on('creds.update', async () => { await saveCreds(); });
 
     await messageHandler.initializeCommandHandler();
+    if (pairedRuntimeSockets.has(sock)) return;
+    pairedRuntimeSockets.add(sock);
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
         if (!messages?.length) return;
@@ -617,6 +620,12 @@ async function setupEventHandlers(sock, saveCreds) {
     }, 60000);
 
     logger.info('All event handlers registered');
+}
+
+async function attachPairedSessionRuntime({ sock: pairedSock, sessionId, number }) {
+    if (!pairedSock || pairedRuntimeSockets.has(pairedSock)) return;
+    await setupEventHandlers(pairedSock, async () => {});
+    logger.info(`Paired session runtime attached: ${sessionId} (+${number || 'unknown'})`);
 }
 
 async function promptPairingNumber() {
@@ -921,7 +930,9 @@ async function initializeBot() {
         stepDone('🌐', 'Web Server', `Port ${config.server?.port || process.env.PORT || 5000}`);
 
         stepLoading('🔗', 'Paired Sessions');
-        await startSavedPairedSessions();
+        await startSavedPairedSessions({
+            onSessionSocket: attachPairedSessionRuntime
+        });
         stepDone('🔗', 'Paired Sessions', 'Loaded');
 
         console.log();
@@ -932,7 +943,8 @@ async function initializeBot() {
         if (!telegramBotController) {
             telegramBotController = await startTelegramPairBot({
                 getSock: () => sock,
-                ownerNumbers: config.ownerNumbers || []
+                ownerNumbers: config.ownerNumbers || [],
+                onSessionSocket: attachPairedSessionRuntime
             });
         }
 
