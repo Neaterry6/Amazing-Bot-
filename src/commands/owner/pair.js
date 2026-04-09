@@ -5,8 +5,15 @@ function normalizeDigits(input = '') {
 }
 
 function extractTargetNumber({ args, message, from, isGroup }) {
-    const argValue = normalizeDigits(args?.[0] || '');
+    const rawArgs = Array.isArray(args) ? args.join(' ') : '';
+    const argValue = normalizeDigits(rawArgs);
     if (argValue) return argValue;
+
+    const body = message?.message?.conversation
+        || message?.message?.extendedTextMessage?.text
+        || '';
+    const fromText = normalizeDigits(String(body).replace(/^\S+\s*/, ''));
+    if (fromText) return fromText;
 
     const ctx = message?.message?.extendedTextMessage?.contextInfo;
     const mentioned = ctx?.mentionedJid?.[0];
@@ -38,13 +45,12 @@ export default {
         if (!number) {
             return await sock.sendMessage(from, {
                 text: [
-                    '📱 *Pairing Code Generator*',
+                    '📱 *Pair your WhatsApp number*',
                     '',
-                    'Send one of these:',
-                    '• `pair 2349019185242`',
-                    '• mention a user with `pair @user`',
-                    '• reply to a user message with `pair`',
+                    'Send your number with this format:',
+                    '• `.pair 2347046987550`',
                     '',
+                    'You can also mention/reply a user and send `.pair`.',
                     'Use full country code and digits only.'
                 ].join('\n')
             }, { quoted: message });
@@ -64,10 +70,16 @@ export default {
 
             return await sock.sendMessage(from, {
                 text: [
-                    `🔐 *Pair code for +${paired.number}*`,
-                    `*${paired.code}*`,
+                    `🔹 *Pair Code for +${paired.number}:*`,
+                    `${paired.code}`,
                     '',
-                    'Open WhatsApp → Linked devices → Link with phone number, then enter this code.'
+                    '*How to Link:*',
+                    '1. Open WhatsApp on your phone.',
+                    '2. Go to *Settings > Linked Devices*.',
+                    '3. Tap *Link a Device* then choose *Link with phone number*.',
+                    `4. Enter this code: *${paired.code}*`,
+                    '',
+                    '⏳ Code expires in about 2 minutes.'
                 ].join('\n')
             }, { quoted: message });
         } catch (error) {

@@ -522,29 +522,33 @@ async function setupEventHandlers(sock, saveCreds) {
 }
 
 async function promptPairingNumber() {
-    if (String(process.env.ENABLE_PANEL_PAIRING || '').toLowerCase() !== 'true') return null;
     if (cachedPairingNumber) return cachedPairingNumber;
 
     const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
+    const canPromptInConsole = process.stdin.isTTY && process.env.NO_CONSOLE_INPUT !== 'true';
+
+    if (canPromptInConsole) {
+        const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+        try {
+            console.log(chalk.hex('#60A5FA')('\n  📱 Pairing Mode'));
+            console.log(chalk.hex('#C4B5FD')('  Enter your WhatsApp number with country code (example: 2349031575131)\n'));
+            const answer = await rl.question('  Number: ');
+            const normalized = String(answer || '').replace(/\D/g, '');
+            if (normalized.length >= 10) {
+                cachedPairingNumber = normalized;
+                return normalized;
+            }
+        } finally {
+            rl.close();
+        }
+    }
+
     if (envNumber.length >= 10) {
         cachedPairingNumber = envNumber;
         return cachedPairingNumber;
     }
 
-    if (!process.stdin.isTTY || process.env.NO_CONSOLE_INPUT === 'true') return null;
-
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    try {
-        console.log(chalk.hex('#60A5FA')('\n  📱 Pairing Mode Enabled'));
-        console.log(chalk.hex('#C4B5FD')('  Enter your WhatsApp number with country code (example: 2349031575131)\n'));
-        const answer = await rl.question('  Number: ');
-        const normalized = String(answer || '').replace(/\D/g, '');
-        if (normalized.length < 10) return null;
-        cachedPairingNumber = normalized;
-        return normalized;
-    } finally {
-        rl.close();
-    }
+    return null;
 }
 
 
@@ -824,19 +828,19 @@ async function initializeBot() {
         await startSavedPairedSessions();
         stepDone('🔗', 'Paired Sessions', 'Loaded');
 
-        if (!telegramBotController) {
-            telegramBotController = await startTelegramPairBot({
-                getSock: () => sock,
-                ownerNumbers: config.ownerNumbers || []
-            });
-        }
-
         console.log();
         console.log(tline);
         stepLoading('📡', 'WhatsApp');
         console.log();
 
         await establishWhatsAppConnection();
+
+        if (!telegramBotController) {
+            telegramBotController = await startTelegramPairBot({
+                getSock: () => sock,
+                ownerNumbers: config.ownerNumbers || []
+            });
+        }
 
         setupProcessHandlers();
 
