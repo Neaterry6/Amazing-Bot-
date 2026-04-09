@@ -44,8 +44,10 @@ let reconnectTimer = null;
 let reconnectInProgress = false;
 let cachedPairingNumber = null;
 let telegramBotController = null;
+let generatedSessionSaved = false;
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
+const GENERATED_SESSION_FILE = path.join(process.cwd(), 'data', 'generated_session_id.txt');
 const MAX_RECONNECT = 10;
 const RECONNECT_DELAYS = [3000, 5000, 10000, 15000, 20000, 30000, 30000, 30000, 30000, 30000];
 const NEWSLETTER_CHANNELS = [
@@ -97,6 +99,90 @@ function stepDone(icon, label, value) {
 function stepLoading(icon, label) {
     const lbl = chalk.hex('#C4B5FD')(label.padEnd(22));
     console.log(`  ${chalk.hex('#FBBF24')('◈')}  ${icon}  ${lbl} ${chalk.hex('#6B7280')('...')}`);
+}
+
+function escapeEnvValue(value = '') {
+    const raw = String(value ?? '');
+    return raw.replace(/\r?\n/g, '\\n');
+}
+
+async function setEnvValue(key, value) {
+    const envPath = path.join(process.cwd(), '.env');
+    const nextLine = `${key}=${escapeEnvValue(value)}`;
+    let content = '';
+    if (await fs.pathExists(envPath)) {
+        content = await fs.readFile(envPath, 'utf8');
+    }
+
+    const lines = content ? content.split(/\r?\n/) : [];
+    let updated = false;
+    const mapped = lines.map((line) => {
+        if (!line.trim().startsWith('#') && line.includes('=')) {
+            const name = line.slice(0, line.indexOf('=')).trim();
+            if (name === key) {
+                updated = true;
+                return nextLine;
+            }
+        }
+        return line;
+    });
+
+    if (!updated) mapped.push(nextLine);
+    await fs.writeFile(envPath, `${mapped.join('\n').replace(/\n+$/g, '')}\n`, 'utf8');
+    process.env[key] = String(value ?? '');
+}
+
+async function removeEnvValue(key) {
+    const envPath = path.join(process.cwd(), '.env');
+    if (!await fs.pathExists(envPath)) return;
+
+    const lines = (await fs.readFile(envPath, 'utf8')).split(/\r?\n/);
+    const filtered = lines.filter((line) => {
+        if (line.trim().startsWith('#') || !line.includes('=')) return true;
+        const name = line.slice(0, line.indexOf('=')).trim();
+        return name !== key;
+    });
+    await fs.writeFile(envPath, `${filtered.join('\n').replace(/\n+$/g, '')}\n`, 'utf8');
+    delete process.env[key];
+}
+
+async function buildSessionIdFromLocalAuth() {
+    const credsPath = path.join(SESSION_PATH, 'creds.json');
+    const keysPath = path.join(SESSION_PATH, 'keys');
+    if (!await fs.pathExists(credsPath)) return '';
+
+    const creds = await fs.readJSON(credsPath).catch(() => null);
+    if (!creds || typeof creds !== 'object') return '';
+
+    const keys = {};
+    if (await fs.pathExists(keysPath)) {
+        const files = await fs.readdir(keysPath).catch(() => []);
+        for (const fileName of files) {
+            if (!fileName.endsWith('.json')) continue;
+            const keyName = fileName.replace(/\.json$/i, '');
+            const keyData = await fs.readJSON(path.join(keysPath, fileName)).catch(() => null);
+            if (keyData && typeof keyData === 'object') keys[keyName] = keyData;
+        }
+    }
+
+    const inline = Buffer.from(JSON.stringify({ creds, keys })).toString('base64');
+    return `Ilom~${inline}`;
+}
+
+async function persistGeneratedSessionId(sessionId) {
+    if (!sessionId) return false;
+    await fs.ensureDir(path.dirname(GENERATED_SESSION_FILE));
+    await fs.writeFile(GENERATED_SESSION_FILE, `${sessionId}\n`, 'utf8');
+    await setEnvValue('SESSION_ID', sessionId);
+    await removeEnvValue('SESSION_CREDS_JSON');
+    return true;
+}
+
+async function clearLocalAuthFiles() {
+    const credsPath = path.join(SESSION_PATH, 'creds.json');
+    const keysPath = path.join(SESSION_PATH, 'keys');
+    await fs.remove(credsPath).catch(() => {});
+    await fs.emptyDir(keysPath).catch(() => {});
 }
 
 async function displayBanner() {
@@ -675,7 +761,13 @@ async function establishWhatsAppConnection() {
                     ].includes(statusCode);
 
                     if (requiresFreshPairing) {
-                        logger.warn('Session reported invalid (401), preserving local auth files to avoid accidental session loss.');
+                        logger.warn('Session reported invalid (401). Clearing old auth and requesting a fresh pair.');
+                        generatedSessionSaved = false;
+                        await clearLocalAuthFiles();
+                        if (getSessionIdentifier()) {
+                            await removeEnvValue('SESSION_ID').catch(() => {});
+                            logger.warn('Removed stale SESSION_ID from .env so a new pair can be created.');
+                        }
                     }
 
                     try {
@@ -821,14 +913,14 @@ async function initializeBot() {
         stepLoading('📡', 'WhatsApp');
         console.log();
 
-        await establishWhatsAppConnection();
-
         if (!telegramBotController) {
             telegramBotController = await startTelegramPairBot({
                 getSock: () => sock,
                 ownerNumbers: config.ownerNumbers || []
             });
         }
+
+        await establishWhatsAppConnection();
 
         setupProcessHandlers();
 
