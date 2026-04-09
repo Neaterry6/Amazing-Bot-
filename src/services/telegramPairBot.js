@@ -306,7 +306,7 @@ async function waitForConnectedSock(getSock, {
 export async function startTelegramPairBot({
     getSock,
     ownerNumbers = [],
-    token = process.env.TELEGRAM_BOT_TOKEN || resolveTelegramTokenFromEnv(),
+    token = resolveTelegramTokenFromEnv(),
     botId = process.env.TELEGRAM_BOT_ID,
     adminIds = (process.env.TELEGRAM_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean)
 } = {}) {
