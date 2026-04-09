@@ -1,7 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
 import P from 'pino';
-import pn from 'awesome-phonenumber';
 import { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, Browsers } from '@whiskeysockets/baileys';
 
 const PAIRING_SESSIONS_PATH = path.join(process.cwd(), 'cache', 'paired_sessions');
@@ -10,9 +9,7 @@ const activePairingSockets = new Map();
 function normalizeNumber(value = '') {
     const clean = String(value || '').replace(/\D/g, '');
     if (clean.length < 10 || clean.length > 15) return null;
-    const parsed = pn(`+${clean}`);
-    if (!parsed?.isValid?.()) return null;
-    return parsed.getNumber('e164').replace('+', '');
+    return clean;
 }
 
 function formatCode(code = '') {
