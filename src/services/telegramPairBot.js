@@ -12,12 +12,16 @@ function nowISO() {
 }
 
 function normalizeTelegramToken(value = '') {
-    return String(value || '').trim().replace(/^bot/i, '').replace(/^:/, '');
+    return String(value || '')
+        .trim()
+        .replace(/^['"]|['"]$/g, '')
+        .replace(/^bot/i, '')
+        .replace(/^:/, '');
 }
 
 function resolveTelegramToken(primaryToken = '', botId = '') {
-    const rawToken = String(primaryToken || '').trim();
-    const rawBotId = String(botId || '').trim().replace(/^bot/i, '').replace(/:$/, '');
+    const rawToken = String(primaryToken || '').trim().replace(/^['"]|['"]$/g, '');
+    const rawBotId = String(botId || '').trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '').replace(/:$/, '');
 
     if (!rawToken && !rawBotId) return '';
 
@@ -314,8 +318,8 @@ export async function startTelegramPairBot({
     }
 
     if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) {
-        logger.warn('Telegram pair bot disabled: invalid TELEGRAM_BOT_TOKEN format. Use full BotFather token like <bot_id>:<secret>.');
-        logger.warn('Tip: you can also set TELEGRAM_BOT_ID and TELEGRAM_BOT_TOKEN (secret only), and the bot will combine them automatically.');
+        logger.warn('Telegram pair bot disabled: invalid Telegram token format.');
+        logger.warn('Use TELEGRAM_BOT_ID=<bot id> and TELEGRAM_BOT_TOKEN=<secret>, or TELEGRAM_BOT_TOKEN=<bot_id:secret>.');
         return null;
     }
 

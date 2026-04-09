@@ -417,14 +417,15 @@ async function processSessionCredentials() {
         //   ilombot--<base64(https://mega.nz/file/FILEID#DECRYPTIONKEY)>
         // We decode it to get the full URL including the #key fragment,
         // then pass it directly to megajs which needs the hash to decrypt.
+        const normalizedSessionId = String(sessionId || '').trim();
+        const lowerSessionId = normalizedSessionId.toLowerCase();
         if (
-            sessionId.startsWith('ilombot--') ||
-            sessionId.startsWith('ilombot ilombot--') ||
-            /^https:\/\/mega\.nz\/(file|folder)\//.test(sessionId)
+            lowerSessionId.startsWith('ilombot--') ||
+            lowerSessionId.startsWith('ilombot ilombot--') ||
+            /^https:\/\/mega\.nz\/(file|folder)\//i.test(normalizedSessionId)
         ) {
-            const encoded = sessionId
-                .replace('ilombot ilombot--', '')
-                .replace('ilombot--', '')
+            const encoded = normalizedSessionId
+                .replace(/^(?:ilombot\s+)?ilombot--/i, '')
                 .trim()
                 .replace(/\s+/g, '');
 
