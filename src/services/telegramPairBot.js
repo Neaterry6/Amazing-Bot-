@@ -303,6 +303,7 @@ export async function startTelegramPairBot({
 
     let running = true;
     let offset = 0;
+    const pendingPairRequests = new Map();
     const startedAt = Date.now();
 
     try {
@@ -361,7 +362,23 @@ export async function startTelegramPairBot({
     const handlePair = async (chatId, user, text) => {
         const raw = text.replace(/^[./]pair(@\w+)?/i, '').trim();
         const number = normalizeNumber(raw);
-        if (!number) return sendText(chatId, '❌ Usage: /pair 2347046987550 (or .pair 2347046987550)');
+        if (!number) {
+            pendingPairRequests.set(String(chatId), {
+                userId: String(user.id),
+                requestedAt: Date.now()
+            });
+            return sendText(
+                chatId,
+                [
+                    '📱 Send the WhatsApp number to pair.',
+                    'Example: 2347046987550',
+                    '',
+                    'Use full country code (10-15 digits).',
+                    'Send /cancel to stop.'
+                ].join('\n')
+            );
+        }
+        pendingPairRequests.delete(String(chatId));
         let pairId = null;
 
         try {
@@ -601,6 +618,23 @@ ${rows.join('\n')}`);
         const chatId = msg?.chat?.id;
         const user = msg?.from;
         if (!chatId || !text || !user) return;
+        const pendingForChat = pendingPairRequests.get(String(chatId));
+
+        if (/^\/cancel\b/i.test(text)) {
+            if (pendingForChat) {
+                pendingPairRequests.delete(String(chatId));
+                return sendText(chatId, '✅ Pair request cancelled.');
+            }
+            return sendText(chatId, 'ℹ️ No pending pair request.');
+        }
+
+        if (
+            pendingForChat
+            && pendingForChat.userId === String(user.id)
+            && !text.startsWith('/')
+        ) {
+            return handlePair(chatId, user, `/pair ${text}`);
+        }
 
         if (/^\/start/i.test(text) || /^\/menu/i.test(text)) {
             return sendMenu(chatId, user);
