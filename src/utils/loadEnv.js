@@ -14,6 +14,17 @@ function parseEnvLine(line) {
     if (!key) return null;
 
     let value = trimmed.slice(idx + 1).trim();
+    const isQuoted = (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+    );
+
+    // Support inline comments for unquoted values:
+    // KEY=value # comment
+    if (!isQuoted) {
+        value = value.replace(/\s+#.*$/, '').trim();
+    }
+
     if (
         (value.startsWith('"') && value.endsWith('"')) ||
         (value.startsWith("'") && value.endsWith("'"))
@@ -31,7 +42,12 @@ function loadEnvFromFile(filePath) {
     for (const line of content.split(/\r?\n/)) {
         const parsed = parseEnvLine(line);
         if (!parsed) continue;
+        // Keep externally provided process env values intact.
         if (initialProcessEnvKeys.has(parsed.key)) continue;
+        // First-loaded env file wins; do not allow later fallback files
+        // (e.g. config/development.env defaults) to overwrite real values
+        // from .env / .env.local.
+        if (Object.prototype.hasOwnProperty.call(process.env, parsed.key)) continue;
         process.env[parsed.key] = parsed.value;
     }
 }
