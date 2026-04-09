@@ -15,7 +15,7 @@ function normalizeTelegramToken(value = '') {
     return String(value || '')
         .trim()
         .replace(/^['"]|['"]$/g, '')
-        .replace(/^bot/i, '')
+        .replace(/^bot(?=\d+:)/i, '')
         .replace(/^:/, '');
 }
 
@@ -35,14 +35,22 @@ function resolveTelegramToken(primaryToken = '', botId = '') {
 }
 
 function resolveTelegramTokenFromEnv() {
+    const primaryBotToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+    const primaryBotId = String(process.env.TELEGRAM_BOT_ID || '').trim();
+
+    // Preferred explicit format:
+    // TELEGRAM_BOT_ID=123456789
+    // TELEGRAM_BOT_TOKEN=secret_part_only
+    if (primaryBotToken || primaryBotId) {
+        return resolveTelegramToken(primaryBotToken, primaryBotId);
+    }
+
     const tokenCandidates = [
-        process.env.TELEGRAM_BOT_TOKEN,
         process.env.TELEGRAM_TOKEN,
         process.env.TG_BOT_TOKEN,
         process.env.BOT_TOKEN
     ];
     const idCandidates = [
-        process.env.TELEGRAM_BOT_ID,
         process.env.TELEGRAM_ID,
         process.env.TG_BOT_ID
     ];
@@ -308,12 +316,17 @@ export async function startTelegramPairBot({
     ownerNumbers = [],
     token = resolveTelegramTokenFromEnv(),
     botId = process.env.TELEGRAM_BOT_ID,
-    adminIds = (process.env.TELEGRAM_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean)
+    adminIds = (
+        process.env.TELEGRAM_ADMIN_IDS ||
+        process.env.TELEGRAM_ADMINS ||
+        process.env.TG_ADMIN_IDS ||
+        ''
+    ).split(',').map((x) => x.trim()).filter(Boolean)
 } = {}) {
     token = resolveTelegramToken(token, botId);
 
     if (!token) {
-        logger.info('Telegram pair bot disabled (Telegram token not set). Supported env keys: TELEGRAM_BOT_TOKEN, TELEGRAM_TOKEN, TG_BOT_TOKEN, BOT_TOKEN.');
+        logger.info('Telegram pair bot disabled (Telegram token not set). Use TELEGRAM_BOT_ID + TELEGRAM_BOT_TOKEN, or TELEGRAM_BOT_TOKEN=<bot_id:secret>.');
         return null;
     }
 
