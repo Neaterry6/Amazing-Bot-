@@ -67,8 +67,12 @@ function shouldUsePairingCodeFlow() {
 function getSessionIdentifier() {
     return (
         process.env.SESSION_ID ||
+        process.env.SESSIONID ||
+        process.env.SESSION ||
         process.env.WA_SESSION_ID ||
         process.env.ILOMBOT_SESSION_ID ||
+        process.env.SESSION_CREDS_JSON ||
+        process.env.CREDS_JSON ||
         config.session?.sessionId ||
         ''
     ).trim().replace(/^['"]|['"]$/g, '');
@@ -640,6 +644,10 @@ async function promptPairingNumber() {
 
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
+    if (getSessionIdentifier()) {
+        logger.info('SESSION_ID detected in environment. Skipping console pair prompt.');
+        return;
+    }
     const number = await promptPairingNumber();
     if (!number) return;
 
