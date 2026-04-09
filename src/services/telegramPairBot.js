@@ -102,6 +102,72 @@ function isAdmin(userId, adminIds = []) {
     return adminIds.includes(String(userId));
 }
 
+const REQUIRED_JOIN_TARGETS = [
+    { chatId: '@primeee_official', title: '@primeee_official', invite: 'https://t.me/primeee_official', required: true },
+    { chatId: '@mininoxch', title: '@mininoxch', invite: 'https://t.me/mininoxch', required: true },
+    { chatId: '', title: 'Main Channel', invite: 'https://t.me/+AoByGO2_jUZjYTQ8', required: true },
+    { chatId: '', title: 'Community Group', invite: 'https://t.me/+lmD9XlIGB742MmY0', required: true }
+];
+
+function inlineMainButtons() {
+    return {
+        inline_keyboard: [
+            [{ text: '📱 Pair Number', callback_data: 'act_pair' }],
+            [{ text: '📄 My Pairs', callback_data: 'act_pairs' }, { text: '🧭 Menu', callback_data: 'act_menu' }],
+            [{ text: '✅ Check Join', callback_data: 'act_check_join' }]
+        ]
+    };
+}
+
+function joinRequiredButtons() {
+    return {
+        inline_keyboard: [
+            ...REQUIRED_JOIN_TARGETS.map((x) => [{ text: `Join ${x.title}`, url: x.invite }]),
+            [{ text: '✅ I Have Joined', callback_data: 'act_check_join' }]
+        ]
+    };
+}
+
+async function ensureRequiredMembership({ token, chatId, user, adminIds }) {
+    if (isAdmin(user?.id, adminIds)) return { ok: true, missing: [] };
+
+    const missing = [];
+    for (const target of REQUIRED_JOIN_TARGETS) {
+        if (!target.required) continue;
+        if (!target.chatId) {
+            continue;
+        }
+        try {
+            const member = await tgCall(token, 'getChatMember', {
+                chat_id: target.chatId,
+                user_id: user.id
+            });
+            const status = String(member?.status || '').toLowerCase();
+            const joined = ['creator', 'administrator', 'member'].includes(status);
+            if (!joined) missing.push(target);
+        } catch {
+            missing.push(target);
+        }
+    }
+
+    if (missing.length > 0) {
+        await tgCall(token, 'sendMessage', {
+            chat_id: chatId,
+            text: [
+                '🚫 Before using this bot, you must join all required channels/groups.',
+                '',
+                ...missing.map((x) => `• ${x.title}: ${x.invite}`),
+                '',
+                'After joining, tap ✅ I Have Joined.'
+            ].join('\n'),
+            reply_markup: joinRequiredButtons()
+        });
+        return { ok: false, missing };
+    }
+
+    return { ok: true, missing: [] };
+}
+
 function buildMenu(user, runtimeText = '') {
     return [
         '🖼 ╭─────────────────❏',
@@ -115,6 +181,7 @@ function buildMenu(user, runtimeText = '') {
         '├─────────────────❏',
         '│  📱 USER COMMANDS',
         '│  /pair <number>',
+        '│  /buttons',
         '│  /pairs',
         '│  /delpair <id>',
         '│  /ilomai <prompt>',
@@ -316,6 +383,7 @@ export async function startTelegramPairBot({
     ownerNumbers = [],
     token = resolveTelegramTokenFromEnv(),
     botId = process.env.TELEGRAM_BOT_ID,
+    onSessionSocket = null,
     adminIds = (
         process.env.TELEGRAM_ADMIN_IDS ||
         process.env.TELEGRAM_ADMINS ||
@@ -367,6 +435,12 @@ export async function startTelegramPairBot({
     const sendMenu = async (chatId, user) => {
         await sendText(chatId, buildMenu(user, runtimeText()), {
             reply_markup: menuKeyboard()
+        });
+    };
+
+    const sendButtons = async (chatId) => {
+        await sendText(chatId, '🔘 Quick action buttons:', {
+            reply_markup: inlineMainButtons()
         });
     };
 
@@ -434,6 +508,7 @@ export async function startTelegramPairBot({
             await saveStore(store);
 
             const paired = await generatePairingCode(number, {
+                onSessionSocket,
                 onCodeSent: async ({ number: pairedNumber, code, sessionPath }) => {
                     await updatePairRecord(pairId, {
                         number: pairedNumber,
@@ -647,13 +722,56 @@ ${rows.join('\n')}`);
         }
     };
 
+    const handleCallbackQuery = async (update) => {
+        const cb = update?.callback_query;
+        const action = cb?.data || '';
+        const chatId = cb?.message?.chat?.id;
+        const user = cb?.from;
+        if (!action || !chatId || !user) return;
+
+        try {
+            await tgCall(token, 'answerCallbackQuery', {
+                callback_query_id: cb.id,
+                text: 'Processing...'
+            });
+        } catch {}
+
+        if (action === 'act_menu') return sendMenu(chatId, user);
+        if (action === 'act_buttons') return sendButtons(chatId);
+
+        if (action === 'act_check_join') {
+            const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
+            if (gate.ok) {
+                return sendText(chatId, '✅ Membership check passed. You can now use /pair or the buttons.', {
+                    reply_markup: inlineMainButtons()
+                });
+            }
+            return null;
+        }
+
+        const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
+        if (!gate.ok) return null;
+
+        if (action === 'act_pair') {
+            pendingPairRequests.set(String(chatId), {
+                userId: String(user.id),
+                requestedAt: Date.now()
+            });
+            return sendText(chatId, '📱 Send your WhatsApp number (country code included). Example: 2349031575131');
+        }
+        if (action === 'act_pairs') return handlePairs(chatId, user);
+        return null;
+    };
+
     const handleUpdate = async (update) => {
+        if (update?.callback_query) return handleCallbackQuery(update);
         const msg = update?.message;
         const text = msg?.text || '';
         const chatId = msg?.chat?.id;
         const user = msg?.from;
         if (!chatId || !text || !user) return;
         const pendingForChat = pendingPairRequests.get(String(chatId));
+        const startsWithSlash = text.startsWith('/');
 
         if (/^\/cancel\b/i.test(text)) {
             if (pendingForChat) {
@@ -668,12 +786,28 @@ ${rows.join('\n')}`);
             && pendingForChat.userId === String(user.id)
             && !text.startsWith('/')
         ) {
+            const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
+            if (!gate.ok) return null;
             return handlePair(chatId, user, `/pair ${text}`);
         }
 
         if (/^\/start/i.test(text) || /^\/menu/i.test(text)) {
             return sendMenu(chatId, user);
         }
+        if (/^\/buttons\b/i.test(text)) return sendButtons(chatId);
+
+        const nonRestricted = [
+            /^\/start/i,
+            /^\/menu/i,
+            /^\/buttons\b/i,
+            /^\/owners\b/i
+        ].some((x) => x.test(text));
+
+        if (startsWithSlash && !nonRestricted) {
+            const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
+            if (!gate.ok) return null;
+        }
+
         if (/^[./]pair\b/i.test(text)) return handlePair(chatId, user, text);
         if (/^\/delpair\b/i.test(text)) return handleDeletePair(chatId, user, text);
         if (/^\/pairs\b/i.test(text)) return handlePairs(chatId, user);
@@ -693,7 +827,7 @@ ${rows.join('\n')}`);
                 const updates = await tgCall(token, 'getUpdates', {
                     timeout: 25,
                     offset,
-                    allowed_updates: ['message']
+                    allowed_updates: ['message', 'callback_query']
                 });
                 for (const u of updates) {
                     offset = u.update_id + 1;

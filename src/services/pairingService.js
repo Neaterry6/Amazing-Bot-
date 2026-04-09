@@ -124,7 +124,8 @@ function attachSessionLifecycle(sessionId, sock) {
 export async function generatePairingCode(rawNumber, {
     timeoutMs = 90000,
     onCodeSent = null,
-    onLinked = null
+    onLinked = null,
+    onSessionSocket = null
 } = {}) {
     const number = normalizeNumber(rawNumber);
     if (!number) {
@@ -143,6 +144,11 @@ export async function generatePairingCode(rawNumber, {
     try {
         sock = await createPairingSocket(authDir);
         attachSessionLifecycle(sessionId, sock);
+        try {
+            await onSessionSocket?.({ sessionId, number, sock, sessionPath: authDir });
+        } catch {
+            // Ignore runtime hook errors; pairing flow should still continue.
+        }
 
         const code = await new Promise((resolve, reject) => {
             let settled = false;
@@ -159,7 +165,7 @@ export async function generatePairingCode(rawNumber, {
             sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
                 if (connection === 'open') {
                     try {
-                        await onLinked?.({ number, sessionPath: authDir });
+                        await onLinked?.({ number, sessionPath: authDir, sessionId, sock });
                     } catch {
                         // Ignore callback errors so pairing lifecycle can continue.
                     }
@@ -193,7 +199,9 @@ export async function generatePairingCode(rawNumber, {
     }
 }
 
-export async function startSavedPairedSessions() {
+export async function startSavedPairedSessions({
+    onSessionSocket = null
+} = {}) {
     await fs.ensureDir(PAIRING_SESSIONS_PATH);
     const entries = await fs.readdir(PAIRING_SESSIONS_PATH).catch(() => []);
 
@@ -205,6 +213,17 @@ export async function startSavedPairedSessions() {
         try {
             const sock = await createPairingSocket(authDir);
             attachSessionLifecycle(entry, sock);
+            try {
+                const meta = await fs.readJSON(path.join(authDir, 'pairing-meta.json')).catch(() => null);
+                await onSessionSocket?.({
+                    sessionId: entry,
+                    number: meta?.number || '',
+                    sock,
+                    sessionPath: authDir
+                });
+            } catch {
+                // Ignore runtime hook errors while restoring sessions.
+            }
         } catch {
             // Ignore broken session dirs; user can re-pair that number.
         }
