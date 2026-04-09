@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import P from 'pino';
+import pn from 'awesome-phonenumber';
 import { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, Browsers } from '@whiskeysockets/baileys';
 
 const PAIRING_SESSIONS_PATH = path.join(process.cwd(), 'cache', 'paired_sessions');
@@ -9,7 +10,9 @@ const activePairingSockets = new Map();
 function normalizeNumber(value = '') {
     const clean = String(value || '').replace(/\D/g, '');
     if (clean.length < 10 || clean.length > 15) return null;
-    return clean;
+    const parsed = pn(`+${clean}`);
+    if (!parsed?.isValid?.()) return null;
+    return parsed.getNumber('e164').replace('+', '');
 }
 
 function formatCode(code = '') {
@@ -45,6 +48,42 @@ async function createPairingSocket(authDir) {
 
     sock.ev.on('creds.update', saveCreds);
     return sock;
+}
+
+function waitForPairingReady(sock, timeoutMs = 20000) {
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            resolve();
+        };
+
+        const timer = setTimeout(finish, timeoutMs);
+        sock.ev.on('connection.update', ({ connection }) => {
+            if (connection === 'connecting' || connection === 'open') {
+                finish();
+            }
+        });
+    });
+}
+
+async function requestPairingCodeWithRetry(sock, number, retries = 3) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+        try {
+            const rawCode = await sock.requestPairingCode(number);
+            if (!rawCode) throw new Error('Pairing API returned an empty code');
+            return rawCode;
+        } catch (error) {
+            lastError = error;
+            if (attempt < retries) {
+                await new Promise((resolve) => setTimeout(resolve, 1200 * attempt));
+            }
+        }
+    }
+    throw lastError || new Error('Could not generate pairing code');
 }
 
 async function isAlreadyRegistered(authDir) {
@@ -136,7 +175,8 @@ export async function generatePairingCode(rawNumber, {
 
             setTimeout(async () => {
                 try {
-                    const rawCode = await sock.requestPairingCode(number);
+                    await waitForPairingReady(sock, 20000);
+                    const rawCode = await requestPairingCodeWithRetry(sock, number, 3);
                     const code = formatCode(rawCode);
                     try {
                         await onCodeSent?.({ number, code, sessionPath: authDir });

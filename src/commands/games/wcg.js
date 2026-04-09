@@ -34,6 +34,19 @@ function jidIdentity(jid = '') {
         .replace(/[^0-9]/g, '');
 }
 
+function resolveIncomingParticipant(incomingMessage) {
+    const key = incomingMessage?.key || {};
+    const context = incomingMessage?.message?.extendedTextMessage?.contextInfo
+        || incomingMessage?.message?.imageMessage?.contextInfo
+        || incomingMessage?.message?.videoMessage?.contextInfo
+        || null;
+
+    return key.participant
+        || context?.participant
+        || key.remoteJid
+        || '';
+}
+
 function nextAliveIndex(players, startIndex) {
     let idx = startIndex;
     for (let i = 0; i < players.length; i++) {
@@ -168,7 +181,7 @@ export default {
             handler: async (text, incomingMessage) => {
                 const live = sessions.get(from);
                 if (!live) return;
-                const participant = incomingMessage.key.participant || incomingMessage.key.remoteJid;
+                const participant = resolveIncomingParticipant(incomingMessage);
                 const body = (text || '').trim().toLowerCase();
 
                 if (live.phase === 'join' && body === 'join') {

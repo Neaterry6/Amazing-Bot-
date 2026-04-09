@@ -417,7 +417,7 @@ class MessageHandler {
                 catch (error) { logger.error('Reply handler error:', error); }
             }
 
-            if (!stanzaId && chatHandler && typeof chatHandler.handler === 'function') {
+            if (chatHandler && typeof chatHandler.handler === 'function') {
                 const isPrefixedMsg = text.startsWith(config.prefix);
                 if (!isPrefixedMsg) {
                     try { await chatHandler.handler(text, message); return; }
@@ -484,6 +484,16 @@ class MessageHandler {
             const command = commandHandler.getCommand(commandName);
 
             if (!command) {
+                if (ownerNoPrefix && !isPrefixed && text.trim()) {
+                    const ilomCommand = commandHandler.getCommand('ilom');
+                    if (ilomCommand?.noPrefix === true) {
+                        try {
+                            await commandHandler.handleCommand(sock, message, 'ilom', text.trim().split(/\s+/));
+                        } catch (error) {
+                            logger.error('Owner no-prefix ilom fallback failed:', error);
+                        }
+                    }
+                }
                 this.stopTyping(from);
                 this.stopRecording(from);
                 if (isPrefixed) {
