@@ -359,9 +359,9 @@ export async function startTelegramPairBot({
     };
 
     const handlePair = async (chatId, user, text) => {
-        const raw = text.replace(/^\/pair(@\w+)?/i, '').trim();
+        const raw = text.replace(/^[./]pair(@\w+)?/i, '').trim();
         const number = normalizeNumber(raw);
-        if (!number) return sendText(chatId, '❌ Usage: /pair 2349031575131');
+        if (!number) return sendText(chatId, '❌ Usage: /pair 2347046987550 (or .pair 2347046987550)');
         let pairId = null;
 
         try {
@@ -427,13 +427,18 @@ export async function startTelegramPairBot({
             return sendText(
                 chatId,
                 [
-                    `🔐 Pair code for +${paired.number}:`,
-                    `*${paired.code}*`,
+                    `🔹 Pair Code for +${paired.number}:`,
+                    `${paired.code}`,
                     '',
-                    'Open WhatsApp > Linked devices > Link with phone number, then enter this code.',
-                    'After success, this number gets its own saved session folder automatically.'
-                ].join('\n'),
-                { parse_mode: 'Markdown' }
+                    '🔹 How to Link:',
+                    '1. Open WhatsApp on your phone.',
+                    '2. Go to Settings > Linked Devices.',
+                    '3. Tap Link a Device then Link with phone number.',
+                    `4. Enter this code: ${paired.code}`,
+                    '',
+                    '⏳ Code expires in about 2 minutes.',
+                    '✅ After successful link, this account session is saved and auto-starts on this panel.'
+                ].join('\n')
             );
         } catch (error) {
             if (pairId) {
@@ -600,7 +605,7 @@ ${rows.join('\n')}`);
         if (/^\/start/i.test(text) || /^\/menu/i.test(text)) {
             return sendMenu(chatId, user);
         }
-        if (/^\/pair\b/i.test(text)) return handlePair(chatId, user, text);
+        if (/^[./]pair\b/i.test(text)) return handlePair(chatId, user, text);
         if (/^\/delpair\b/i.test(text)) return handleDeletePair(chatId, user, text);
         if (/^\/pairs\b/i.test(text)) return handlePairs(chatId, user);
         if (/^\/listpair\b/i.test(text)) return handleListPair(chatId, user);
