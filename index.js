@@ -611,7 +611,8 @@ async function promptPairingNumber() {
     if (cachedPairingNumber) return cachedPairingNumber;
 
     const envNumber = (process.env.PAIRING_NUMBER || process.env.PHONE_NUMBER || '').replace(/\D/g, '');
-    const canPromptInConsole = process.stdin.isTTY && process.env.NO_CONSOLE_INPUT !== 'true';
+    const pairingPromptEnabled = String(process.env.ENABLE_PAIRING_PROMPT || 'true').toLowerCase() !== 'false';
+    const canPromptInConsole = process.stdin.isTTY && process.env.NO_CONSOLE_INPUT !== 'true' && pairingPromptEnabled;
 
     if (canPromptInConsole) {
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
