@@ -12,12 +12,16 @@ function nowISO() {
 }
 
 function normalizeTelegramToken(value = '') {
-    return String(value || '').trim().replace(/^bot/i, '').replace(/^:/, '');
+    return String(value || '')
+        .trim()
+        .replace(/^['"]|['"]$/g, '')
+        .replace(/^bot/i, '')
+        .replace(/^:/, '');
 }
 
 function resolveTelegramToken(primaryToken = '', botId = '') {
-    const rawToken = String(primaryToken || '').trim();
-    const rawBotId = String(botId || '').trim().replace(/^bot/i, '').replace(/:$/, '');
+    const rawToken = String(primaryToken || '').trim().replace(/^['"]|['"]$/g, '');
+    const rawBotId = String(botId || '').trim().replace(/^['"]|['"]$/g, '').replace(/^bot/i, '').replace(/:$/, '');
 
     if (!rawToken && !rawBotId) return '';
 
@@ -28,6 +32,24 @@ function resolveTelegramToken(primaryToken = '', botId = '') {
     if (rawBotId && normalizedSecret) return `${rawBotId}:${normalizedSecret}`;
 
     return normalizedSecret;
+}
+
+function resolveTelegramTokenFromEnv() {
+    const tokenCandidates = [
+        process.env.TELEGRAM_BOT_TOKEN,
+        process.env.TELEGRAM_TOKEN,
+        process.env.TG_BOT_TOKEN,
+        process.env.BOT_TOKEN
+    ];
+    const idCandidates = [
+        process.env.TELEGRAM_BOT_ID,
+        process.env.TELEGRAM_ID,
+        process.env.TG_BOT_ID
+    ];
+
+    const token = tokenCandidates.find((x) => String(x || '').trim()) || '';
+    const botId = idCandidates.find((x) => String(x || '').trim()) || '';
+    return resolveTelegramToken(token, botId);
 }
 
 function normalizeNumber(value = '') {
@@ -284,20 +306,20 @@ async function waitForConnectedSock(getSock, {
 export async function startTelegramPairBot({
     getSock,
     ownerNumbers = [],
-    token = process.env.TELEGRAM_BOT_TOKEN,
+    token = process.env.TELEGRAM_BOT_TOKEN || resolveTelegramTokenFromEnv(),
     botId = process.env.TELEGRAM_BOT_ID,
     adminIds = (process.env.TELEGRAM_ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean)
 } = {}) {
     token = resolveTelegramToken(token, botId);
 
     if (!token) {
-        logger.info('Telegram pair bot disabled (TELEGRAM_BOT_TOKEN not set)');
+        logger.info('Telegram pair bot disabled (Telegram token not set). Supported env keys: TELEGRAM_BOT_TOKEN, TELEGRAM_TOKEN, TG_BOT_TOKEN, BOT_TOKEN.');
         return null;
     }
 
     if (!/^\d+:[A-Za-z0-9_-]{20,}$/.test(token)) {
-        logger.warn('Telegram pair bot disabled: invalid TELEGRAM_BOT_TOKEN format. Use full BotFather token like <bot_id>:<secret>.');
-        logger.warn('Tip: you can also set TELEGRAM_BOT_ID and TELEGRAM_BOT_TOKEN (secret only), and the bot will combine them automatically.');
+        logger.warn('Telegram pair bot disabled: invalid Telegram token format.');
+        logger.warn('Use TELEGRAM_BOT_ID=<bot id> and TELEGRAM_BOT_TOKEN=<secret>, or TELEGRAM_BOT_TOKEN=<bot_id:secret>.');
         return null;
     }
 
@@ -360,7 +382,7 @@ export async function startTelegramPairBot({
     };
 
     const handlePair = async (chatId, user, text) => {
-        const raw = text.replace(/^[./]pair(@\w+)?/i, '').trim();
+        const raw = text.replace(/^\s*[./]pair(?:@\w+)?\s*/i, '').trim();
         const number = normalizeNumber(raw);
         if (!number) {
             pendingPairRequests.set(String(chatId), {

@@ -67,8 +67,12 @@ function shouldUsePairingCodeFlow() {
 function getSessionIdentifier() {
     return (
         process.env.SESSION_ID ||
+        process.env.SESSIONID ||
+        process.env.SESSION ||
         process.env.WA_SESSION_ID ||
         process.env.ILOMBOT_SESSION_ID ||
+        process.env.SESSION_CREDS_JSON ||
+        process.env.CREDS_JSON ||
         config.session?.sessionId ||
         ''
     ).trim().replace(/^['"]|['"]$/g, '');
@@ -413,14 +417,15 @@ async function processSessionCredentials() {
         //   ilombot--<base64(https://mega.nz/file/FILEID#DECRYPTIONKEY)>
         // We decode it to get the full URL including the #key fragment,
         // then pass it directly to megajs which needs the hash to decrypt.
+        const normalizedSessionId = String(sessionId || '').trim();
+        const lowerSessionId = normalizedSessionId.toLowerCase();
         if (
-            sessionId.startsWith('ilombot--') ||
-            sessionId.startsWith('ilombot ilombot--') ||
-            /^https:\/\/mega\.nz\/(file|folder)\//.test(sessionId)
+            lowerSessionId.startsWith('ilombot--') ||
+            lowerSessionId.startsWith('ilombot ilombot--') ||
+            /^https:\/\/mega\.nz\/(file|folder)\//i.test(normalizedSessionId)
         ) {
-            const encoded = sessionId
-                .replace('ilombot ilombot--', '')
-                .replace('ilombot--', '')
+            const encoded = normalizedSessionId
+                .replace(/^(?:ilombot\s+)?ilombot--/i, '')
                 .trim()
                 .replace(/\s+/g, '');
 
@@ -640,6 +645,10 @@ async function promptPairingNumber() {
 
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
+    if (getSessionIdentifier()) {
+        logger.info('SESSION_ID detected in environment. Skipping console pair prompt.');
+        return;
+    }
     const number = await promptPairingNumber();
     if (!number) return;
 
