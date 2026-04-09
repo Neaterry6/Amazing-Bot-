@@ -65,7 +65,7 @@ function shouldUsePairingCodeFlow() {
 }
 
 function getSessionIdentifier() {
-    return (
+    const raw = (
         process.env.SESSION_ID ||
         process.env.SESSIONID ||
         process.env.SESSION ||
@@ -75,7 +75,13 @@ function getSessionIdentifier() {
         process.env.CREDS_JSON ||
         config.session?.sessionId ||
         ''
-    ).trim().replace(/^['"]|['"]$/g, '');
+    );
+
+    return String(raw || '')
+        .trim()
+        .replace(/^['"`]|['"`]$/g, '')
+        .replace(/^SESSION_ID\s*=\s*/i, '')
+        .trim();
 }
 
 function box(content) {
@@ -433,6 +439,7 @@ async function processSessionCredentials() {
             let fullMegaUrl;
             try {
                 const normalized = encoded
+                    // support base64url and classic base64 transparently
                     .replace(/-/g, '+')
                     .replace(/_/g, '/')
                     .padEnd(Math.ceil(encoded.length / 4) * 4, '=');
