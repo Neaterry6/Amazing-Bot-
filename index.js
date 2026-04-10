@@ -625,6 +625,7 @@ async function setupEventHandlers(sock, saveCreds) {
 async function attachPairedSessionRuntime({ sock: pairedSock, sessionId, number }) {
     if (!pairedSock || pairedRuntimeSockets.has(pairedSock)) return;
     await setupEventHandlers(pairedSock, async () => {});
+    pairedRuntimeSockets.add(pairedSock);
     logger.info(`Paired session runtime attached: ${sessionId} (+${number || 'unknown'})`);
 }
 
