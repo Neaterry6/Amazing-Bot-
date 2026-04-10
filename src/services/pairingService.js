@@ -7,6 +7,7 @@ const PAIRING_SESSIONS_PATH = path.join(process.cwd(), 'cache', 'paired_sessions
 const PAIRING_CODE_FILE = path.join(PAIRING_SESSIONS_PATH, 'pairing.json');
 const activePairingSockets = new Map();
 const pendingPairRequests = new Map();
+const pairedReconnectTimers = new Map();
 
 function normalizeNumber(value = '') {
     const clean = String(value || '').replace(/\D/g, '');
@@ -16,6 +17,11 @@ function normalizeNumber(value = '') {
 
 function formatCode(code = '') {
     return code?.match(/.{1,4}/g)?.join('-') || code;
+}
+
+function isRetryablePairClose(error) {
+    const statusCode = error?.statusCode ?? error?.output?.statusCode;
+    return [401, 408, 428, 440, 500, 503].includes(Number(statusCode));
 }
 
 async function createPairingSocket(authDir) {
@@ -85,6 +91,40 @@ async function requestPairingCodeWithRetry(sock, number, retries = 3) {
     throw lastError || new Error('Could not generate pairing code');
 }
 
+function waitForCodeStability(sock, timeoutMs = 8000) {
+    return new Promise((resolve, reject) => {
+        let finished = false;
+
+        const complete = (fn, payload) => {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            try {
+                if (typeof sock?.ev?.off === 'function') sock.ev.off('connection.update', onUpdate);
+            } catch {
+                // Ignore listener cleanup issues.
+            }
+            fn(payload);
+        };
+
+        const onUpdate = ({ connection, lastDisconnect }) => {
+            if (connection === 'open') {
+                complete(resolve, { linked: true });
+                return;
+            }
+            if (connection === 'close') {
+                const statusCode = lastDisconnect?.error?.output?.statusCode;
+                const err = new Error(`Pairing connection closed (${statusCode ?? 'unknown'}) right after code generation.`);
+                err.statusCode = statusCode;
+                complete(reject, err);
+            }
+        };
+
+        const timer = setTimeout(() => complete(resolve, { linked: false }), timeoutMs);
+        sock.ev.on('connection.update', onUpdate);
+    });
+}
+
 function withNumberPairLock(number, worker) {
     const key = String(number || '');
     if (!key) return worker();
@@ -148,20 +188,66 @@ export async function readLatestPairingCode() {
     }
 }
 
-function attachSessionLifecycle(sessionId, sock) {
+async function scheduleReconnect({ sessionId, authDir, onSessionSocket = null, attempt = 1 }) {
+    if (pairedReconnectTimers.has(sessionId)) return;
+    const delayMs = Math.min(30000, attempt * 2500);
+
+    const timer = setTimeout(async () => {
+        pairedReconnectTimers.delete(sessionId);
+
+        if (!await isAlreadyRegistered(authDir)) return;
+
+        try {
+            const sock = await createPairingSocket(authDir);
+            attachSessionLifecycle(sessionId, sock, { authDir, onSessionSocket, reconnectAttempt: 1 });
+            try {
+                const meta = await fs.readJSON(path.join(authDir, 'pairing-meta.json')).catch(() => null);
+                await onSessionSocket?.({
+                    sessionId,
+                    number: meta?.number || '',
+                    sock,
+                    sessionPath: authDir
+                });
+            } catch {
+                // Ignore runtime hook errors; reconnect should still happen.
+            }
+        } catch {
+            await scheduleReconnect({ sessionId, authDir, onSessionSocket, attempt: attempt + 1 });
+        }
+    }, delayMs);
+
+    pairedReconnectTimers.set(sessionId, timer);
+}
+
+function attachSessionLifecycle(sessionId, sock, {
+    authDir = null,
+    onSessionSocket = null
+} = {}) {
     activePairingSockets.set(sessionId, sock);
-    sock.ev.on('connection.update', ({ connection }) => {
+    sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
         if (connection === 'open') {
             activePairingSockets.set(sessionId, sock);
+            if (pairedReconnectTimers.has(sessionId)) {
+                clearTimeout(pairedReconnectTimers.get(sessionId));
+                pairedReconnectTimers.delete(sessionId);
+            }
         }
         if (connection === 'close') {
             activePairingSockets.delete(sessionId);
+            if (!authDir) return;
+
+            const statusCode = Number(lastDisconnect?.error?.output?.statusCode || 0);
+            if ([401, 403].includes(statusCode)) return;
+            if (!await isAlreadyRegistered(authDir)) return;
+            await scheduleReconnect({ sessionId, authDir, onSessionSocket, attempt: 1 });
         }
     });
 }
 
 export async function generatePairingCode(rawNumber, {
     timeoutMs = 90000,
+    maxAttempts = 3,
+    codeStabilityWindowMs = 8000,
     onCodeSent = null,
     onLinked = null,
     onSessionSocket = null
@@ -171,76 +257,92 @@ export async function generatePairingCode(rawNumber, {
         throw new Error('Invalid phone number. Use 10-15 digits with country code.');
     }
     return await withNumberPairLock(number, async () => {
-        const sessionId = createSessionId(number);
-        const authDir = sessionDirForId(sessionId);
-        await fs.ensureDir(authDir);
-        await fs.ensureDir(path.join(authDir, 'keys'));
-        await writeSessionMeta(authDir, number);
+        let lastError = null;
 
-        let sock = null;
-        let timeoutHandle = null;
+        for (let attempt = 1; attempt <= Math.max(1, maxAttempts); attempt += 1) {
+            const sessionId = createSessionId(number);
+            const authDir = sessionDirForId(sessionId);
+            await fs.ensureDir(authDir);
+            await fs.ensureDir(path.join(authDir, 'keys'));
+            await writeSessionMeta(authDir, number);
 
-        try {
-            sock = await createPairingSocket(authDir);
-            attachSessionLifecycle(sessionId, sock);
+            let sock = null;
+            let timeoutHandle = null;
+
             try {
-                await onSessionSocket?.({ sessionId, number, sock, sessionPath: authDir });
-            } catch {
-                // Ignore runtime hook errors; pairing flow should still continue.
-            }
+                sock = await createPairingSocket(authDir);
+                attachSessionLifecycle(sessionId, sock, { authDir, onSessionSocket });
+                try {
+                    await onSessionSocket?.({ sessionId, number, sock, sessionPath: authDir });
+                } catch {
+                    // Ignore runtime hook errors; pairing flow should still continue.
+                }
 
-            const code = await new Promise((resolve, reject) => {
-                let settled = false;
-                const finish = (fn, payload) => {
-                    if (settled) return;
-                    settled = true;
-                    fn(payload);
-                };
+                const code = await new Promise((resolve, reject) => {
+                    let settled = false;
+                    const finish = (fn, payload) => {
+                        if (settled) return;
+                        settled = true;
+                        fn(payload);
+                    };
 
-                timeoutHandle = setTimeout(() => {
-                    finish(reject, new Error('Timed out while generating pair code. Try again.'));
-                }, timeoutMs);
+                    timeoutHandle = setTimeout(() => {
+                        finish(reject, new Error('Timed out while generating pair code. Try again.'));
+                    }, timeoutMs);
 
-                sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
-                    if (connection === 'open') {
-                        try {
-                            await onLinked?.({ number, sessionPath: authDir, sessionId, sock });
-                        } catch {
-                            // Ignore callback errors so pairing lifecycle can continue.
+                    sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
+                        if (connection === 'open') {
+                            try {
+                                await onLinked?.({ number, sessionPath: authDir, sessionId, sock });
+                            } catch {
+                                // Ignore callback errors so pairing lifecycle can continue.
+                            }
                         }
-                    }
-                    if (connection === 'close' && !settled) {
-                        const statusCode = lastDisconnect?.error?.output?.statusCode;
-                        finish(reject, new Error(`Pairing connection closed (${statusCode ?? 'unknown'}).`));
-                    }
+                        if (connection === 'close' && !settled) {
+                            const statusCode = lastDisconnect?.error?.output?.statusCode;
+                            const error = new Error(`Pairing connection closed (${statusCode ?? 'unknown'}).`);
+                            error.statusCode = statusCode;
+                            finish(reject, error);
+                        }
+                    });
+
+                    setTimeout(async () => {
+                        try {
+                            await waitForPairingReady(sock, 20000);
+                            const rawCode = await requestPairingCodeWithRetry(sock, number, 3);
+                            const code = formatCode(rawCode);
+                            await writeLatestPairingCode({
+                                number,
+                                code,
+                                sessionPath: authDir
+                            });
+                            try {
+                                await onCodeSent?.({ number, code, sessionPath: authDir });
+                            } catch {
+                                // Ignore callback errors so pair code can still be returned.
+                            }
+
+                            await waitForCodeStability(sock, codeStabilityWindowMs);
+                            finish(resolve, code);
+                        } catch (error) {
+                            finish(reject, error);
+                        }
+                    }, 700);
                 });
 
-                setTimeout(async () => {
-                    try {
-                        await waitForPairingReady(sock, 20000);
-                        const rawCode = await requestPairingCodeWithRetry(sock, number, 3);
-                        const code = formatCode(rawCode);
-                        await writeLatestPairingCode({
-                            number,
-                            code,
-                            sessionPath: authDir
-                        });
-                        try {
-                            await onCodeSent?.({ number, code, sessionPath: authDir });
-                        } catch {
-                            // Ignore callback errors so pair code can still be returned.
-                        }
-                        finish(resolve, code);
-                    } catch (error) {
-                        finish(reject, error);
-                    }
-                }, 700);
-            });
-
-            return { number, code, sessionPath: authDir };
-        } finally {
-            if (timeoutHandle) clearTimeout(timeoutHandle);
+                return { number, code, sessionPath: authDir };
+            } catch (error) {
+                lastError = error;
+                const isRetryable = isRetryablePairClose(error);
+                if (!isRetryable || attempt >= maxAttempts) throw error;
+                await fs.remove(authDir).catch(() => {});
+                await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
+            } finally {
+                if (timeoutHandle) clearTimeout(timeoutHandle);
+            }
         }
+
+        throw lastError || new Error('Failed to generate pairing code.');
     });
 }
 
@@ -257,7 +359,7 @@ export async function startSavedPairedSessions({
 
         try {
             const sock = await createPairingSocket(authDir);
-            attachSessionLifecycle(entry, sock);
+            attachSessionLifecycle(entry, sock, { authDir, onSessionSocket });
             try {
                 const meta = await fs.readJSON(path.join(authDir, 'pairing-meta.json')).catch(() => null);
                 await onSessionSocket?.({
@@ -284,6 +386,10 @@ export async function clearAllPairedSessions() {
         }
     }
     activePairingSockets.clear();
+    for (const [, timer] of pairedReconnectTimers.entries()) {
+        clearTimeout(timer);
+    }
+    pairedReconnectTimers.clear();
 
     await fs.remove(PAIRING_SESSIONS_PATH);
     await fs.ensureDir(PAIRING_SESSIONS_PATH);
