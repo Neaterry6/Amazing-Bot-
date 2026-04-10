@@ -323,6 +323,9 @@ async function processSessionCredentials() {
         const persistSessionData = async (rawData) => {
             const credPath = path.join(SESSION_PATH, 'creds.json');
             const keysPath = path.join(SESSION_PATH, 'keys');
+            await fs.ensureDir(keysPath);
+            await fs.remove(credPath).catch(() => {});
+            await fs.emptyDir(keysPath);
 
             // pair.js uploads zipped auth folders (PK zip). Extract directly when detected.
             if (Buffer.isBuffer(rawData) && rawData.length > 4 && rawData[0] === 0x50 && rawData[1] === 0x4b) {
@@ -340,10 +343,19 @@ async function processSessionCredentials() {
 
                     // Support both root creds.json and nested auth_info path variants.
                     const rootCreds = path.join(SESSION_PATH, 'creds.json');
+                    const rootKeys = path.join(SESSION_PATH, 'keys');
                     if (!await fs.pathExists(rootCreds)) {
                         const nestedCreds = path.join(SESSION_PATH, 'auth_info_baileys', 'creds.json');
                         if (await fs.pathExists(nestedCreds)) {
                             await fs.copy(nestedCreds, rootCreds, { overwrite: true });
+                        }
+                    }
+
+                    const nestedKeys = path.join(SESSION_PATH, 'auth_info_baileys', 'keys');
+                    if (await fs.pathExists(nestedKeys)) {
+                        const rootKeyEntries = await fs.readdir(rootKeys).catch(() => []);
+                        if (!rootKeyEntries.length) {
+                            await fs.copy(nestedKeys, rootKeys, { overwrite: true, errorOnExist: false });
                         }
                     }
                     return await fs.pathExists(rootCreds);

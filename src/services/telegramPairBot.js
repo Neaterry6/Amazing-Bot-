@@ -459,22 +459,15 @@ export async function startTelegramPairBot({
 
     const sendHelpCard = async (chatId) => {
         await sendText(chatId, [
-            '📋 *How to pair successfully*',
+            '📋 Pairing guide',
             '',
-            '1) Send: `/pair 234XXXXXXXXXX`',
-            '2) Wait for your fresh 8-character code.',
-            '3) In WhatsApp open *Linked Devices*.',
-            '4) Tap *Link with phone number*.',
-            '5) Enter code exactly as sent.',
+            '1) Tap 📱 Pair Number or send /pair <number>.',
+            '2) Copy the 8-digit code sent by bot.',
+            '3) In WhatsApp: Settings > Linked devices > Link with phone number.',
+            '4) Paste code and finish link.',
             '',
-            '⚠️ Tips to avoid "Couldn’t link device":',
-            '• Use code within 2 minutes.',
-            '• Don’t request many codes at once.',
-            '• If it fails once, request a new code and retry.',
-            '',
-            '✅ Session is auto-saved after successful link.'
+            '✅ Session is saved automatically and will be restored after restart.'
         ].join('\n'), {
-            parse_mode: 'Markdown',
             reply_markup: inlineMainButtons()
         });
     };
