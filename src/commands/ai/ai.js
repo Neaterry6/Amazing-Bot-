@@ -1,7 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
 import axios from 'axios';
-import { registerChatHandler, clearChatHandler } from '../../handlers/messageHandler.js';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai');
 const HISTORY_FILE = path.join(DATA_DIR, 'ai_history.json');
@@ -121,12 +120,10 @@ function getQuotedText(message) {
     return q.conversation || q.extendedTextMessage?.text || q.imageMessage?.caption || q.videoMessage?.caption || null;
 }
 
-function registerReplyHandler(msgId, chatJid, handler) {
+function registerReplyHandler(msgId, handler) {
     if (!global.replyHandlers) global.replyHandlers = {};
     global.replyHandlers[msgId] = { command: 'ai', handler };
     setTimeout(() => { if (global.replyHandlers?.[msgId]) delete global.replyHandlers[msgId]; }, REPLY_TTL);
-
-    registerChatHandler(chatJid, { command: 'ai', handler }, REPLY_TTL);
 }
 
 function buildChainHandler(sock, from, uid, sender) {
@@ -162,7 +159,7 @@ function buildChainHandler(sock, from, uid, sender) {
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
             const sent = await sock.sendMessage(from, { text: aiText }, { quoted: replyMessage });
-            registerReplyHandler(sent.key.id, from, buildChainHandler(sock, from, uid, sender));
+            registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
         } catch (err) {
             const errText = `❌ Error: ${err.message || 'Could not get response'}`;
             await sock.sendMessage(from, { text: errText }, { quoted: replyMessage });
@@ -272,7 +269,7 @@ export default {
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
             const sent = await sock.sendMessage(from, { text: aiText }, { quoted: message });
-            registerReplyHandler(sent.key.id, from, buildChainHandler(sock, from, uid, sender));
+            registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
         } catch (err) {
             const errText = `❌ AI Error: ${err.message || 'Unknown error'}\n\nTry: .ai -engine:gemini`;
             await sock.sendMessage(from, { text: errText }, { quoted: message });

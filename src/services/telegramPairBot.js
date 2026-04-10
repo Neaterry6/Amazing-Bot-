@@ -146,6 +146,7 @@ async function ensureRequiredMembership({ token, chatId, user, adminIds }) {
     if (isAdmin(user?.id, adminIds)) return { ok: true, missing: [] };
 
     const missing = [];
+    const unverifiable = [];
     for (const target of REQUIRED_JOIN_TARGETS) {
         if (!target.required) continue;
         if (!target.chatId) {
@@ -159,9 +160,19 @@ async function ensureRequiredMembership({ token, chatId, user, adminIds }) {
             const status = String(member?.status || '').toLowerCase();
             const joined = ['creator', 'administrator', 'member'].includes(status);
             if (!joined) missing.push(target);
-        } catch {
+        } catch (error) {
+            const reason = String(error?.message || '').toLowerCase();
+            const cannotVerify = /(chat not found|member list is inaccessible|have no rights|forbidden|bot was kicked|need administrator rights|user not found)/i.test(reason);
+            if (cannotVerify) {
+                unverifiable.push(target.title);
+                continue;
+            }
             missing.push(target);
         }
+    }
+
+    if (unverifiable.length > 0) {
+        logger.warn(`Telegram membership check skipped for unverifiable targets: ${unverifiable.join(', ')}`);
     }
 
     if (missing.length > 0) {

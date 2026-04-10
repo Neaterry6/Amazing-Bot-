@@ -531,18 +531,14 @@ export default {
 
     async execute({ sock, message, args, from, sender, isGroup, isBotAdmin, isOwner, isSudo }) {
         const text = extractText(message).trim();
-        const full = text || `ilom ${args.join(' ')}`;
-        const contextInfo = getContextInfo(message);
+        const full = text || '';
         const mainOwner = config.ownerNumbers?.[0] || '';
         const isMainOwner = jidToNumber(sender) && jidToNumber(sender) === jidToNumber(mainOwner);
-        const isReplyToBot = !!contextInfo?.stanzaId && !!global.replyHandlers?.[contextInfo.stanzaId];
-        const shouldHandleSessionMessage = !ILOM_PREFIX_REGEX.test(full) && isReplyToBot;
-        const shouldHandleOwnerNoPrefix = isMainOwner && !ILOM_PREFIX_REGEX.test(full) && !shouldHandleSessionMessage;
-        if (!ILOM_PREFIX_REGEX.test(full) && !shouldHandleSessionMessage && !shouldHandleOwnerNoPrefix) return;
+        if (!ILOM_PREFIX_REGEX.test(full)) return;
 
         const state = await loadState();
         const isPrivileged = isOwner || isSudo;
-        const input = ILOM_PREFIX_REGEX.test(full) ? full.replace(ILOM_PREFIX_REGEX, '').trim() : full.trim();
+        const input = full.replace(ILOM_PREFIX_REGEX, '').trim();
         const recentHistory = await getRecentHistory({ from, sender });
         const userStyle = inferUserStyle(recentHistory);
         const quotedText = extractQuotedText(message);

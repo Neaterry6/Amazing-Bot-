@@ -245,7 +245,7 @@ function attachSessionLifecycle(sessionId, sock, {
 }
 
 export async function generatePairingCode(rawNumber, {
-    timeoutMs = 90000,
+    timeoutMs = 120000,
     maxAttempts = 3,
     codeStabilityWindowMs = 8000,
     onCodeSent = null,
@@ -271,7 +271,7 @@ export async function generatePairingCode(rawNumber, {
 
             try {
                 sock = await createPairingSocket(authDir);
-                attachSessionLifecycle(sessionId, sock);
+                attachSessionLifecycle(sessionId, sock, { authDir, onSessionSocket });
                 try {
                     await onSessionSocket?.({ sessionId, number, sock, sessionPath: authDir });
                 } catch {
@@ -280,6 +280,7 @@ export async function generatePairingCode(rawNumber, {
 
                 const code = await new Promise((resolve, reject) => {
                     let settled = false;
+                    let codeIssued = false;
                     const finish = (fn, payload) => {
                         if (settled) return;
                         settled = true;
@@ -298,7 +299,7 @@ export async function generatePairingCode(rawNumber, {
                                 // Ignore callback errors so pairing lifecycle can continue.
                             }
                         }
-                        if (connection === 'close' && !settled) {
+                        if (connection === 'close' && !settled && !codeIssued) {
                             const statusCode = lastDisconnect?.error?.output?.statusCode;
                             const error = new Error(`Pairing connection closed (${statusCode ?? 'unknown'}).`);
                             error.statusCode = statusCode;
@@ -311,6 +312,7 @@ export async function generatePairingCode(rawNumber, {
                             await waitForPairingReady(sock, 20000);
                             const rawCode = await requestPairingCodeWithRetry(sock, number, 3);
                             const code = formatCode(rawCode);
+                            codeIssued = true;
                             await writeLatestPairingCode({
                                 number,
                                 code,
