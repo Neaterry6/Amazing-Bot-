@@ -271,7 +271,7 @@ export async function generatePairingCode(rawNumber, {
 
             try {
                 sock = await createPairingSocket(authDir);
-                attachSessionLifecycle(sessionId, sock, { authDir, onSessionSocket });
+                attachSessionLifecycle(sessionId, sock);
                 try {
                     await onSessionSocket?.({ sessionId, number, sock, sessionPath: authDir });
                 } catch {
