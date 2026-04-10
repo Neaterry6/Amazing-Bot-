@@ -1,7 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import logger from '../utils/logger.js';
-import { clearAllPairedSessions, generatePairingCode } from './pairingService.js';
+import { clearAllPairedSessions, generatePairingCode, readLatestPairingCode } from './pairingService.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const STORE_FILE = path.join(process.cwd(), 'data', 'telegram-pairs.json');
@@ -113,7 +113,8 @@ function inlineMainButtons() {
     return {
         inline_keyboard: [
             [{ text: '📱 Pair Number', callback_data: 'act_pair' }],
-            [{ text: '📄 My Pairs', callback_data: 'act_pairs' }, { text: '🧭 Menu', callback_data: 'act_menu' }],
+            [{ text: '📄 My Pairs', callback_data: 'act_pairs' }, { text: '❓ Help', callback_data: 'act_help' }],
+            [{ text: '🧭 Menu', callback_data: 'act_menu' }, { text: '⚡ Commands', callback_data: 'act_cmds' }],
             [{ text: '✅ Check Join', callback_data: 'act_check_join' }]
         ]
     };
@@ -125,6 +126,19 @@ function joinRequiredButtons() {
             ...REQUIRED_JOIN_TARGETS.map((x) => [{ text: `Join ${x.title}`, url: x.invite }]),
             [{ text: '✅ I Have Joined', callback_data: 'act_check_join' }]
         ]
+    };
+}
+
+function commandShortcutButtons() {
+    return {
+        keyboard: [
+            [{ text: '/pair 2349031575131' }],
+            [{ text: '/pairs' }, { text: '/delpair' }],
+            [{ text: '/help' }, { text: '/buttons' }],
+            [{ text: '/ilomai Hello' }, { text: '/img anime wallpaper' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: false
     };
 }
 
@@ -444,6 +458,27 @@ export async function startTelegramPairBot({
         });
     };
 
+    const sendCommandButtons = async (chatId) => {
+        await sendText(chatId, '⚡ Command shortcuts:', {
+            reply_markup: commandShortcutButtons()
+        });
+    };
+
+    const sendHelpCard = async (chatId) => {
+        await sendText(chatId, [
+            '📋 Pairing guide',
+            '',
+            '1) Tap 📱 Pair Number or send /pair <number>.',
+            '2) Copy the 8-digit code sent by bot.',
+            '3) In WhatsApp: Settings > Linked devices > Link with phone number.',
+            '4) Paste code and finish link.',
+            '',
+            '✅ Session is saved automatically and will be restored after restart.'
+        ].join('\n'), {
+            reply_markup: inlineMainButtons()
+        });
+    };
+
     const sendWhatsappNotice = async ({ number, code, tgUser, chatId }) => {
         const sock = await waitForConnectedSock(getSock, {
             timeoutMs: 20000,
@@ -528,9 +563,16 @@ export async function startTelegramPairBot({
                 }
             });
 
+            const latestPair = await readLatestPairingCode().catch(() => null);
+            const resolvedCode = (
+                latestPair?.number === paired.number
+                && typeof latestPair?.code === 'string'
+                && latestPair.code.trim()
+            ) ? latestPair.code.trim() : paired.code;
+
             await updatePairRecord(pairId, {
                 number: paired.number,
-                code: paired.code,
+                code: resolvedCode,
                 sessionPath: paired.sessionPath || null,
                 status: 'code_sent'
             });
@@ -539,7 +581,7 @@ export async function startTelegramPairBot({
             try {
                 waNoticeSent = await sendWhatsappNotice({
                     number: paired.number,
-                    code: paired.code,
+                    code: resolvedCode,
                     tgUser: user,
                     chatId
                 });
@@ -555,13 +597,13 @@ export async function startTelegramPairBot({
                 chatId,
                 [
                     `🔹 Pair Code for +${paired.number}:`,
-                    `${paired.code}`,
+                    `${resolvedCode}`,
                     '',
                     '🔹 How to Link:',
                     '1. Open WhatsApp on your phone.',
                     '2. Go to Settings > Linked Devices.',
                     '3. Tap Link a Device then Link with phone number.',
-                    `4. Enter this code: ${paired.code}`,
+                    `4. Enter this code: ${resolvedCode}`,
                     '',
                     '⏳ Code expires in about 2 minutes.',
                     '✅ After successful link, this account session is saved and auto-starts on this panel.'
@@ -738,6 +780,8 @@ ${rows.join('\n')}`);
 
         if (action === 'act_menu') return sendMenu(chatId, user);
         if (action === 'act_buttons') return sendButtons(chatId);
+        if (action === 'act_cmds') return sendCommandButtons(chatId);
+        if (action === 'act_help') return sendHelpCard(chatId);
 
         if (action === 'act_check_join') {
             const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
@@ -795,6 +839,8 @@ ${rows.join('\n')}`);
             return sendMenu(chatId, user);
         }
         if (/^\/buttons\b/i.test(text)) return sendButtons(chatId);
+        if (/^\/cmds\b/i.test(text)) return sendCommandButtons(chatId);
+        if (/^\/help\b/i.test(text)) return sendHelpCard(chatId);
 
         const nonRestricted = [
             /^\/start/i,
