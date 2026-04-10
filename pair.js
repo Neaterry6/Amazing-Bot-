@@ -17,9 +17,13 @@ import { upload as megaUpload } from './mega.js';
 
 const router = express.Router();
 
-const MAX_RECONNECT_ATTEMPTS = 3;
-const SESSION_TIMEOUT = 5 * 60 * 1000;
+const MAX_RECONNECT_ATTEMPTS = 6;
+const SESSION_TIMEOUT = 12 * 60 * 1000;
 const CLEANUP_DELAY = 5000;
+const POST_PAIRING_CODE_WAIT_MS = 4000;
+const POST_CONNECT_SETTLE_MS = 8000;
+const CREDS_WAIT_TIMEOUT_MS = 15000;
+const CREDS_POLL_INTERVAL_MS = 500;
 
 async function removeFile(filePath) {
     try {
@@ -47,6 +51,17 @@ async function zipAuthDir(dirPath) {
         archive.directory(dirPath, false);
         archive.finalize().catch(reject);
     });
+}
+
+async function waitForFile(filePath, timeoutMs = CREDS_WAIT_TIMEOUT_MS, intervalMs = CREDS_POLL_INTERVAL_MS) {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeoutMs) {
+        if (fs.existsSync(filePath)) return true;
+        await delay(intervalMs);
+    }
+
+    return fs.existsSync(filePath);
 }
 
 router.get('/', async (req, res) => {
@@ -154,11 +169,12 @@ router.get('/', async (req, res) => {
                     console.log(`✅ Connected for ${num} — preparing session file`);
 
                     try {
-                        await delay(3000);
+                        await delay(POST_CONNECT_SETTLE_MS);
                         await saveCreds();
 
                         const credsFile = `${authDir}/creds.json`;
-                        if (!fs.existsSync(credsFile)) {
+                        const credsReady = await waitForFile(credsFile);
+                        if (!credsReady) {
                             throw new Error('creds.json not found after successful link');
                         }
 
@@ -233,7 +249,7 @@ router.get('/', async (req, res) => {
             });
 
             if (!state.creds.registered && !pairingCodeSent && !isCleaningUp) {
-                await delay(1500);
+                await delay(POST_PAIRING_CODE_WAIT_MS);
 
                 try {
                     pairingCodeSent = true;
