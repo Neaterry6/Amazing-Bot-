@@ -1,7 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import logger from '../utils/logger.js';
-import { clearAllPairedSessions, generatePairingCode, readLatestPairingCode } from './pairingService.js';
+import { clearAllPairedSessions, generatePairingCode } from './pairingService.js';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const STORE_FILE = path.join(process.cwd(), 'data', 'telegram-pairs.json');
@@ -456,6 +456,7 @@ export async function startTelegramPairBot({
         await sendText(chatId, '🔘 Quick action buttons:', {
             reply_markup: inlineMainButtons()
         });
+        await sendCommandButtons(chatId);
     };
 
     const sendCommandButtons = async (chatId) => {
@@ -563,16 +564,9 @@ export async function startTelegramPairBot({
                 }
             });
 
-            const latestPair = await readLatestPairingCode().catch(() => null);
-            const resolvedCode = (
-                latestPair?.number === paired.number
-                && typeof latestPair?.code === 'string'
-                && latestPair.code.trim()
-            ) ? latestPair.code.trim() : paired.code;
-
             await updatePairRecord(pairId, {
                 number: paired.number,
-                code: resolvedCode,
+                code: paired.code,
                 sessionPath: paired.sessionPath || null,
                 status: 'code_sent'
             });
@@ -581,7 +575,7 @@ export async function startTelegramPairBot({
             try {
                 waNoticeSent = await sendWhatsappNotice({
                     number: paired.number,
-                    code: resolvedCode,
+                    code: paired.code,
                     tgUser: user,
                     chatId
                 });
@@ -597,15 +591,16 @@ export async function startTelegramPairBot({
                 chatId,
                 [
                     `🔹 Pair Code for +${paired.number}:`,
-                    `${resolvedCode}`,
+                    `${paired.code}`,
                     '',
                     '🔹 How to Link:',
                     '1. Open WhatsApp on your phone.',
                     '2. Go to Settings > Linked Devices.',
                     '3. Tap Link a Device then Link with phone number.',
-                    `4. Enter this code: ${resolvedCode}`,
+                    `4. Enter this code: ${paired.code}`,
                     '',
                     '⏳ Code expires in about 2 minutes.',
+                    '⚠️ If WhatsApp shows "Couldn’t link device", run /pair again to get a fresh code.',
                     '✅ After successful link, this account session is saved and auto-starts on this panel.'
                 ].join('\n')
             );
