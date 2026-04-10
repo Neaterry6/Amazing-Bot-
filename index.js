@@ -85,6 +85,31 @@ function getSessionIdentifier() {
         .trim();
 }
 
+async function getSessionIdFromEnvFile() {
+    const envPath = path.join(process.cwd(), '.env');
+    if (!await fs.pathExists(envPath)) return '';
+
+    const lines = (await fs.readFile(envPath, 'utf8')).split(/\r?\n/);
+    for (const rawLine of lines) {
+        const line = String(rawLine || '').trim();
+        if (!line || line.startsWith('#') || !line.includes('=')) continue;
+
+        const key = line.slice(0, line.indexOf('=')).trim();
+        if (key !== 'SESSION_ID') continue;
+
+        const value = line
+            .slice(line.indexOf('=') + 1)
+            .trim()
+            .replace(/^['"`]|['"`]$/g, '')
+            .replace(/^SESSION_ID\s*=\s*/i, '')
+            .trim();
+
+        if (value) return value;
+    }
+
+    return '';
+}
+
 function box(content) {
     console.log(chalk.hex('#8B5CF6')('╔' + '═'.repeat(W) + '╗'));
     for (const row of content) {
@@ -551,6 +576,7 @@ async function processSessionCredentials() {
     } catch (error) {
         logger.warn(`Session processing failed: ${error.message} - will use QR`);
         await fs.remove(path.join(SESSION_PATH, 'creds.json')).catch(() => {});
+        await removeEnvValue('SESSION_ID').catch(() => {});
         return false;
     }
 }
@@ -676,8 +702,10 @@ async function promptPairingNumber() {
 
 async function requestPairingCodeIfNeeded(sock, isRegistered) {
     if (isRegistered) return;
-    if (getSessionIdentifier()) {
-        logger.info('SESSION_ID detected in environment. Skipping console pair prompt.');
+    const sessionFromEnvFile = await getSessionIdFromEnvFile();
+    const sessionFromRuntimeEnv = String(process.env.SESSION_ID || '').trim();
+    if (sessionFromEnvFile || sessionFromRuntimeEnv) {
+        logger.info('SESSION_ID found. Skipping phone number prompt for pairing.');
         return;
     }
     const number = await promptPairingNumber();
