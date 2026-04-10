@@ -573,7 +573,9 @@ async function setupEventHandlers(sock, saveCreds) {
                 if (!message?.key) continue;
                 const from = message.key.remoteJid;
                 if (!from || from === 'status@broadcast') continue;
-                if (message.key.fromMe && !config.selfMode) continue;
+                const ownJid = sock?.user?.id ? sock.user.id.split(':')[0] : '';
+                const isOwnChat = ownJid && from === ownJid;
+                if (message.key.fromMe && !config.selfMode && !isOwnChat) continue;
                 if (!message.message || !Object.keys(message.message).length) continue;
 
                 const ignoredTypes = ['protocolMessage', 'senderKeyDistributionMessage', 'messageContextInfo'];
@@ -625,6 +627,7 @@ async function setupEventHandlers(sock, saveCreds) {
 async function attachPairedSessionRuntime({ sock: pairedSock, sessionId, number }) {
     if (!pairedSock || pairedRuntimeSockets.has(pairedSock)) return;
     await setupEventHandlers(pairedSock, async () => {});
+    pairedRuntimeSockets.add(pairedSock);
     logger.info(`Paired session runtime attached: ${sessionId} (+${number || 'unknown'})`);
 }
 
@@ -842,7 +845,7 @@ async function autoFollowNewsletters(sockInstance) {
             await sockInstance.newsletterFollow(jid);
             logger.info(`Auto-followed newsletter: ${jid}`);
         } catch (error) {
-            logger.warn(`Newsletter auto-follow failed for ${jid}: ${error.message}`);
+            logger.debug(`Newsletter auto-follow skipped for ${jid}: ${error.message}`);
         }
     }
 }

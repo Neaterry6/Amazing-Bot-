@@ -113,7 +113,8 @@ function inlineMainButtons() {
     return {
         inline_keyboard: [
             [{ text: '📱 Pair Number', callback_data: 'act_pair' }],
-            [{ text: '📄 My Pairs', callback_data: 'act_pairs' }, { text: '🧭 Menu', callback_data: 'act_menu' }],
+            [{ text: '📄 My Pairs', callback_data: 'act_pairs' }, { text: '❓ Help', callback_data: 'act_help' }],
+            [{ text: '🧭 Menu', callback_data: 'act_menu' }, { text: '⚡ Commands', callback_data: 'act_cmds' }],
             [{ text: '✅ Check Join', callback_data: 'act_check_join' }]
         ]
     };
@@ -125,6 +126,19 @@ function joinRequiredButtons() {
             ...REQUIRED_JOIN_TARGETS.map((x) => [{ text: `Join ${x.title}`, url: x.invite }]),
             [{ text: '✅ I Have Joined', callback_data: 'act_check_join' }]
         ]
+    };
+}
+
+function commandShortcutButtons() {
+    return {
+        keyboard: [
+            [{ text: '/pair 2349031575131' }],
+            [{ text: '/pairs' }, { text: '/delpair' }],
+            [{ text: '/help' }, { text: '/buttons' }],
+            [{ text: '/ilomai Hello' }, { text: '/img anime wallpaper' }]
+        ],
+        resize_keyboard: true,
+        one_time_keyboard: false
     };
 }
 
@@ -170,34 +184,26 @@ async function ensureRequiredMembership({ token, chatId, user, adminIds }) {
 
 function buildMenu(user, runtimeText = '') {
     return [
-        '🖼 ╭─────────────────❏',
-        '│  ✦ ilom ²⁰²⁶ ✦',
-        '│  ',
-        '│  👑 Owner: Raphael ilom x brokenvzn',
-        `│  ⏱️ Runtime: ${runtimeText}`,
-        `│  👤 User: ${user?.first_name || 'User'}`,
-        `│  🆔 User ID: ${user?.id || 'unknown'}`,
-        '│',
-        '├─────────────────❏',
-        '│  📱 USER COMMANDS',
-        '│  /pair <number>',
-        '│  /buttons',
-        '│  /pairs',
-        '│  /delpair <id>',
-        '│  /ilomai <prompt>',
-        '│  /tts <text>',
-        '│  /img <prompt>',
-        '│',
-        '├─────────────────❏',
-        '│  🛡️ ADMIN COMMANDS',
-        '│  /listpair',
-        '│  /broadcast <text>',
-        '│  /clearsession',
-        '│',
-        '╰─────────────────❏',
-        '│  Presented by ILOM BOT INC.',
-        '│  © 2026',
-        '╰─────────────────'
+        '╭───〔 🤖 ILOM PAIR BOT 〕───╮',
+        `👤 User: ${user?.first_name || 'User'}  |  🆔 ${user?.id || 'unknown'}`,
+        `⏱️ Uptime: ${runtimeText}`,
+        '',
+        '📱 Pairing Commands',
+        '• /pair <number>  → Generate WhatsApp link code',
+        '• /pairs          → View your pair history',
+        '• /delpair <id>   → Remove your pair record',
+        '',
+        '🧠 AI Utilities',
+        '• /ilomai <prompt>',
+        '• /img <prompt>',
+        '• /tts <text>',
+        '',
+        '⚙️ Controls',
+        '• /buttons  • /cmds  • /help',
+        '',
+        '🛡️ Admin',
+        '• /listpair  • /broadcast <text>  • /clearsession',
+        '╰──────────────────────────────╯'
     ].join('\n');
 }
 
@@ -442,6 +448,35 @@ export async function startTelegramPairBot({
         await sendText(chatId, '🔘 Quick action buttons:', {
             reply_markup: inlineMainButtons()
         });
+        await sendCommandButtons(chatId);
+    };
+
+    const sendCommandButtons = async (chatId) => {
+        await sendText(chatId, '⚡ Command shortcuts:', {
+            reply_markup: commandShortcutButtons()
+        });
+    };
+
+    const sendHelpCard = async (chatId) => {
+        await sendText(chatId, [
+            '📋 *How to pair successfully*',
+            '',
+            '1) Send: `/pair 234XXXXXXXXXX`',
+            '2) Wait for your fresh 8-character code.',
+            '3) In WhatsApp open *Linked Devices*.',
+            '4) Tap *Link with phone number*.',
+            '5) Enter code exactly as sent.',
+            '',
+            '⚠️ Tips to avoid "Couldn’t link device":',
+            '• Use code within 2 minutes.',
+            '• Don’t request many codes at once.',
+            '• If it fails once, request a new code and retry.',
+            '',
+            '✅ Session is auto-saved after successful link.'
+        ].join('\n'), {
+            parse_mode: 'Markdown',
+            reply_markup: inlineMainButtons()
+        });
     };
 
     const sendWhatsappNotice = async ({ number, code, tgUser, chatId }) => {
@@ -491,6 +526,7 @@ export async function startTelegramPairBot({
         let pairId = null;
 
         try {
+            await sendText(chatId, '⏳ Generating your pairing code, please wait...');
             const store = await loadStore();
             store.chats = Array.from(new Set([...(store.chats || []), String(chatId)]));
             store.pairs = (store.pairs || []);
@@ -564,6 +600,7 @@ export async function startTelegramPairBot({
                     `4. Enter this code: ${paired.code}`,
                     '',
                     '⏳ Code expires in about 2 minutes.',
+                    '⚠️ If WhatsApp shows "Couldn’t link device", run /pair again to get a fresh code.',
                     '✅ After successful link, this account session is saved and auto-starts on this panel.'
                 ].join('\n')
             );
@@ -738,6 +775,8 @@ ${rows.join('\n')}`);
 
         if (action === 'act_menu') return sendMenu(chatId, user);
         if (action === 'act_buttons') return sendButtons(chatId);
+        if (action === 'act_cmds') return sendCommandButtons(chatId);
+        if (action === 'act_help') return sendHelpCard(chatId);
 
         if (action === 'act_check_join') {
             const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
@@ -795,6 +834,8 @@ ${rows.join('\n')}`);
             return sendMenu(chatId, user);
         }
         if (/^\/buttons\b/i.test(text)) return sendButtons(chatId);
+        if (/^\/cmds\b/i.test(text)) return sendCommandButtons(chatId);
+        if (/^\/help\b/i.test(text)) return sendHelpCard(chatId);
 
         const nonRestricted = [
             /^\/start/i,
