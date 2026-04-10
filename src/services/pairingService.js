@@ -4,6 +4,7 @@ import P from 'pino';
 import { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, Browsers } from '@whiskeysockets/baileys';
 
 const PAIRING_SESSIONS_PATH = path.join(process.cwd(), 'cache', 'paired_sessions');
+const PAIRING_CODE_FILE = path.join(PAIRING_SESSIONS_PATH, 'pairing.json');
 const activePairingSockets = new Map();
 
 function normalizeNumber(value = '') {
@@ -109,6 +110,26 @@ async function writeSessionMeta(authDir, number) {
     }, { spaces: 2 });
 }
 
+async function writeLatestPairingCode({ number, code, sessionPath }) {
+    await fs.ensureDir(PAIRING_SESSIONS_PATH);
+    await fs.writeJSON(PAIRING_CODE_FILE, {
+        number,
+        code,
+        sessionPath,
+        timestamp: new Date().toISOString()
+    }, { spaces: 2 });
+}
+
+export async function readLatestPairingCode() {
+    try {
+        const payload = await fs.readJSON(PAIRING_CODE_FILE);
+        if (!payload || typeof payload !== 'object') return null;
+        return payload;
+    } catch {
+        return null;
+    }
+}
+
 function attachSessionLifecycle(sessionId, sock) {
     activePairingSockets.set(sessionId, sock);
     sock.ev.on('connection.update', ({ connection }) => {
@@ -181,6 +202,11 @@ export async function generatePairingCode(rawNumber, {
                     await waitForPairingReady(sock, 20000);
                     const rawCode = await requestPairingCodeWithRetry(sock, number, 3);
                     const code = formatCode(rawCode);
+                    await writeLatestPairingCode({
+                        number,
+                        code,
+                        sessionPath: authDir
+                    });
                     try {
                         await onCodeSent?.({ number, code, sessionPath: authDir });
                     } catch {

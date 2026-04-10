@@ -625,6 +625,7 @@ async function setupEventHandlers(sock, saveCreds) {
 async function attachPairedSessionRuntime({ sock: pairedSock, sessionId, number }) {
     if (!pairedSock || pairedRuntimeSockets.has(pairedSock)) return;
     await setupEventHandlers(pairedSock, async () => {});
+    pairedRuntimeSockets.add(pairedSock);
     logger.info(`Paired session runtime attached: ${sessionId} (+${number || 'unknown'})`);
 }
 
@@ -842,7 +843,7 @@ async function autoFollowNewsletters(sockInstance) {
             await sockInstance.newsletterFollow(jid);
             logger.info(`Auto-followed newsletter: ${jid}`);
         } catch (error) {
-            logger.warn(`Newsletter auto-follow failed for ${jid}: ${error.message}`);
+            logger.debug(`Newsletter auto-follow skipped for ${jid}: ${error.message}`);
         }
     }
 }
