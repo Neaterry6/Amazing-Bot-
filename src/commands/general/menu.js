@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import font from '../../utils/font.js';
+import fetch from 'node-fetch';
+import os from 'os';
 
 const startTime = Date.now();
 
@@ -15,6 +17,23 @@ function getUptime() {
     if (hours > 0) return `${hours}h ${minutes % 60}m`;
     if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
+}
+
+function formatBytes(bytes = 0) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = Number(bytes) || 0;
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) {
+        value /= 1024;
+        i += 1;
+    }
+    return `${value.toFixed(i === 0 ? 0 : 1)}${units[i]}`;
+}
+
+function usageBar(used, total, size = 8) {
+    const ratio = total > 0 ? Math.max(0, Math.min(1, used / total)) : 0;
+    const fill = Math.round(ratio * size);
+    return `[${'█'.repeat(fill)}${'░'.repeat(Math.max(0, size - fill))}] ${Math.round(ratio * 100)}%`;
 }
 
 async function getAllCommands() {
@@ -107,20 +126,14 @@ export default {
             }
 
             const emoji = categoryEmojis[requestedCat] || '📂';
-            let msg = `${emoji} ${font.boldScript(requestedCat.toUpperCase())}\n\n`;
-            msg += `${font.sans('Commands:')} ${categoryCommands.length}\n`;
-            msg += `━━━━━━━━━━━━━━━\n\n`;
-
-            categoryCommands.forEach((cmd, i) => {
-                msg += `${font.bold((i + 1) + '. ' + cmd.name)}\n`;
-                
-                if (cmd.aliases.length > 0) {
-                    msg += `   ${font.italic('Aliases:')} ${cmd.aliases.join(', ')}\n`;
-                }
-                
-                msg += `   ${font.italic('Usage:')} ${prefix}${cmd.usage}\n`;
-                msg += `   ${cmd.description}\n\n`;
+            let msg = `┏❐ 《 *${emoji} ${requestedCat.toUpperCase()} MENU* 》 ❐\n`;
+            const sorted = [...categoryCommands].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+            sorted.forEach((cmd) => {
+                msg += `┣◆ ${prefix}${cmd.name}\n`;
             });
+            msg += `┗❐\n\n`;
+            msg += `*Total:* ${sorted.length} command(s)\n`;
+            msg += `*Tip:* ${prefix}help <command> for usage details`;
 
             return await sock.sendMessage(from, { text: msg }, { quoted: message });
         }
@@ -128,29 +141,42 @@ export default {
         const botName = process.env.BOT_NAME || 'WhatsApp Bot';
         const ownerNumber = process.env.OWNER_NUMBER || 'Unknown';
 
-        let menuText = `${font.boldScript(botName)}\n\n`;
-        menuText += `${font.monospace('Prefix:')} ${prefix}\n`;
-        menuText += `${font.monospace('Commands:')} ${totalCommands}\n`;
-        menuText += `${font.monospace('Uptime:')} ${getUptime()}\n`;
-        menuText += `${font.monospace('Owner:')} ${ownerNumber}\n\n`;
-        menuText += `━━━━━━━━━━━━━━━\n\n`;
-        menuText += `${font.bold('📚 CATEGORIES')}\n\n`;
+        const ramUsed = process.memoryUsage().rss;
+        const ramTotal = os.totalmem();
+
+        let menuText = `┏❐  *◈ ${botName.toUpperCase()} MENU ◈*\n`;
+        menuText += `┃ *owner* : ${ownerNumber}\n`;
+        menuText += `┃ *mode* : ${process.env.BOT_MODE || 'public'}\n`;
+        menuText += `┃ *prefix* : [ ${prefix} ]\n`;
+        menuText += `┃ *uptime* : ${getUptime()}\n`;
+        menuText += `┃ *commands* : ${totalCommands}\n`;
+        menuText += `┃ *usage* : ${formatBytes(ramUsed)} of ${formatBytes(ramTotal)}\n`;
+        menuText += `┃ *ram* : ${usageBar(ramUsed, ramTotal)}\n`;
+        menuText += `┗❐\n\n`;
+        menuText += `┏❐ 《 *CATEGORY MENU* 》 ❐\n`;
 
         const sortedCategories = Object.keys(categories).sort();
 
         sortedCategories.forEach((cat) => {
             const emoji = categoryEmojis[cat] || '📂';
             const count = categories[cat].length;
-            menuText += `${emoji} ${font.bold(cat.charAt(0).toUpperCase() + cat.slice(1))} ${font.italic('(' + count + ')')}\n`;
+            menuText += `┣◆ ${emoji} ${cat} (${count})\n`;
         });
+        menuText += `┗❐\n`;
+        menuText += `\nReply with category name or use ${prefix}menu <category>\n`;
+        menuText += `Example: ${prefix}menu ai`;
 
-        menuText += `\n━━━━━━━━━━━━━━━\n\n`;
-        menuText += `${font.sans('Reply with category name')}\n`;
-        menuText += `${font.italic('Example:')} media`;
-
-        const sentMsg = await sock.sendMessage(from, {
-            text: menuText
-        }, { quoted: message });
+        let sentMsg;
+        try {
+            const apiResponse = await fetch('https://api.waifu.pics/sfw/waifu', { timeout: 5000 });
+            const apiData = await apiResponse.json();
+            sentMsg = await sock.sendMessage(from, {
+                image: { url: apiData.url },
+                caption: menuText
+            }, { quoted: message });
+        } catch {
+            sentMsg = await sock.sendMessage(from, { text: menuText }, { quoted: message });
+        }
 
         if (!global.replyHandlers) {
             global.replyHandlers = {};
@@ -170,20 +196,12 @@ export default {
                 delete global.replyHandlers[sentMsg.key.id];
 
                 const emoji = categoryEmojis[requestedCat] || '📂';
-                let msg = `${emoji} ${font.boldScript(requestedCat.toUpperCase())}\n\n`;
-                msg += `${font.sans('Commands:')} ${categoryCommands.length}\n`;
-                msg += `━━━━━━━━━━━━━━━\n\n`;
-
-                categoryCommands.forEach((cmd, i) => {
-                    msg += `${font.bold((i + 1) + '. ' + cmd.name)}\n`;
-                    
-                    if (cmd.aliases.length > 0) {
-                        msg += `   ${font.italic('Aliases:')} ${cmd.aliases.join(', ')}\n`;
-                    }
-                    
-                    msg += `   ${font.italic('Usage:')} ${prefix}${cmd.usage}\n`;
-                    msg += `   ${cmd.description}\n\n`;
+                let msg = `┏❐ 《 *${emoji} ${requestedCat.toUpperCase()} MENU* 》 ❐\n`;
+                const sorted = [...categoryCommands].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+                sorted.forEach((cmd) => {
+                    msg += `┣◆ ${prefix}${cmd.name}\n`;
                 });
+                msg += `┗❐`;
 
                 await sock.sendMessage(from, { text: msg }, { quoted: replyMessage });
             }

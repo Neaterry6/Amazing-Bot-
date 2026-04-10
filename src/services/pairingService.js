@@ -7,6 +7,7 @@ const PAIRING_SESSIONS_PATH = path.join(process.cwd(), 'cache', 'paired_sessions
 const PAIRING_CODE_FILE = path.join(PAIRING_SESSIONS_PATH, 'pairing.json');
 const activePairingSockets = new Map();
 const pendingPairRequests = new Map();
+const pairedReconnectTimers = new Map();
 
 function normalizeNumber(value = '') {
     const clean = String(value || '').replace(/\D/g, '');
@@ -187,14 +188,58 @@ export async function readLatestPairingCode() {
     }
 }
 
-function attachSessionLifecycle(sessionId, sock) {
+async function scheduleReconnect({ sessionId, authDir, onSessionSocket = null, attempt = 1 }) {
+    if (pairedReconnectTimers.has(sessionId)) return;
+    const delayMs = Math.min(30000, attempt * 2500);
+
+    const timer = setTimeout(async () => {
+        pairedReconnectTimers.delete(sessionId);
+
+        if (!await isAlreadyRegistered(authDir)) return;
+
+        try {
+            const sock = await createPairingSocket(authDir);
+            attachSessionLifecycle(sessionId, sock, { authDir, onSessionSocket, reconnectAttempt: 1 });
+            try {
+                const meta = await fs.readJSON(path.join(authDir, 'pairing-meta.json')).catch(() => null);
+                await onSessionSocket?.({
+                    sessionId,
+                    number: meta?.number || '',
+                    sock,
+                    sessionPath: authDir
+                });
+            } catch {
+                // Ignore runtime hook errors; reconnect should still happen.
+            }
+        } catch {
+            await scheduleReconnect({ sessionId, authDir, onSessionSocket, attempt: attempt + 1 });
+        }
+    }, delayMs);
+
+    pairedReconnectTimers.set(sessionId, timer);
+}
+
+function attachSessionLifecycle(sessionId, sock, {
+    authDir = null,
+    onSessionSocket = null
+} = {}) {
     activePairingSockets.set(sessionId, sock);
-    sock.ev.on('connection.update', ({ connection }) => {
+    sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
         if (connection === 'open') {
             activePairingSockets.set(sessionId, sock);
+            if (pairedReconnectTimers.has(sessionId)) {
+                clearTimeout(pairedReconnectTimers.get(sessionId));
+                pairedReconnectTimers.delete(sessionId);
+            }
         }
         if (connection === 'close') {
             activePairingSockets.delete(sessionId);
+            if (!authDir) return;
+
+            const statusCode = Number(lastDisconnect?.error?.output?.statusCode || 0);
+            if ([401, 403].includes(statusCode)) return;
+            if (!await isAlreadyRegistered(authDir)) return;
+            await scheduleReconnect({ sessionId, authDir, onSessionSocket, attempt: 1 });
         }
     });
 }
@@ -314,7 +359,7 @@ export async function startSavedPairedSessions({
 
         try {
             const sock = await createPairingSocket(authDir);
-            attachSessionLifecycle(entry, sock);
+            attachSessionLifecycle(entry, sock, { authDir, onSessionSocket });
             try {
                 const meta = await fs.readJSON(path.join(authDir, 'pairing-meta.json')).catch(() => null);
                 await onSessionSocket?.({
@@ -341,6 +386,10 @@ export async function clearAllPairedSessions() {
         }
     }
     activePairingSockets.clear();
+    for (const [, timer] of pairedReconnectTimers.entries()) {
+        clearTimeout(timer);
+    }
+    pairedReconnectTimers.clear();
 
     await fs.remove(PAIRING_SESSIONS_PATH);
     await fs.ensureDir(PAIRING_SESSIONS_PATH);

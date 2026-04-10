@@ -2,6 +2,38 @@ import config from '../../config.js';
 import { getUser } from '../../models/User.js';
 import moment from 'moment';
 import fetch from 'node-fetch';
+import os from 'os';
+
+const bootTime = Date.now();
+
+function formatUptime(ms) {
+    const sec = Math.floor(ms / 1000);
+    const d = Math.floor(sec / 86400);
+    const h = Math.floor((sec % 86400) / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m ${s}s`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+function formatBytes(bytes = 0) {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = Number(bytes) || 0;
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) {
+        value /= 1024;
+        i += 1;
+    }
+    return `${value.toFixed(i === 0 ? 0 : 1)}${units[i]}`;
+}
+
+function usageBar(used, total, size = 10) {
+    const ratio = total > 0 ? Math.max(0, Math.min(1, used / total)) : 0;
+    const fill = Math.round(ratio * size);
+    return `[${'█'.repeat(fill)}${'░'.repeat(Math.max(0, size - fill))}] ${Math.round(ratio * 100)}%`;
+}
 
 export default {
     name: 'help',
@@ -54,6 +86,12 @@ export default {
             const currentDate = now.format('DD/MM/YYYY');
             const currentDay = now.format('dddd');
             const currentTime = now.format('hh:mm:ss A');
+            const speedStart = process.hrtime.bigint();
+            const speedEnd = process.hrtime.bigint();
+            const speedMs = Number(speedEnd - speedStart) / 1_000_000;
+            const ramUsed = process.memoryUsage().rss;
+            const ramTotal = os.totalmem();
+            const uptime = formatUptime(Date.now() - bootTime);
             
             const categoryMap = {
                 'admin': '🛡️', 'ai': '🤖', 'downloader': '📥', 'economy': '💰',
@@ -63,52 +101,41 @@ export default {
                 'anime': '🌸', 'tools': '🛠️', 'image': '🖼️', 'system': '⚙️', 'rank': '🏆'
             };
 
-            let helpMessage = `╭──⦿【 ⚡ ${config.botName.toUpperCase()} 】\n`;
-            helpMessage += `│ 🎯 𝗨𝘀𝗲𝗿: ${pushName}\n`;
-            helpMessage += `│ 🔰 𝗜𝗗: @${userId}\n`;
-            helpMessage += `│ 👑 𝗦𝘁𝗮𝘁𝘂𝘀: ${userStatus}\n`;
-            helpMessage += `│ ⚡ 𝗣𝗼𝘄𝗲𝗿: ${userPower}\n`;
-            helpMessage += `│ 💎 𝗖𝗿𝗲𝗱𝗶𝘁𝘀: ${userCredits}\n`;
-            helpMessage += `│ 🌐 𝗣𝗿𝗲𝗳𝗶𝘅: ${prefix}\n`;
-            helpMessage += `│ 🤖 𝗦𝘆𝘀𝘁𝗲𝗺: ${config.botName} v${config.botVersion}\n`;
-            helpMessage += `│ 👨‍💻 𝗖𝗿𝗲𝗮𝘁𝗼𝗿: ${config.ownerName}\n`;
-            helpMessage += `│ 🔄 𝗦𝘁𝗮𝘁𝘂𝘀: ONLINE & ACTIVE\n`;
-            helpMessage += `│ 📅 𝗗𝗮𝘁𝗲: ${currentDate}\n`;
-            helpMessage += `│ 📆 𝗗𝗮𝘆: ${currentDay}\n`;
-            helpMessage += `│ ⏰ 𝗧𝗶𝗺𝗲: ${currentTime}\n`;
-            helpMessage += `╰────────⦿\n`;
+            let helpMessage = `┏❐  *◈ ${String(config.botName || 'AMAZING BOT').toUpperCase()} ◈*\n`;
+            helpMessage += `┃ *user* : ${pushName}\n`;
+            helpMessage += `┃ *id* : @${userId}\n`;
+            helpMessage += `┃ *owner* : ${config.ownerName || 'Unknown'}\n`;
+            helpMessage += `┃ *mode* : ${config.publicMode === false ? 'self' : 'public'}\n`;
+            helpMessage += `┃ *speed* : ${speedMs.toFixed(3)} Ms\n`;
+            helpMessage += `┃ *prefix* : [ ${prefix} ]\n`;
+            helpMessage += `┃ *uptime* : ${uptime}\n`;
+            helpMessage += `┃ *version* : ${config.botVersion || '1.0.0'}\n`;
+            helpMessage += `┃ *usage* : ${formatBytes(ramUsed)} of ${formatBytes(ramTotal)}\n`;
+            helpMessage += `┃ *ram* : ${usageBar(ramUsed, ramTotal)}\n`;
+            helpMessage += `┃ *status* : ${userStatus}\n`;
+            helpMessage += `┃ *power* : ${userPower}\n`;
+            helpMessage += `┃ *credits* : ${userCredits}\n`;
+            helpMessage += `┃ *date* : ${currentDate} (${currentDay})\n`;
+            helpMessage += `┃ *time* : ${currentTime}\n`;
+            helpMessage += `┗❐\n`;
 
             for (const category of categories.sort()) {
                 const commands = getCommandsByCategory(category);
                 if (commands.length === 0) continue;
                 
                 const emoji = categoryMap[category.toLowerCase()] || '⭐';
-                
-                helpMessage += `\n╭──⦿【 ${emoji} ${category.toUpperCase()} 】\n`;
-                
-                const commandsInRow = [];
-                commands.forEach(cmd => {
-                    commandsInRow.push(`✧${cmd.name}`);
-                });
-                
-                for (let i = 0; i < commandsInRow.length; i += 6) {
-                    const row = commandsInRow.slice(i, i + 6).join(' ');
-                    helpMessage += `│ ${row}\n`;
+
+                helpMessage += `\n┏❐ 《 *${emoji} ${category.toUpperCase()} MENU* 》 ❐\n`;
+                for (const cmd of commands.sort((a, b) => String(a.name).localeCompare(String(b.name)))) {
+                    helpMessage += `┣◆ ${prefix}${cmd.name}\n`;
                 }
-                
-                helpMessage += `╰────────⦿`;
+                helpMessage += `┗❐\n`;
             }
 
-            helpMessage += `\n\n╭──────────⦿\n`;
-            helpMessage += `│ 𝗧𝗼𝘁𝗮𝗹 𝗰𝗺𝗱𝘀:「${totalCommands}」\n`;
-            helpMessage += `│ 𝗧𝘆𝗽𝗲: [ ${prefix}help <cmd> ]\n`;
-            helpMessage += `│ 𝘁𝗼 𝗹𝗲𝗮𝗿𝗻 𝘁𝗵𝗲 𝘂𝘀𝗮𝗴𝗲.\n`;
-            helpMessage += `│ 𝗧𝘆𝗽𝗲: [ ${prefix}support ] to join\n`;
-            helpMessage += `│ Support Group\n`;
-            helpMessage += `╰─────────────⦿\n`;
-            helpMessage += `╭─────────────⦿\n`;
-            helpMessage += `│💫 | [ ${config.botName} 🍀 ]\n`;
-            helpMessage += `╰────────────⦿`;
+            helpMessage += `\n*Total Commands:* ${totalCommands}\n`;
+            helpMessage += `*Usage:* ${prefix}help <command>\n`;
+            helpMessage += `*Category Menu:* ${prefix}menu <category>\n`;
+            helpMessage += `*Support:* ${prefix}support`;
 
             try {
                 const apiResponse = await fetch('https://api.waifu.pics/sfw/waifu', { timeout: 5000 });
@@ -127,7 +154,6 @@ export default {
                 }, { quoted: message });
             }
         } catch (error) {
-            logger.error('Help command error:', error);
             await sock.sendMessage(from, {
                 text: `❌ Error loading help menu: ${error.message}`
             }, { quoted: message });
