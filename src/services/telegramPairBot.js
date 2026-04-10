@@ -184,34 +184,26 @@ async function ensureRequiredMembership({ token, chatId, user, adminIds }) {
 
 function buildMenu(user, runtimeText = '') {
     return [
-        '🖼 ╭─────────────────❏',
-        '│  ✦ ilom ²⁰²⁶ ✦',
-        '│  ',
-        '│  👑 Owner: Raphael ilom x brokenvzn',
-        `│  ⏱️ Runtime: ${runtimeText}`,
-        `│  👤 User: ${user?.first_name || 'User'}`,
-        `│  🆔 User ID: ${user?.id || 'unknown'}`,
-        '│',
-        '├─────────────────❏',
-        '│  📱 USER COMMANDS',
-        '│  /pair <number>',
-        '│  /buttons',
-        '│  /pairs',
-        '│  /delpair <id>',
-        '│  /ilomai <prompt>',
-        '│  /tts <text>',
-        '│  /img <prompt>',
-        '│',
-        '├─────────────────❏',
-        '│  🛡️ ADMIN COMMANDS',
-        '│  /listpair',
-        '│  /broadcast <text>',
-        '│  /clearsession',
-        '│',
-        '╰─────────────────❏',
-        '│  Presented by ILOM BOT INC.',
-        '│  © 2026',
-        '╰─────────────────'
+        '╭───〔 🤖 ILOM PAIR BOT 〕───╮',
+        `👤 User: ${user?.first_name || 'User'}  |  🆔 ${user?.id || 'unknown'}`,
+        `⏱️ Uptime: ${runtimeText}`,
+        '',
+        '📱 Pairing Commands',
+        '• /pair <number>  → Generate WhatsApp link code',
+        '• /pairs          → View your pair history',
+        '• /delpair <id>   → Remove your pair record',
+        '',
+        '🧠 AI Utilities',
+        '• /ilomai <prompt>',
+        '• /img <prompt>',
+        '• /tts <text>',
+        '',
+        '⚙️ Controls',
+        '• /buttons  • /cmds  • /help',
+        '',
+        '🛡️ Admin',
+        '• /listpair  • /broadcast <text>  • /clearsession',
+        '╰──────────────────────────────╯'
     ].join('\n');
 }
 
@@ -527,6 +519,7 @@ export async function startTelegramPairBot({
         let pairId = null;
 
         try {
+            await sendText(chatId, '⏳ Generating your pairing code, please wait...');
             const store = await loadStore();
             store.chats = Array.from(new Set([...(store.chats || []), String(chatId)]));
             store.pairs = (store.pairs || []);

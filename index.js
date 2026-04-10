@@ -585,7 +585,9 @@ async function setupEventHandlers(sock, saveCreds) {
                 if (!message?.key) continue;
                 const from = message.key.remoteJid;
                 if (!from || from === 'status@broadcast') continue;
-                if (message.key.fromMe && !config.selfMode) continue;
+                const ownJid = sock?.user?.id ? sock.user.id.split(':')[0] : '';
+                const isOwnChat = ownJid && from === ownJid;
+                if (message.key.fromMe && !config.selfMode && !isOwnChat) continue;
                 if (!message.message || !Object.keys(message.message).length) continue;
 
                 const ignoredTypes = ['protocolMessage', 'senderKeyDistributionMessage', 'messageContextInfo'];
