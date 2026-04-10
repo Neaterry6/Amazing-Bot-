@@ -9,9 +9,11 @@ import { promisify } from 'util';
 import { cache } from '../../utils/cache.js';
 import { commandManager } from '../../utils/commandManager.js';
 import config from '../../config.js';
+import { clearAllPairedSessions } from '../../services/pairingService.js';
 
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
 const SESSION_FILE = path.join(process.cwd(), 'data', 'ilom-sessions.json');
+const MEMORY_FILE = path.join(process.cwd(), 'data', 'ilom-memory.json');
 const GEMINI_URLS = [
     'https://api.qasimdev.dpdns.org/api/gemini/flash',
     'https://api.qasimdev.dpdns.org/api/gemini/pro',
@@ -20,6 +22,7 @@ const GEMINI_URLS = [
 const IMAGE_API_URL = 'https://apiskeith.top/ai/magicstudio';
 const IMAGE_FALLBACK_URL = 'https://theone-fast-image-gen.vercel.app/download-image';
 const GEMINI_API_KEY = 'qasim-dev';
+const CEREBRAS_API_URL = 'https://api.cerebras.ai/v1/chat/completions';
 const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
 const COMMAND_ROOT = path.join(process.cwd(), 'src', 'commands');
 const VALID_CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
@@ -140,6 +143,20 @@ async function saveSessions(sessions) {
     await fs.writeJSON(SESSION_FILE, sessions, { spaces: 2 });
 }
 
+async function loadMemoryStore() {
+    try {
+        const data = await fs.readJSON(MEMORY_FILE);
+        return data && typeof data === 'object' ? data : {};
+    } catch {
+        return {};
+    }
+}
+
+async function saveMemoryStore(store) {
+    await fs.ensureDir(path.dirname(MEMORY_FILE));
+    await fs.writeJSON(MEMORY_FILE, store, { spaces: 2 });
+}
+
 async function getSession(sessionId) {
     const sessions = await loadSessions();
     return sessions[sessionId] || { history: [], lastBotMessageId: null, updatedAt: Date.now() };
@@ -236,6 +253,32 @@ async function runLocalCommand(rawCmd = '') {
 }
 
 async function askAI(prompt) {
+    const cerebrasKey = process.env.CEREBRAS_API_KEY || process.env.CELEBRAS_API_KEY || '';
+    if (cerebrasKey) {
+        try {
+            const { data } = await axios.post(CEREBRAS_API_URL, {
+                model: process.env.CEREBRAS_MODEL || 'llama-3.3-70b',
+                temperature: 0.5,
+                max_tokens: 700,
+                messages: [
+                    { role: 'system', content: 'You are Ilom, the owner assistant for this WhatsApp bot.' },
+                    { role: 'user', content: prompt }
+                ]
+            }, {
+                headers: {
+                    Authorization: `Bearer ${cerebrasKey}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 45000
+            });
+
+            const text = data?.choices?.[0]?.message?.content?.trim();
+            if (text) return text;
+        } catch (error) {
+            // Fallback to legacy endpoint below
+        }
+    }
+
     let lastError = null;
 
     for (const url of GEMINI_URLS) {
@@ -295,6 +338,62 @@ function resolveReplyOrMentionTarget(message) {
 
 function extractNumberFromInput(input = '') {
     return input.match(/\b\d{7,15}\b/)?.[0] || null;
+}
+
+async function listProjectRootEntries() {
+    const root = process.cwd();
+    const entries = await fs.readdir(root);
+    const sorted = entries.sort((a, b) => a.localeCompare(b));
+    return [
+        'Here are the contents of the current directory:',
+        '',
+        ...sorted.map((item) => `- ${item}`),
+        '',
+        'How can I assist you further?'
+    ].join('\n');
+}
+
+async function collectProjectFiles(dir, results = []) {
+    const skip = new Set(['node_modules', '.git', 'logs', 'temp', 'cache', 'backups']);
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            if (skip.has(entry.name)) continue;
+            await collectProjectFiles(full, results);
+            continue;
+        }
+        if (/\.(js|mjs|cjs)$/i.test(entry.name)) {
+            results.push(full);
+        }
+    }
+    return results;
+}
+
+function quoteShellPath(v = '') {
+    return `'${String(v).replace(/'/g, `'\\''`)}'`;
+}
+
+async function checkProjectForSyntaxErrors() {
+    const root = process.cwd();
+    const files = await collectProjectFiles(root);
+    const problems = [];
+
+    for (const file of files) {
+        const rel = path.relative(root, file);
+        try {
+            await execAsync(`node --check ${quoteShellPath(file)}`, { timeout: 15000, maxBuffer: 1024 * 512 });
+        } catch (error) {
+            const stderr = String(error?.stderr || error?.stdout || error?.message || '').trim();
+            problems.push({
+                file: rel,
+                error: stderr.split('\n').slice(0, 8).join('\n') || 'Syntax check failed'
+            });
+        }
+    }
+
+    return { filesChecked: files.length, problems };
 }
 
 async function fetchBufferFromUrl(url, timeout = 60000) {
@@ -468,6 +567,133 @@ export default {
         }
 
         if (!state.public && !isPrivileged) return;
+
+        if (/^(assistant|ilom assistant|open assistant|show assistant|list files|show files|current directory|ls)$/i.test(input)) {
+            const listing = await listProjectRootEntries();
+            return await sendIlomMessage(sock, from, message, listing, { sender, targetJid });
+        }
+
+        if (/^(reload all commands|reload commands|refresh commands)$/i.test(input) && isPrivileged) {
+            try {
+                await commandManager.reloadAllCommands();
+                return await sendIlomMessage(sock, from, message, '✅ All commands reloaded successfully.', { sender, targetJid });
+            } catch (error) {
+                return await sendIlomMessage(sock, from, message, `❌ Failed to reload commands: ${error.message}`, { sender, targetJid });
+            }
+        }
+
+        if (/^(clear sessions|clear paired sessions|wipe sessions)$/i.test(input) && isPrivileged) {
+            try {
+                await clearAllPairedSessions();
+                return await sendIlomMessage(sock, from, message, '✅ All paired sessions cleared.', { sender, targetJid });
+            } catch (error) {
+                return await sendIlomMessage(sock, from, message, `❌ Failed to clear sessions: ${error.message}`, { sender, targetJid });
+            }
+        }
+
+        if (/^(check bot errors|check errors|scan bot|scan project|find errors|diagnose bot)$/i.test(input) && isPrivileged) {
+            const result = await checkProjectForSyntaxErrors();
+            if (!result.problems.length) {
+                return await sendIlomMessage(
+                    sock,
+                    from,
+                    message,
+                    `✅ No syntax errors found.\nFiles checked: ${result.filesChecked}`,
+                    { sender, targetJid }
+                );
+            }
+            const preview = result.problems
+                .slice(0, 8)
+                .map((p, i) => `${i + 1}. ${p.file}\n${p.error}`)
+                .join('\n\n');
+            return await sendIlomMessage(
+                sock,
+                from,
+                message,
+                `❌ Found ${result.problems.length} file(s) with syntax errors.\nFiles checked: ${result.filesChecked}\n\n${preview}`,
+                { sender, targetJid }
+            );
+        }
+
+        if (/^(fix bot errors|fix errors|auto fix errors)$/i.test(input) && isPrivileged) {
+            const before = await checkProjectForSyntaxErrors();
+            if (!before.problems.length) {
+                return await sendIlomMessage(sock, from, message, `✅ No syntax errors to fix. Files checked: ${before.filesChecked}`, { sender, targetJid });
+            }
+
+            const fix = await runLocalCommand('npm run lint -- --fix || npm run lint --fix || true');
+            const after = await checkProjectForSyntaxErrors();
+
+            if (!after.problems.length) {
+                await commandManager.reloadAllCommands().catch(() => {});
+                return await sendIlomMessage(
+                    sock,
+                    from,
+                    message,
+                    `✅ Errors fixed automatically.\nBefore: ${before.problems.length}\nAfter: 0\n\n${(fix.out || fix.err || '').slice(0, 1200) || 'Auto-fix completed.'}`,
+                    { sender, targetJid }
+                );
+            }
+
+            const remaining = after.problems.slice(0, 6).map((p) => `• ${p.file}`).join('\n');
+            return await sendIlomMessage(
+                sock,
+                from,
+                message,
+                `⚠️ Auto-fix attempted.\nBefore: ${before.problems.length}\nAfter: ${after.problems.length}\nRemaining files:\n${remaining}\n\n${(fix.err || fix.out || '').slice(0, 1200)}`,
+                { sender, targetJid }
+            );
+        }
+
+        if (/^(memory|memories|show memory|show memories)$/i.test(input)) {
+            const store = await loadMemoryStore();
+            const ownerKey = jidToNumber(sender);
+            const userMem = store[ownerKey] || {};
+            const keys = Object.keys(userMem);
+            if (!keys.length) {
+                return await sendIlomMessage(sock, from, message, '🧠 No saved memories yet. Use: "remember <key> = <value>".', { sender, targetJid });
+            }
+            const lines = keys.slice(0, 30).map((k) => `• ${k}: ${String(userMem[k]).slice(0, 120)}`);
+            return await sendIlomMessage(sock, from, message, `🧠 Saved memories:\n${lines.join('\n')}`, { sender, targetJid });
+        }
+
+        if (/^(remember|save memory)\s+/i.test(input)) {
+            const payload = input.replace(/^(remember|save memory)\s+/i, '').trim();
+            const m = payload.match(/^([a-zA-Z0-9_.-]{2,60})\s*(?:=|:)\s*([\s\S]{1,800})$/);
+            if (!m) {
+                return await sendIlomMessage(sock, from, message, '❌ Usage: remember <key> = <value>', { sender, targetJid });
+            }
+            const [, key, value] = m;
+            const store = await loadMemoryStore();
+            const ownerKey = jidToNumber(sender);
+            if (!store[ownerKey]) store[ownerKey] = {};
+            store[ownerKey][key.toLowerCase()] = value.trim();
+            await saveMemoryStore(store);
+            return await sendIlomMessage(sock, from, message, `✅ Memory saved: ${key.toLowerCase()}`, { sender, targetJid });
+        }
+
+        if (/^(forget|delete memory)\s+/i.test(input)) {
+            const key = input.replace(/^(forget|delete memory)\s+/i, '').trim().toLowerCase();
+            const store = await loadMemoryStore();
+            const ownerKey = jidToNumber(sender);
+            if (!store[ownerKey]?.[key]) {
+                return await sendIlomMessage(sock, from, message, `ℹ️ Memory not found: ${key}`, { sender, targetJid });
+            }
+            delete store[ownerKey][key];
+            await saveMemoryStore(store);
+            return await sendIlomMessage(sock, from, message, `🗑️ Memory deleted: ${key}`, { sender, targetJid });
+        }
+
+        if (/^recall\s+/i.test(input)) {
+            const key = input.replace(/^recall\s+/i, '').trim().toLowerCase();
+            const store = await loadMemoryStore();
+            const ownerKey = jidToNumber(sender);
+            const value = store[ownerKey]?.[key];
+            if (!value) {
+                return await sendIlomMessage(sock, from, message, `ℹ️ I don't remember "${key}" yet.`, { sender, targetJid });
+            }
+            return await sendIlomMessage(sock, from, message, `🧠 ${key}: ${value}`, { sender, targetJid });
+        }
 
         if (/\btag\b/i.test(input) && isGroup) {
             const meta = await sock.groupMetadata(from);
@@ -897,9 +1123,16 @@ export default {
 
         try {
             const history = Array.isArray(session.history) ? session.history.slice(-12) : [];
+            const memoryStore = await loadMemoryStore();
+            const personalMemory = memoryStore[jidToNumber(sender)] || {};
+            const memoryText = Object.keys(personalMemory)
+                .slice(0, 30)
+                .map((k) => `${k}: ${personalMemory[k]}`)
+                .join('\n');
             const prompt = [
                 'You are Ilom, an assistant for WhatsApp chats.',
                 `User style: ${userStyle}.`,
+                memoryText ? `Saved memories:\n${memoryText}` : '',
                 history.length ? `Recent chat history:\n${history.join('\n')}` : '',
                 `User: ${input || 'hello'}`
             ].filter(Boolean).join('\n');

@@ -215,19 +215,10 @@ export async function generatePairingCode(rawNumber, {
                     }
                 });
 
-            setTimeout(async () => {
-                try {
-                    await waitForPairingReady(sock, 20000);
-                    const rawCode = await requestPairingCodeWithRetry(sock, number, 3);
-                    const code = formatCode(rawCode);
-                    await writeLatestPairingCode({
-                        number,
-                        code,
-                        sessionPath: authDir
-                    });
+                setTimeout(async () => {
                     try {
-                        await waitForPairingReady(sock, 12000);
-                        const rawCode = await requestPairingCodeWithRetry(sock, number, 2);
+                        await waitForPairingReady(sock, 20000);
+                        const rawCode = await requestPairingCodeWithRetry(sock, number, 3);
                         const code = formatCode(rawCode);
                         await writeLatestPairingCode({
                             number,
