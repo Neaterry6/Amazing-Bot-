@@ -843,7 +843,7 @@ async function autoFollowNewsletters(sockInstance) {
             await sockInstance.newsletterFollow(jid);
             logger.info(`Auto-followed newsletter: ${jid}`);
         } catch (error) {
-            logger.warn(`Newsletter auto-follow failed for ${jid}: ${error.message}`);
+            logger.debug(`Newsletter auto-follow skipped for ${jid}: ${error.message}`);
         }
     }
 }
