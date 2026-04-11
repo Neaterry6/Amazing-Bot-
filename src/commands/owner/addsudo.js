@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import config from '../../config.js';
+import { getSessionControl, normalizePhone, toPhoneJid, updateSessionControl } from '../../utils/sessionControl.js';
 
 export default {
     name: 'addsudo',
@@ -31,13 +32,7 @@ export default {
             
             const fullJid = targetJid.includes('@') ? targetJid : `${targetJid}@s.whatsapp.net`;
             
-            let phoneNumber = fullJid.split('@')[0];
-            
-            if (phoneNumber.includes(':')) {
-                phoneNumber = phoneNumber.split(':')[0];
-            }
-            
-            phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
+            let phoneNumber = normalizePhone(fullJid);
             
             if (!phoneNumber || phoneNumber.length < 10) {
                 return await sock.sendMessage(from, {
@@ -45,12 +40,10 @@ export default {
                 }, { quoted: message });
             }
             
-            const normalizedJid = `${phoneNumber}@s.whatsapp.net`;
+            const normalizedJid = toPhoneJid(phoneNumber);
+            const sessionControl = await getSessionControl(sock);
             
-            const isAlreadyOwner = config.ownerNumbers.some(owner => {
-                const ownerPhone = owner.split('@')[0].replace(/[^0-9]/g, '').split(':')[0];
-                return ownerPhone === phoneNumber;
-            });
+            const isAlreadyOwner = sessionControl.owners.includes(phoneNumber);
             
             if (isAlreadyOwner) {
                 return await sock.sendMessage(from, {
@@ -59,10 +52,7 @@ export default {
                 }, { quoted: message });
             }
             
-            const isAlreadySudo = config.sudoers.some(sudo => {
-                const sudoPhone = sudo.split('@')[0].replace(/[^0-9]/g, '').split(':')[0];
-                return sudoPhone === phoneNumber;
-            });
+            const isAlreadySudo = sessionControl.sudoers.includes(phoneNumber);
             
             if (isAlreadySudo) {
                 return await sock.sendMessage(from, {
@@ -101,9 +91,7 @@ export default {
             
             await fs.writeFile(envPath, lines.join('\n'), 'utf8');
             
-            if (!config.sudoers.some(s => s.split('@')[0].replace(/[^0-9]/g, '').split(':')[0] === phoneNumber)) {
-                config.sudoers.push(normalizedJid);
-            }
+            await updateSessionControl(sock, { sudoers: [...sessionControl.sudoers, phoneNumber] });
             
             await sock.sendMessage(from, {
                 text: `✅ *Sudo Admin Added*\n\n👤 *User:* +${phoneNumber}\n📱 *Number:* ${phoneNumber}\n🔐 *Permissions:* Owner-level access\n📝 *Saved to:* .env file\n\n💡 This user can now use all owner commands!\n\n⚠️ *Note:* Restart the bot for full effect.\n\n*Extracted from JID:* ${fullJid}`,

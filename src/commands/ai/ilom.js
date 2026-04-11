@@ -14,15 +14,11 @@ import { clearAllPairedSessions } from '../../services/pairingService.js';
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
 const SESSION_FILE = path.join(process.cwd(), 'data', 'ilom-sessions.json');
 const MEMORY_FILE = path.join(process.cwd(), 'data', 'ilom-memory.json');
-const GEMINI_URLS = [
-    'https://api.qasimdev.dpdns.org/api/gemini/flash',
-    'https://api.qasimdev.dpdns.org/api/gemini/pro',
-    'https://api.qasimdev.dpdns.org/api/gemini'
-];
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const IMAGE_API_URL = 'https://apiskeith.top/ai/magicstudio';
 const IMAGE_FALLBACK_URL = 'https://theone-fast-image-gen.vercel.app/download-image';
-const GEMINI_API_KEY = 'qasim-dev';
-const CEREBRAS_API_URL = 'https://api.cerebras.ai/v1/chat/completions';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyC6pBs6VepLVzINT9NV3U36bv6Pu8_jic0';
 const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
 const COMMAND_ROOT = path.join(process.cwd(), 'src', 'commands');
 const VALID_CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
@@ -253,54 +249,18 @@ async function runLocalCommand(rawCmd = '') {
 }
 
 async function askAI(prompt) {
-    const cerebrasKey = process.env.CEREBRAS_API_KEY || process.env.CELEBRAS_API_KEY || '';
-    if (cerebrasKey) {
-        try {
-            const { data } = await axios.post(CEREBRAS_API_URL, {
-                model: process.env.CEREBRAS_MODEL || 'llama-3.3-70b',
-                temperature: 0.5,
-                max_tokens: 700,
-                messages: [
-                    { role: 'system', content: 'You are Ilom, the owner assistant for this WhatsApp bot.' },
-                    { role: 'user', content: prompt }
-                ]
-            }, {
-                headers: {
-                    Authorization: `Bearer ${cerebrasKey}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 45000
-            });
-
-            const text = data?.choices?.[0]?.message?.content?.trim();
-            if (text) return text;
-        } catch (error) {
-            // Fallback to legacy endpoint below
-        }
-    }
-
-    let lastError = null;
-
-    for (const url of GEMINI_URLS) {
-        try {
-            const { data } = await axios.get(url, {
-                params: { apiKey: GEMINI_API_KEY, text: prompt },
-                timeout: 30000
-            });
-            const text = data?.data?.response || data?.response || data?.text || data?.result || '';
-            if (text) return text;
-        } catch (error) {
-            lastError = error;
-            continue;
-        }
-    }
-
-    const status = lastError?.response?.status;
-    if (status) {
-        throw new Error(`AI service is temporarily unavailable (HTTP ${status}). Please try again in a moment.`);
-    }
-
-    throw new Error('AI service is temporarily unavailable. Please try again in a moment.');
+    const { data } = await axios.post(GEMINI_URL, {
+        contents: [{ parts: [{ text: prompt }] }]
+    }, {
+        headers: {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': GEMINI_API_KEY
+        },
+        timeout: 30000
+    });
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    if (!text) throw new Error('AI service returned empty response.');
+    return text;
 }
 
 function getByPath(obj, pathKey) {

@@ -6,6 +6,7 @@ import { checkBan } from '../commands/admin/ban.js';
 import { checkSpam } from '../commands/admin/antispam.js';
 import { checkBadWord } from '../commands/admin/antiword.js';
 import { isSuspended } from '../utils/suspendStore.js';
+import { getSessionControl, isOwnerForSession, isSudoForSession } from '../utils/sessionControl.js';
 
 let autoDownloadHandler = null;
 
@@ -127,8 +128,7 @@ function resolvePrivateSenderPhone(sock, fromMe, remoteJid, userJid) {
     return '';
 }
 
-function isOwner(senderPhone, message, sock) {
-    if (!config.ownerNumbers?.length) return false;
+async function isOwner(senderPhone, message, sock) {
     const nums = new Set();
     if (senderPhone && senderPhone.length >= 7) nums.add(senderPhone);
     if (message?.key?.fromMe) {
@@ -142,18 +142,25 @@ function isOwner(senderPhone, message, sock) {
             if (n && n.length >= 7) nums.add(n);
         }
     }
-    for (const ownerJid of config.ownerNumbers) {
-        const ownerNum = stripJid(ownerJid);
-        if (ownerNum && nums.has(ownerNum)) return true;
+    for (const n of nums) {
+        if (await isOwnerForSession(sock, n)) return true;
     }
     return false;
 }
 
-function isSudo(senderPhone, message, sock) {
-    if (isOwner(senderPhone, message, sock)) return true;
-    if (!senderPhone || !config.sudoers?.length) return false;
-    for (const sudoJid of config.sudoers) {
-        if (senderPhone === stripJid(sudoJid)) return true;
+async function isSudo(senderPhone, message, sock) {
+    if (await isOwner(senderPhone, message, sock)) return true;
+    const nums = new Set();
+    if (senderPhone && senderPhone.length >= 7) nums.add(senderPhone);
+    if (message?.key?.remoteJid && !message.key.remoteJid.endsWith('@g.us')) {
+        const jid = message.key.remoteJid;
+        if (!isLid(jid)) {
+            const n = stripJid(jid);
+            if (n && n.length >= 7) nums.add(n);
+        }
+    }
+    for (const n of nums) {
+        if (await isSudoForSession(sock, n)) return true;
     }
     return false;
 }
@@ -371,8 +378,9 @@ class MessageHandler {
 
             const senderJid = senderPhone ? senderPhone + '@s.whatsapp.net' : (rawParticipant || from);
 
-            const isOwnerUser = isOwner(senderPhone, message, sock);
-            const isSudoUser = isSudo(senderPhone, message, sock);
+            const isOwnerUser = await isOwner(senderPhone, message, sock);
+            const isSudoUser = await isSudo(senderPhone, message, sock);
+            const sessionControl = await getSessionControl(sock);
 
             if (config.autoRead && !fromMe) {
                 try { await sock.readMessages([message.key]); } catch {}
@@ -418,7 +426,7 @@ class MessageHandler {
             }
 
             if (chatHandler && typeof chatHandler.handler === 'function') {
-                const isPrefixedMsg = text.startsWith(config.prefix);
+                const isPrefixedMsg = text.startsWith(sessionControl.prefix || config.prefix);
                 if (!isPrefixedMsg) {
                     try { await chatHandler.handler(text, message); return; }
                     catch (error) { logger.error('Chat handler error:', error); }
@@ -427,10 +435,13 @@ class MessageHandler {
 
             if (!text?.length) return;
 
+            if (sessionControl.privateMode && !isOwnerUser && !isSudoUser && !fromMe) return;
+
             if (config.whitelist?.enabled && !isOwnerUser && !isSudoUser) return;
 
             const ownerNoPrefix = config.ownerNoPrefix && (isOwnerUser || isSudoUser);
-            const isPrefixed = text.startsWith(config.prefix);
+            const activePrefix = sessionControl.prefix || config.prefix;
+            const isPrefixed = text.startsWith(activePrefix);
 
             const commandHandler = await this.initializeCommandHandler();
             if (!commandHandler) return;
@@ -464,7 +475,7 @@ class MessageHandler {
 
             const commandText = ownerNoPrefix && !isPrefixed
                 ? text.trim()
-                : text.slice(config.prefix.length).trim();
+                : text.slice(activePrefix.length).trim();
 
             if (!commandText?.length) {
                 this.stopTyping(from);
@@ -500,9 +511,9 @@ class MessageHandler {
                     const suggestions = commandHandler.searchCommands(commandName);
                     let response = `Command "${commandName}" not found.`;
                     if (suggestions?.length > 0) {
-                        response += `\n\nDid you mean:\n${suggestions.slice(0, 3).map(c => `${config.prefix}${c.name}`).join('\n')}`;
+                        response += `\n\nDid you mean:\n${suggestions.slice(0, 3).map(c => `${activePrefix}${c.name}`).join('\n')}`;
                     }
-                    response += `\n\nType ${config.prefix}help for all commands`;
+                    response += `\n\nType ${activePrefix}help for all commands`;
                     await sock.sendMessage(from, { text: response }, { quoted: message });
                 }
                 return;
