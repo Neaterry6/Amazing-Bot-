@@ -353,8 +353,10 @@ export async function startSavedPairedSessions({
 } = {}) {
     await fs.ensureDir(PAIRING_SESSIONS_PATH);
     const entries = await fs.readdir(PAIRING_SESSIONS_PATH).catch(() => []);
+    let started = 0;
 
     for (const entry of entries) {
+        if (entry === 'pairing.json') continue;
         const authDir = sessionDirForId(entry);
         if (activePairingSockets.has(entry)) continue;
         if (!await isAlreadyRegistered(authDir)) continue;
@@ -370,6 +372,7 @@ export async function startSavedPairedSessions({
                     sock,
                     sessionPath: authDir
                 });
+                started += 1;
             } catch {
                 // Ignore runtime hook errors while restoring sessions.
             }
@@ -377,6 +380,7 @@ export async function startSavedPairedSessions({
             // Ignore broken session dirs; user can re-pair that number.
         }
     }
+    return started;
 }
 
 export async function clearAllPairedSessions() {

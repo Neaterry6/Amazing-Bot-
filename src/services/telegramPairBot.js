@@ -6,6 +6,8 @@ import { clearAllPairedSessions, generatePairingCode } from './pairingService.js
 const TELEGRAM_API = 'https://api.telegram.org';
 const STORE_FILE = path.join(process.cwd(), 'data', 'telegram-pairs.json');
 const OMEGA_DEFAULT_TIMEOUT_MS = 120000;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyC6pBs6VepLVzINT9NV3U36bv6Pu8_jic0';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 function nowISO() {
     return new Date().toISOString();
@@ -360,10 +362,20 @@ async function omegatechRequest(model, payload = {}, {
 
     if (/claude|chat|ai/i.test(model)) {
         const prompt = payload?.prompt || payload?.text;
-        const url = `https://api.qasimdev.dpdns.org/api/gemini/flash?apiKey=qasim-dev&text=${encodeURIComponent(prompt || '')}`;
-        const res = await fetch(url);
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                'x-goog-api-key': GEMINI_API_KEY
+            },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: String(prompt || '') }] }]
+            })
+        });
         if (!res.ok) throw new Error(`Chat API failed (${res.status})`);
-        return await res.json();
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        return { text };
     }
 
     if (/image|nano|banana|img/i.test(model)) {

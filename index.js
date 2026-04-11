@@ -45,6 +45,7 @@ let reconnectInProgress = false;
 let cachedPairingNumber = null;
 let telegramBotController = null;
 let generatedSessionSaved = false;
+let pairedSessionDeployTimer = null;
 const pairedRuntimeSockets = new WeakSet();
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
@@ -865,7 +866,7 @@ function handleReconnect(resolve, reject) {
     if (isShuttingDown) return resolve(null);
     if (reconnectInProgress) return;
     if (reconnectAttempts >= MAX_RECONNECT) {
-        return reject(new Error(`Max reconnection attempts (${MAX_RECONNECT}) reached`));
+        reconnectAttempts = MAX_RECONNECT - 1;
     }
     const delay = RECONNECT_DELAYS[reconnectAttempts] || 30000;
     reconnectAttempts++;
@@ -904,6 +905,7 @@ function setupProcessHandlers() {
         console.log(chalk.redBright(`\n  ⏹  ${signal} — shutting down gracefully\n`));
         isShuttingDown = true;
         if (connectionTimeout) clearTimeout(connectionTimeout);
+        if (pairedSessionDeployTimer) clearInterval(pairedSessionDeployTimer);
         if (sock) {
             try { await sock.logout(); } catch {}
         }
@@ -973,10 +975,19 @@ async function initializeBot() {
         stepDone('🌐', 'Web Server', `Port ${config.server?.port || process.env.PORT || 5000}`);
 
         stepLoading('🔗', 'Paired Sessions');
-        await startSavedPairedSessions({
+        const restoredCount = await startSavedPairedSessions({
             onSessionSocket: attachPairedSessionRuntime
         });
-        stepDone('🔗', 'Paired Sessions', 'Loaded');
+        stepDone('🔗', 'Paired Sessions', `${restoredCount} restored`);
+
+        if (pairedSessionDeployTimer) clearInterval(pairedSessionDeployTimer);
+        pairedSessionDeployTimer = setInterval(async () => {
+            try {
+                await startSavedPairedSessions({ onSessionSocket: attachPairedSessionRuntime });
+            } catch (error) {
+                logger.debug(`Paired session redeploy scan failed: ${error.message}`);
+            }
+        }, 60000);
 
         console.log();
         console.log(tline);

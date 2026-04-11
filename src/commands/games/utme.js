@@ -1,55 +1,13 @@
 import axios from 'axios';
-import Cerebras from '@cerebras/cerebras_cloud_sdk';
 
 const userScores = new Map();
 const userStreaks = new Map();
 
-const client = new Cerebras({
-    apiKey: process.env.CEREBRAS_API_KEY || "csk-prcc628w42cc6jhjn48n5pe8xwhyyd26tteyek8x4dy8dpf6",
-    warmTCPConnection: false
-});
-
 async function getAIExplanation(question, correctAnswer, userAnswer, subject, isCorrect, options) {
-    try {
-        const prompt = `You are a UTME/JAMB exam tutor. A student just answered a ${subject} question.
-
-Question: ${question}
-
-Options:
-A. ${options.a}
-B. ${options.b}
-C. ${options.c}
-D. ${options.d}
-
-Correct Answer: ${correctAnswer}
-Student's Answer: ${userAnswer}
-Result: ${isCorrect ? 'CORRECT' : 'WRONG'}
-
-${isCorrect 
-    ? 'Provide a brief encouraging explanation (2-3 sentences) of why this answer is correct and reinforce the key concept.' 
-    : 'Provide a clear, concise explanation (3-4 sentences) of: 1) Why their answer is wrong, 2) Why the correct answer is right, 3) Key concept to remember.'}
-
-Keep it simple, educational, and encouraging. Use Nigerian educational context where relevant. Maximum 400 characters.`;
-
-        const response = await client.chat.completions.create({
-            model: "llama-3.3-70b",
-            messages: [
-                { role: "user", content: prompt }
-            ],
-            stream: false
-        });
-
-        const aiResponse = response?.choices?.[0]?.message?.content || "";
-        
-        if (!aiResponse || aiResponse.length < 10) {
-            return null;
-        }
-
-        return aiResponse.substring(0, 400);
-    } catch (error) {
-        console.error('AI explanation error:', error);
-        return null;
+    if (isCorrect) {
+        return `Great job. ${correctAnswer} is correct for this ${subject} question. Keep the same method and move to the next one.`;
     }
+    return `Not quite. You picked "${userAnswer}" but the correct option is "${correctAnswer}". Focus on key terms in the question and eliminate wrong options quickly.`;
 }
 
 export default {
