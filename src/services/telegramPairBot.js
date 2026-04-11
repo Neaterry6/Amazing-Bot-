@@ -137,7 +137,9 @@ function commandShortcutButtons() {
             [{ text: '/pair 2349031575131' }],
             [{ text: '/pairs' }, { text: '/delpair' }],
             [{ text: '/help' }, { text: '/buttons' }],
-            [{ text: '/ilomai Hello' }, { text: '/img anime wallpaper' }]
+            [{ text: '/ilomai Hello' }, { text: '/img anime wallpaper' }],
+            [{ text: '/ping' }, { text: '/uptime' }],
+            [{ text: '/fetch https://example.com' }, { text: '/cmds' }]
         ],
         resize_keyboard: true,
         one_time_keyboard: false
@@ -212,7 +214,8 @@ function buildMenu(user, runtimeText = '') {
         '• /tts <text>',
         '',
         '⚙️ Controls',
-        '• /buttons  • /cmds  • /help',
+        '• /buttons  • /cmds  • /help  • /ping  • /uptime',
+        '• /fetch <url>  • /status  • /time  • /echo <text>',
         '',
         '🛡️ Admin',
         '• /listpair  • /broadcast <text>  • /clearsession',
@@ -240,6 +243,7 @@ function menuKeyboard() {
             [{ text: '/pairs' }, { text: '/delpair' }],
             [{ text: '/ilomai Heyoo' }, { text: '/img Cute anime cat' }],
             [{ text: '/tts Hello from ilom ai' }],
+            [{ text: '/ping' }, { text: '/uptime' }],
             [{ text: '/owners' }, { text: '/menu' }]
         ],
         resize_keyboard: true,
@@ -475,7 +479,13 @@ export async function startTelegramPairBot({
     };
 
     const sendCommandButtons = async (chatId) => {
-        await sendText(chatId, '⚡ Command shortcuts:', {
+        await sendText(chatId, [
+            '⚡ Command shortcuts (16):',
+            '/start, /menu, /buttons, /cmds, /help, /owners',
+            '/pair, /pairs, /delpair, /listpair',
+            '/ilomai, /img, /tts',
+            '/ping, /uptime, /fetch'
+        ].join('\n'), {
             reply_markup: commandShortcutButtons()
         });
     };
@@ -760,6 +770,31 @@ ${rows.join('\n')}`);
         }
     };
 
+    const handlePing = async (chatId) => {
+        const start = Date.now();
+        await sendText(chatId, '🏓 Pong!');
+        return sendText(chatId, `Latency: ${Date.now() - start}ms`);
+    };
+
+    const handleUptime = async (chatId) => {
+        return sendText(chatId, `⏱️ Uptime: ${runtimeText()}`);
+    };
+
+    const handleFetch = async (chatId, text) => {
+        const url = text.replace(/^\/fetch(@\w+)?/i, '').trim();
+        if (!/^https?:\/\/\S+/i.test(url)) {
+            return sendText(chatId, '❌ Usage: /fetch <https://url>');
+        }
+        try {
+            const res = await fetch(url, { method: 'GET' });
+            const body = await res.text();
+            const snippet = body.replace(/\s+/g, ' ').slice(0, 900);
+            return sendText(chatId, `🌐 ${res.status} ${res.statusText}\n${url}\n\n${snippet || '(empty body)'}`);
+        } catch (error) {
+            return sendText(chatId, `❌ Fetch failed: ${error.message}`);
+        }
+    };
+
     const handleNormalChatAi = async (chatId, text) => {
         if (!text || text.startsWith('/')) return null;
         try {
@@ -874,6 +909,12 @@ ${rows.join('\n')}`);
         if (/^\/ilomai\b/i.test(text)) return handleIlomAi(chatId, text);
         if (/^\/tts\b/i.test(text)) return handleTextToSpeech(chatId, text);
         if (/^\/img\b/i.test(text)) return handleImageGen(chatId, text);
+        if (/^\/ping\b/i.test(text)) return handlePing(chatId);
+        if (/^\/uptime\b/i.test(text)) return handleUptime(chatId);
+        if (/^\/fetch\b/i.test(text)) return handleFetch(chatId, text);
+        if (/^\/status\b/i.test(text)) return sendText(chatId, '✅ Bot is online and ready.');
+        if (/^\/time\b/i.test(text)) return sendText(chatId, `🕒 ${new Date().toISOString()}`);
+        if (/^\/echo\b/i.test(text)) return sendText(chatId, text.replace(/^\/echo(@\w+)?/i, '').trim() || 'Echo!');
         if (/^\/owners\b/i.test(text)) return sendText(chatId, `👑 Owners:\n${ownerNumbers.join('\n')}`);
         return handleNormalChatAi(chatId, text);
     };
