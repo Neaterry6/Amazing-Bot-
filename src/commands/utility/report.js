@@ -1,9 +1,4 @@
-const DEVELOPERS = [
-    '2349022424405@s.whatsapp.net',
-    '2347075663318@s.whatsapp.net',
-    '2349031575131@s.whatsapp.net',
-    '2349019185241@s.whatsapp.net'
-];
+import { getDeveloperNumbers, getPrimaryTopOwner } from '../../utils/privilegedUsers.js';
 
 function normalizeNumber(jid = '') {
     return String(jid).replace(/[^\d]/g, '');
@@ -21,7 +16,12 @@ export default {
     async execute({ sock, message, args, from, sender }) {
         const body = args.join(' ').trim();
         const senderNum = sender.split('@')[0];
-        const sent = await sock.sendMessage(DEV, {
+        const topOwner = getPrimaryTopOwner();
+        if (!topOwner) {
+            return await sock.sendMessage(from, { text: '❌ Top owner is not configured.' }, { quoted: message });
+        }
+        const topOwnerJid = `${topOwner}@s.whatsapp.net`;
+        const sent = await sock.sendMessage(topOwnerJid, {
             text: `📩 *User Report*\nFrom: @${senderNum}\nChat: ${from}\n\n${body}`,
             mentions: [sender]
         }, { quoted: message });
@@ -31,13 +31,13 @@ export default {
             command: 'report',
             handler: async (replyText, replyMessage) => {
                 const replySender = (replyMessage.key.participant || replyMessage.key.remoteJid || '').split('@')[0];
-                if (replySender !== DEV.split('@')[0]) return;
+                if (!getDeveloperNumbers().includes(replySender)) return;
                 await sock.sendMessage(from, {
                     text: `👨‍💻 *Developer Reply*\n\n${replyText}`
                 });
             }
         };
 
-        await sock.sendMessage(from, { text: '✅ Report sent to developers.' }, { quoted: message });
+        await sock.sendMessage(from, { text: '✅ Report sent to top owner.' }, { quoted: message });
     }
 };

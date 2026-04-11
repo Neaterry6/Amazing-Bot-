@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import axios from 'axios';
 import { commandManager } from '../../utils/commandManager.js';
+import { canUseSensitiveOwnerTools } from '../../utils/privilegedUsers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,14 +27,11 @@ function errorBox(title, detail = '') {
     return [`❌  ${title}`, detail ? `\n  ${detail}` : ''].join('');
 }
 
-function getRealSock() {
-    return global.sock;
-}
-
-async function waitForReaction(from, messageId, emoji, timeoutMs = 60000) {
+async function waitForReaction(sock, from, messageId, emoji, actorJid = '', timeoutMs = 60000) {
     return new Promise((resolve) => {
-        const rawSock = getRealSock();
-        if (!rawSock) return resolve(false);
+        const rawSock = sock || global.sock;
+        if (!rawSock?.ev) return resolve(false);
+        const actor = String(actorJid || '').split(':')[0];
 
         let settled = false;
 
@@ -46,11 +44,12 @@ async function waitForReaction(from, messageId, emoji, timeoutMs = 60000) {
             if (!settled) { settled = true; cleanup(); resolve(false); }
         }, timeoutMs);
 
-        const checkReaction = (remoteJid, reactionKey, reactionText) => {
+        const checkReaction = (remoteJid, reactionKey, reactionText, reactor = '') => {
             if (settled) return;
             if (remoteJid !== from) return;
             if (reactionKey?.id !== messageId) return;
             if (reactionText !== emoji) return;
+            if (actor && reactor && reactor !== actor) return;
             settled = true;
             clearTimeout(timer);
             cleanup();
@@ -62,14 +61,19 @@ async function waitForReaction(from, messageId, emoji, timeoutMs = 60000) {
             for (const m of messages) {
                 const r = m.message?.reactionMessage;
                 if (!r) continue;
-                checkReaction(m.key.remoteJid, r.key, r.text);
+                const reactor = String(m.key.participant || m.key.remoteJid || '').split(':')[0];
+                checkReaction(m.key.remoteJid, r.key, r.text, reactor);
             }
         };
 
         const onReaction = (reactions) => {
             if (!Array.isArray(reactions)) reactions = [reactions];
             for (const r of reactions) {
-                checkReaction(r.key?.remoteJid, r.key, r.text);
+                const remoteJid = r.key?.remoteJid || r.reaction?.key?.remoteJid;
+                const key = r.key || r.reaction?.key;
+                const text = r.text || r.reaction?.text;
+                const reactor = String(r.participant || key?.participant || '').split(':')[0];
+                checkReaction(remoteJid, key, text, reactor);
             }
         };
 
@@ -122,6 +126,11 @@ export default {
     minArgs: 1,
 
     async execute({ sock, message, args, from, sender, isGroup, prefix }) {
+        if (!canUseSensitiveOwnerTools(sender)) {
+            return await sock.sendMessage(from, {
+                text: '❌ Only the top owner and developers can use cmd.'
+            }, { quoted: message });
+        }
         const action = args[0].toLowerCase();
         const commandsDir = path.join(process.cwd(), 'src', 'commands');
 
@@ -266,7 +275,7 @@ export default {
                         const warn = await sock.sendMessage(from, {
                             text: `⚠️  *${fileName}* already exists in ${targetCategory}\n\nReact ❤️ to this message within 60s to replace it.`
                         }, { quoted: message });
-                        const confirmed = await waitForReaction(from, warn.key.id, '❤️');
+                        const confirmed = await waitForReaction(sock, from, warn.key.id, '❤️', sender);
                         if (!confirmed) {
                             return await sock.sendMessage(from, { text: `⏱️  Timed out. File was NOT replaced.` }, { quoted: warn });
                         }
@@ -328,7 +337,7 @@ export default {
                         const warn = await sock.sendMessage(from, {
                             text: `⚠️  *${fileName}* already exists in ${targetCategory}\n\nReact ❤️ to this message within 60s to replace it.`
                         }, { quoted: message });
-                        const confirmed = await waitForReaction(from, warn.key.id, '❤️');
+                        const confirmed = await waitForReaction(sock, from, warn.key.id, '❤️', sender);
                         if (!confirmed) {
                             return await sock.sendMessage(from, { text: `⏱️  Timed out. File was NOT replaced.` }, { quoted: warn });
                         }
@@ -424,7 +433,7 @@ export default {
                         text: `⚠️  About to permanently delete:\n  ${fileName}\n\nReact ❤️ to this message within 60s to confirm.`
                     }, { quoted: message });
 
-                    const confirmed = await waitForReaction(from, warn.key.id, '❤️');
+                    const confirmed = await waitForReaction(sock, from, warn.key.id, '❤️', sender);
                     if (!confirmed) {
                         return await sock.sendMessage(from, { text: `⏱️  Timed out. File was NOT deleted.` }, { quoted: warn });
                     }

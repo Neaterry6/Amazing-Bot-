@@ -18,7 +18,7 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const IMAGE_API_URL = 'https://apiskeith.top/ai/magicstudio';
 const IMAGE_FALLBACK_URL = 'https://theone-fast-image-gen.vercel.app/download-image';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyC6pBs6VepLVzINT9NV3U36bv6Pu8_jic0';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
 const COMMAND_ROOT = path.join(process.cwd(), 'src', 'commands');
 const VALID_CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
@@ -249,6 +249,9 @@ async function runLocalCommand(rawCmd = '') {
 }
 
 async function askAI(prompt) {
+    if (!GEMINI_API_KEY) {
+        throw new Error('Missing GEMINI_API_KEY. Add your Gemini API key in environment variables.');
+    }
     const { data } = await axios.post(GEMINI_URL, {
         contents: [{ parts: [{ text: prompt }] }]
     }, {
