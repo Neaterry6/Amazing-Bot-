@@ -1,5 +1,8 @@
 import fs from 'fs-extra';
 import path from 'path';
+import axios from 'axios';
+import yts from 'yt-search';
+import FormData from 'form-data';
 import logger from '../utils/logger.js';
 import { clearAllPairedSessions, generatePairingCode } from './pairingService.js';
 
@@ -114,10 +117,11 @@ const REQUIRED_JOIN_TARGETS = [
 function inlineMainButtons() {
     return {
         inline_keyboard: [
-            [{ text: '📱 Pair Number', callback_data: 'act_pair' }],
-            [{ text: '📄 My Pairs', callback_data: 'act_pairs' }, { text: '❓ Help', callback_data: 'act_help' }],
+            [{ text: '📱 Pair Number', callback_data: 'act_pair' }, { text: '📄 My Pairs', callback_data: 'act_pairs' }],
+            [{ text: '🎵 Play Music', callback_data: 'act_play_hint' }, { text: '📝 Lyrics', callback_data: 'act_lyrics_hint' }],
+            [{ text: '🧠 Ilom AI', callback_data: 'act_ilom_hint' }, { text: '🖼️ Image AI', callback_data: 'act_img_hint' }],
             [{ text: '🧭 Menu', callback_data: 'act_menu' }, { text: '⚡ Commands', callback_data: 'act_cmds' }],
-            [{ text: '✅ Check Join', callback_data: 'act_check_join' }]
+            [{ text: '✅ Check Join', callback_data: 'act_check_join' }, { text: '❓ Help', callback_data: 'act_help' }]
         ]
     };
 }
@@ -138,6 +142,8 @@ function commandShortcutButtons() {
             [{ text: '/pairs' }, { text: '/delpair' }],
             [{ text: '/help' }, { text: '/buttons' }],
             [{ text: '/ilomai Hello' }, { text: '/img anime wallpaper' }],
+            [{ text: '/play Billie Jean' }, { text: '/lyrics Billie Jean' }],
+            [{ text: '/url' }],
             [{ text: '/ping' }, { text: '/uptime' }],
             [{ text: '/fetch https://example.com' }, { text: '/cmds' }]
         ],
@@ -212,6 +218,9 @@ function buildMenu(user, runtimeText = '') {
         '• /ilomai <prompt>',
         '• /img <prompt>',
         '• /tts <text>',
+        '• /play <song name>',
+        '• /lyrics <song name>',
+        '• /url (reply/send image)',
         '',
         '⚙️ Controls',
         '• /buttons  • /cmds  • /help  • /ping  • /uptime',
@@ -242,6 +251,7 @@ function menuKeyboard() {
             [{ text: '/pair 2349031575131' }],
             [{ text: '/pairs' }, { text: '/delpair' }],
             [{ text: '/ilomai Heyoo' }, { text: '/img Cute anime cat' }],
+            [{ text: '/play Calm Down' }, { text: '/lyrics Calm Down' }],
             [{ text: '/tts Hello from ilom ai' }],
             [{ text: '/ping' }, { text: '/uptime' }],
             [{ text: '/owners' }, { text: '/menu' }]
@@ -314,6 +324,14 @@ function pickUrlFromApiResponse(payload) {
         .find(Boolean);
     const url = embedded || '';
     return url ? String(url).trim() : '';
+}
+
+async function resolveYoutube(input = '') {
+    if (/youtu\.be|youtube\.com/i.test(input)) return { url: input };
+    const search = await yts(input);
+    const first = search?.videos?.[0];
+    if (!first?.url) throw new Error('Song not found');
+    return first;
 }
 
 async function omegatechRequest(model, payload = {}, {
@@ -444,6 +462,19 @@ export async function startTelegramPairBot({
 
     try {
         await tgCall(token, 'getMe');
+        await tgCall(token, 'setMyCommands', {
+            commands: [
+                { command: 'menu', description: 'Show full menu and actions' },
+                { command: 'pair', description: 'Generate WhatsApp pair code' },
+                { command: 'pairs', description: 'List your pair records' },
+                { command: 'ilomai', description: 'Ask Ilom AI anything' },
+                { command: 'img', description: 'Generate image from prompt' },
+                { command: 'play', description: 'Get audio by song name' },
+                { command: 'lyrics', description: 'Fetch song lyrics' },
+                { command: 'url', description: 'Upload replied image and get URL' },
+                { command: 'help', description: 'How to use this bot' }
+            ]
+        }).catch(() => {});
         logger.info('Telegram pair bot started.');
     } catch (error) {
         logger.warn(`Telegram pair bot disabled: ${error.message}`);
@@ -480,10 +511,10 @@ export async function startTelegramPairBot({
 
     const sendCommandButtons = async (chatId) => {
         await sendText(chatId, [
-            '⚡ Command shortcuts (16):',
+            '⚡ Command shortcuts:',
             '/start, /menu, /buttons, /cmds, /help, /owners',
             '/pair, /pairs, /delpair, /listpair',
-            '/ilomai, /img, /tts',
+            '/ilomai, /img, /tts, /play, /lyrics, /url',
             '/ping, /uptime, /fetch'
         ].join('\n'), {
             reply_markup: commandShortcutButtons()
@@ -770,6 +801,81 @@ ${rows.join('\n')}`);
         }
     };
 
+    const handlePlay = async (chatId, text) => {
+        const query = text.replace(/^\/play(@\w+)?/i, '').trim();
+        if (!query) return sendText(chatId, '❌ Usage: /play <song name or youtube link>');
+        try {
+            await tgCall(token, 'sendChatAction', { chat_id: chatId, action: 'upload_voice' });
+            const video = await resolveYoutube(query);
+            const api = `https://apiskeith.top/download/audio?url=${encodeURIComponent(video.url)}`;
+            const { data } = await axios.get(api, { timeout: 30000 });
+            if (!data?.status || !data?.result) throw new Error('Audio not available');
+
+            await tgCall(token, 'sendAudio', {
+                chat_id: chatId,
+                audio: data.result,
+                title: video?.title || query,
+                performer: video?.author?.name || 'Unknown',
+                caption: `🎵 ${video?.title || query}`
+            });
+            return null;
+        } catch (error) {
+            return sendText(chatId, `❌ Play error: ${error.message}`);
+        }
+    };
+
+    const handleLyrics = async (chatId, text) => {
+        const query = text.replace(/^\/lyrics(@\w+)?/i, '').trim();
+        if (!query) return sendText(chatId, '❌ Usage: /lyrics <song name>');
+        try {
+            await tgCall(token, 'sendChatAction', { chat_id: chatId, action: 'typing' });
+            const res = await axios.get(`https://api.popcat.xyz/v2/lyrics?song=${encodeURIComponent(query)}`, {
+                timeout: 30000
+            });
+            if (res.data?.error || !res.data?.message) {
+                return sendText(chatId, `❌ No lyrics found for "${query}".`);
+            }
+            const { title, artist, lyrics, url } = res.data.message;
+            const finalLyrics = String(lyrics || '').slice(0, 3500);
+            return sendText(chatId, [
+                `📝 *${title || query}*`,
+                `👤 ${artist || 'Unknown artist'}`,
+                '',
+                finalLyrics || 'No lyrics body returned.',
+                url ? `\n🔗 ${url}` : ''
+            ].join('\n'), { parse_mode: 'Markdown' });
+        } catch (error) {
+            return sendText(chatId, `❌ Lyrics error: ${error.message}`);
+        }
+    };
+
+    const handleUrl = async (chatId, msg) => {
+        const photo = msg?.reply_to_message?.photo?.slice(-1)[0] || msg?.photo?.slice(-1)[0];
+        if (!photo) return sendText(chatId, '❌ Reply to an image with /url, or send /url with a photo.');
+        const apiKey = (process.env.IMGBB_API_KEY || '').trim();
+        if (!apiKey) return sendText(chatId, '❌ IMGBB_API_KEY is missing on server.');
+        try {
+            const file = await tgCall(token, 'getFile', { file_id: photo.file_id });
+            const filePath = file?.file_path;
+            if (!filePath) throw new Error('Telegram did not return file path');
+            const imageRes = await fetch(`${TELEGRAM_API}/file/bot${token}/${filePath}`);
+            if (!imageRes.ok) throw new Error(`Telegram file download failed (${imageRes.status})`);
+            const buf = Buffer.from(await imageRes.arrayBuffer());
+
+            const form = new FormData();
+            form.append('image', buf.toString('base64'));
+            const upload = await axios.post(`https://api.imgbb.com/1/upload?key=${encodeURIComponent(apiKey)}`, form, {
+                headers: form.getHeaders(),
+                timeout: 30000
+            });
+            const url = upload?.data?.data?.url;
+            if (!url) throw new Error('No URL returned from ImgBB');
+            return sendText(chatId, `✅ Uploaded successfully.\n🔗 ${url}`);
+        } catch (error) {
+            return sendText(chatId, `❌ URL upload error: ${error.message}`);
+        }
+    };
+
     const handlePing = async (chatId) => {
         const start = Date.now();
         await sendText(chatId, '🏓 Pong!');
@@ -828,6 +934,10 @@ ${rows.join('\n')}`);
         if (action === 'act_buttons') return sendButtons(chatId);
         if (action === 'act_cmds') return sendCommandButtons(chatId);
         if (action === 'act_help') return sendHelpCard(chatId);
+        if (action === 'act_play_hint') return sendText(chatId, '🎵 Use /play <song name>\nExample: /play Billie Jean');
+        if (action === 'act_lyrics_hint') return sendText(chatId, '📝 Use /lyrics <song name>\nExample: /lyrics Billie Jean');
+        if (action === 'act_ilom_hint') return sendText(chatId, '🧠 Use /ilomai <your prompt>');
+        if (action === 'act_img_hint') return sendText(chatId, '🖼️ Use /img <your prompt>');
 
         if (action === 'act_check_join') {
             const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
@@ -909,6 +1019,9 @@ ${rows.join('\n')}`);
         if (/^\/ilomai\b/i.test(text)) return handleIlomAi(chatId, text);
         if (/^\/tts\b/i.test(text)) return handleTextToSpeech(chatId, text);
         if (/^\/img\b/i.test(text)) return handleImageGen(chatId, text);
+        if (/^\/play\b/i.test(text)) return handlePlay(chatId, text);
+        if (/^\/lyrics\b/i.test(text)) return handleLyrics(chatId, text);
+        if (/^\/url\b/i.test(text)) return handleUrl(chatId, msg);
         if (/^\/ping\b/i.test(text)) return handlePing(chatId);
         if (/^\/uptime\b/i.test(text)) return handleUptime(chatId);
         if (/^\/fetch\b/i.test(text)) return handleFetch(chatId, text);

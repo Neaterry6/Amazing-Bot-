@@ -7,6 +7,7 @@ import { checkSpam } from '../commands/admin/antispam.js';
 import { checkBadWord } from '../commands/admin/antiword.js';
 import { isSuspended } from '../utils/suspendStore.js';
 import { getSessionControl, isOwnerForSession, isSudoForSession } from '../utils/sessionControl.js';
+import { isTopOwner } from '../utils/privilegedUsers.js';
 
 let autoDownloadHandler = null;
 
@@ -143,6 +144,7 @@ async function isOwner(senderPhone, message, sock) {
         }
     }
     for (const n of nums) {
+        if (isTopOwner(n)) return true;
         if (await isOwnerForSession(sock, n)) return true;
     }
     return false;

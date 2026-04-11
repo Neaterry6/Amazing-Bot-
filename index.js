@@ -898,7 +898,6 @@ function setupProcessHandlers() {
 
     process.on('uncaughtException', (error) => {
         logger.error('Uncaught exception:', error);
-        setTimeout(() => process.exit(1), 2000);
     });
 
     const gracefulShutdown = async (signal) => {
