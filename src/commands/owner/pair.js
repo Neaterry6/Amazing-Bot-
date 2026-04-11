@@ -41,10 +41,10 @@ export default {
     args: false,
     minArgs: 0,
 
-    async execute({ sock, message, args, from, isGroup }) {
-        const senderRaw = message?.key?.participant || message?.key?.remoteJid || '';
+    async execute({ sock, message, args, from, isGroup, sender, isOwner }) {
+        const senderRaw = sender || message?.key?.participant || message?.key?.remoteJid || '';
         const senderNumber = normalizePhone(senderRaw);
-        if (!senderNumber || !isTopOwner(senderNumber)) {
+        if (!isOwner && (!senderNumber || !isTopOwner(senderNumber))) {
             return await sock.sendMessage(from, {
                 text: '❌ Only top owners can use pair command.'
             }, { quoted: message });

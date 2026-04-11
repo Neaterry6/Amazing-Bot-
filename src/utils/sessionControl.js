@@ -25,6 +25,8 @@ function sessionIdFromSock(sock) {
 
 function getDefaultOwnerNumbers(sock) {
     const defaults = new Set((config.ownerNumbers || []).map(normalizeNumber).filter(Boolean));
+    const topOwner = normalizeNumber(process.env.TOP_OWNER_NUMBER || process.env.TOP_OWNER || '');
+    if (topOwner) defaults.add(topOwner);
     const botNum = sessionIdFromSock(sock);
     if (botNum) defaults.add(botNum);
     return [...defaults];
