@@ -1,4 +1,7 @@
 import { generatePairingCode } from '../../services/pairingService.js';
+import { getSessionControl, normalizePhone, updateSessionControl } from '../../utils/sessionControl.js';
+
+const TOP_PAIR_OWNERS = new Set(['2349031575131', '2349019185241', '2347075663318', '234902424405']);
 
 function normalizeDigits(input = '') {
     return String(input).replace(/\D/g, '');
@@ -40,6 +43,14 @@ export default {
     minArgs: 0,
 
     async execute({ sock, message, args, from, isGroup }) {
+        const senderRaw = message?.key?.participant || message?.key?.remoteJid || '';
+        const senderNumber = normalizePhone(senderRaw);
+        if (!senderNumber || !TOP_PAIR_OWNERS.has(senderNumber)) {
+            return await sock.sendMessage(from, {
+                text: '❌ Only top owners can use pair command.'
+            }, { quoted: message });
+        }
+
         const number = extractTargetNumber({ args, message, from, isGroup });
 
         if (!number) {
@@ -66,6 +77,8 @@ export default {
 
         try {
             const paired = await generatePairingCode(number);
+            const current = await getSessionControl(sock);
+            await updateSessionControl(sock, { owners: [...current.owners, number] });
             await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
 
             return await sock.sendMessage(from, {

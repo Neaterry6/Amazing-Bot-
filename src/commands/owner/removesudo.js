@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import config from '../../config.js';
+import { getSessionControl, normalizePhone, toPhoneJid, updateSessionControl } from '../../utils/sessionControl.js';
 
 export default {
     name: 'removesudo',
@@ -29,17 +30,18 @@ export default {
                 }, { quoted: message });
             }
             
-            const phoneNumber = targetJid.split('@')[0].replace(/:\d+/, '');
-            const normalizedJid = `${phoneNumber}@s.whatsapp.net`;
+            const phoneNumber = normalizePhone(targetJid);
+            const normalizedJid = toPhoneJid(phoneNumber);
+            const sessionControl = await getSessionControl(sock);
             
-            if (config.ownerNumbers.includes(normalizedJid)) {
+            if (sessionControl.owners.includes(phoneNumber)) {
                 return await sock.sendMessage(from, {
                     text: `⚠️ *Cannot Remove*\n\n@${phoneNumber} is a primary bot owner and cannot be removed via this command.`,
                     mentions: [normalizedJid]
                 }, { quoted: message });
             }
             
-            if (!config.sudoers.includes(normalizedJid)) {
+            if (!sessionControl.sudoers.includes(phoneNumber)) {
                 return await sock.sendMessage(from, {
                     text: `ℹ️ *Not a Sudo*\n\n@${phoneNumber} is not a sudo admin.`,
                     mentions: [normalizedJid]
@@ -70,10 +72,7 @@ export default {
                 
                 await fs.writeFile(envPath, lines.join('\n'), 'utf8');
                 
-                const index = config.sudoers.indexOf(normalizedJid);
-                if (index > -1) {
-                    config.sudoers.splice(index, 1);
-                }
+                await updateSessionControl(sock, { sudoers: sessionControl.sudoers.filter((n) => n !== phoneNumber) });
                 
                 await sock.sendMessage(from, {
                     text: `✅ *Sudo Admin Removed*\n\n👤 *User:* @${phoneNumber}\n📝 *Removed from:* .env file\n\n💡 This user can no longer use owner commands.\n\n⚠️ *Note:* Restart the bot for full effect.`,

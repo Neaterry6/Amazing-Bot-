@@ -7,8 +7,9 @@ const HISTORY_FILE = path.join(DATA_DIR, 'ai_history.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'ai_settings.json');
 const MAX_HISTORY = 20;
 const REPLY_TTL = 10 * 60 * 1000;
-const GEMINI_API_KEY = 'qasim-dev';
-const GEMINI_URL = 'https://api.qasimdev.dpdns.org/api/gemini/flash';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyC6pBs6VepLVzINT9NV3U36bv6Pu8_jic0';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const PERSONALITIES = {
     normal:    'You are a helpful, friendly AI assistant. Be concise and clear.',
@@ -20,7 +21,7 @@ const PERSONALITIES = {
     savage:    'You are brutally honest with no sugarcoating but always accurate and helpful.'
 };
 
-const DEFAULT_SETTINGS = { engine: 'gemini', personality: 'ilom' };
+const DEFAULT_SETTINGS = { personality: 'ilom', voiceMode: false };
 
 function normJid(jid) {
     return String(jid || '').replace(/@s\.whatsapp\.net|@c\.us|@g\.us|@broadcast|@lid/g, '').split(':')[0].replace(/[^0-9]/g, '');
@@ -68,42 +69,37 @@ async function saveHistory(uid, history) {
 
 async function askGemini(personality, history) {
     const systemPrompt = PERSONALITIES[personality] || PERSONALITIES.ilom;
-    const historyText = history.map(h => `${h.role.toUpperCase()}: ${h.content}`).join('\n');
-    const prompt = `SYSTEM: ${systemPrompt}\n\n${historyText}`;
-    const response = await axios.get(GEMINI_URL, {
-        params: { apiKey: GEMINI_API_KEY, text: prompt },
+    const prompt = history.map(h => `${h.role.toUpperCase()}: ${h.content}`).join('\n');
+    const response = await axios.post(GEMINI_URL, {
+        contents: [{
+            parts: [{
+                text: `${systemPrompt}\n\n${prompt}`
+            }]
+        }]
+    }, {
+        headers: {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': GEMINI_API_KEY
+        },
         timeout: 30000
     });
-    let data = response.data;
-    if (typeof data === 'string') { try { data = JSON.parse(data); } catch {} }
-    const text = data?.data?.response || data?.response || data?.text || data?.result || '';
+    const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!text) throw new Error('Empty response from Gemini');
     return text;
 }
 
-async function askCerebras(personality, history, model) {
-    const Cerebras = (await import('@cerebras/cerebras_cloud_sdk')).default;
-    const client = new Cerebras({ apiKey: process.env.CEREBRAS_API_KEY, warmTCPConnection: false });
-    const messages = [
-        { role: 'system', content: PERSONALITIES[personality] || PERSONALITIES.ilom },
-        ...history
-    ];
-    const resp = await client.chat.completions.create({ model: model || 'llama-3.3-70b', messages, stream: false });
-    const text = resp?.choices?.[0]?.message?.content || '';
-    if (!text) throw new Error('Empty response from Cerebras');
-    return text;
+async function getAIResponse(settings, history) {
+    return await askGemini(settings.personality, history);
 }
 
-async function getAIResponse(settings, history) {
-    if (settings.engine === 'cerebras') {
-        try {
-            if (!process.env.CEREBRAS_API_KEY) throw new Error('No API key');
-            return await askCerebras(settings.personality, history, settings.model);
-        } catch (err) {
-            return await askGemini(settings.personality, history);
-        }
-    }
-    return await askGemini(settings.personality, history);
+async function sendVoiceReply(sock, from, text, quoted) {
+    const voiceText = encodeURIComponent(String(text).slice(0, 200));
+    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${voiceText}`;
+    await sock.sendMessage(from, {
+        audio: { url: ttsUrl },
+        mimetype: 'audio/mpeg',
+        ptt: true
+    }, { quoted });
 }
 
 function extractBodyText(message, args) {
@@ -159,6 +155,9 @@ function buildChainHandler(sock, from, uid, sender) {
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
             const sent = await sock.sendMessage(from, { text: aiText }, { quoted: replyMessage });
+            if (settings.voiceMode) {
+                await sendVoiceReply(sock, from, aiText, replyMessage);
+            }
             registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
         } catch (err) {
             const errText = `❌ Error: ${err.message || 'Could not get response'}`;
@@ -172,16 +171,16 @@ function buildHelp(settings, historyLen, prefix) {
     return [
         `🤖 AI Assistant`,
         ``,
-        `Engine:      ${settings.engine}`,
         `Personality: ${settings.personality}`,
+        `Voice notes: ${settings.voiceMode ? 'ON' : 'OFF'}`,
         `Memory:      ${historyLen} messages`,
         ``,
         `${p}ai <question>`,
         `${p}ai clear`,
         `${p}ai settings`,
         `${p}ai -reset`,
-        `${p}ai -engine:gemini`,
-        `${p}ai -engine:cerebras`,
+        `${p}ai vn on`,
+        `${p}ai vn off`,
         `${p}ai -mode:<name>`,
         ``,
         `Personalities: ${Object.keys(PERSONALITIES).join(', ')}`,
@@ -225,10 +224,9 @@ export default {
             return await sock.sendMessage(from, {
                 text: [
                     `🤖 Your AI Settings`,
-                    `Engine:      ${settings.engine}`,
                     `Personality: ${settings.personality}`,
                     `Memory:      ${history.length} messages`,
-                    `Cerebras API: ${process.env.CEREBRAS_API_KEY ? '✅ Set' : '❌ Not set'}`
+                    `Voice notes: ${settings.voiceMode ? 'ON' : 'OFF'}`
                 ].join('\n')
             }, { quoted: message });
         }
@@ -239,14 +237,12 @@ export default {
             return await sock.sendMessage(from, { text: '✅ Settings and memory reset.' }, { quoted: message });
         }
 
-        if (body.startsWith('-engine:')) {
-            const engine = body.slice(8).trim().toLowerCase();
-            if (!['cerebras', 'gemini'].includes(engine))
-                return await sock.sendMessage(from, { text: 'Available engines: gemini, cerebras' }, { quoted: message });
-            settings.engine = engine;
+        if (body.toLowerCase().startsWith('vn ')) {
+            const mode = body.toLowerCase().split(/\s+/)[1];
+            settings.voiceMode = mode === 'on';
             await saveSettings(uid, settings);
             return await sock.sendMessage(from, {
-                text: `✅ Engine set to: ${engine}${engine === 'cerebras' && !process.env.CEREBRAS_API_KEY ? '\n\n⚠️ No CEREBRAS_API_KEY set — will fallback to Gemini' : ''}`
+                text: `✅ Voice note mode ${settings.voiceMode ? 'enabled' : 'disabled'}.`
             }, { quoted: message });
         }
 
@@ -269,9 +265,14 @@ export default {
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
             const sent = await sock.sendMessage(from, { text: aiText }, { quoted: message });
+            if (settings.voiceMode || /start responding with vn/i.test(body)) {
+                settings.voiceMode = true;
+                await saveSettings(uid, settings);
+                await sendVoiceReply(sock, from, aiText, message);
+            }
             registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
         } catch (err) {
-            const errText = `❌ AI Error: ${err.message || 'Unknown error'}\n\nTry: .ai -engine:gemini`;
+            const errText = `❌ AI Error: ${err.message || 'Unknown error'}\n\nTry again shortly.`;
             await sock.sendMessage(from, { text: errText }, { quoted: message });
         }
     }
