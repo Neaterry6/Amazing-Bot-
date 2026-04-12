@@ -480,6 +480,7 @@ export async function startTelegramPairBot({
                 { command: 'owners', description: 'Show owner numbers' },
                 { command: 'ping', description: 'Show bot latency' },
                 { command: 'uptime', description: 'Show bot uptime' },
+                { command: 'restart', description: 'Restart bot process (admins only)' },
                 { command: 'cmds', description: 'Show command shortcut list' },
                 { command: 'buttons', description: 'Show quick action buttons' },
                 { command: 'help', description: 'How to use this bot' },
@@ -542,6 +543,12 @@ export async function startTelegramPairBot({
         ].join('\n'), {
             reply_markup: commandShortcutButtons()
         });
+    };
+
+    const handleRestart = async (chatId, user) => {
+        await sendText(chatId, `♻️ Restart requested by ${user?.username || user?.first_name || user?.id}. Restarting...`);
+        setTimeout(() => process.exit(0), 1200);
+        return null;
     };
 
     const sendHelpCard = async (chatId) => {
@@ -1047,6 +1054,7 @@ ${rows.join('\n')}`);
         if (/^\/url\b/i.test(text)) return handleUrl(chatId, msg);
         if (/^\/ping\b/i.test(text)) return handlePing(chatId);
         if (/^\/uptime\b/i.test(text)) return handleUptime(chatId);
+        if (/^\/restart\b/i.test(text)) return handleRestart(chatId, user);
         if (/^\/fetch\b/i.test(text)) return handleFetch(chatId, text);
         if (/^\/status\b/i.test(text)) return sendText(chatId, '✅ Bot is online and ready.');
         if (/^\/time\b/i.test(text)) return sendText(chatId, `🕒 ${new Date().toISOString()}`);

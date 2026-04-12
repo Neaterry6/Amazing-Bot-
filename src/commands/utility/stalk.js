@@ -28,9 +28,34 @@ export default {
             return await sock.sendMessage(from, { text: '❌ User not found on WhatsApp.' }, { quoted: message });
         }
 
-        await sock.sendMessage(from, {
-            text: `🕵️ *User Stalker*\n\nJID: ${result.jid}\nNumber: +${result.jid.split('@')[0]}\nBusiness: ${result.biz ? 'Yes' : 'No'}\nStatus: Found ✅`,
-            mentions: [result.jid]
-        }, { quoted: message });
+        const targetJid = result.jid;
+        let profilePic = null;
+        let statusText = 'Unknown';
+        let statusTime = 'Unknown';
+        let name = targetJid.split('@')[0];
+        try {
+            profilePic = await sock.profilePictureUrl(targetJid, 'image');
+        } catch {}
+        try {
+            const fetched = await sock.fetchStatus(targetJid);
+            if (fetched?.status) statusText = fetched.status;
+            if (fetched?.setAt) statusTime = new Date(fetched.setAt).toLocaleString();
+        } catch {}
+        try {
+            const [contact] = await sock.onWhatsApp(targetJid);
+            if (contact?.notify) name = contact.notify;
+        } catch {}
+
+        const caption = `🕵️ *User Stalker*\n\n👤 Name: ${name}\n🆔 JID: ${targetJid}\n📱 Number: +${targetJid.split('@')[0]}\n🏢 Business: ${result.biz ? 'Yes' : 'No'}\n📝 Bio: ${statusText}\n🕒 Bio Updated: ${statusTime}\n✅ Status: Found`;
+
+        if (profilePic) {
+            return await sock.sendMessage(from, {
+                image: { url: profilePic },
+                caption,
+                mentions: [targetJid]
+            }, { quoted: message });
+        }
+
+        await sock.sendMessage(from, { text: caption, mentions: [targetJid] }, { quoted: message });
     }
 };

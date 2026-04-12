@@ -51,6 +51,33 @@ function getBotLidNum(sock) {
     return '';
 }
 
+function collectPhoneCandidatesFromMessage(message = {}) {
+    const candidates = new Set();
+    const key = message?.key || {};
+    const msg = message?.message || {};
+    const ctx = msg?.extendedTextMessage?.contextInfo
+        || msg?.imageMessage?.contextInfo
+        || msg?.videoMessage?.contextInfo
+        || msg?.documentMessage?.contextInfo
+        || msg?.ephemeralMessage?.message?.extendedTextMessage?.contextInfo
+        || {};
+
+    const list = [
+        key?.remoteJid,
+        key?.participant,
+        key?.participantAlt,
+        key?.participantPn,
+        ctx?.participant,
+        ctx?.remoteJid
+    ];
+
+    for (const item of list) {
+        const n = rawNum(item);
+        if (n && n.length >= 7) candidates.add(n);
+    }
+    return [...candidates];
+}
+
 class CommandHandler {
     constructor() {
         this.cooldowns = new Map();
@@ -202,6 +229,7 @@ class CommandHandler {
         const nums = new Set();
 
         if (senderPhone && senderPhone.length >= 7) nums.add(senderPhone);
+        for (const n of collectPhoneCandidatesFromMessage(message)) nums.add(n);
 
         if (message?.key?.fromMe) {
             const botNum = getBotPhoneNum(sock);
@@ -227,6 +255,7 @@ class CommandHandler {
         if (await this.isOwner(senderPhone, message, sock)) return true;
         const nums = new Set();
         if (senderPhone && senderPhone.length >= 7) nums.add(senderPhone);
+        for (const n of collectPhoneCandidatesFromMessage(message)) nums.add(n);
         if (message?.key?.remoteJid && !message.key.remoteJid.endsWith('@g.us')) {
             const jid = message.key.remoteJid;
             if (!isLidJid(jid)) {

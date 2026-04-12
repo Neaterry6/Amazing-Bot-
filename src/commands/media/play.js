@@ -1,19 +1,11 @@
 import yts from 'yt-search';
-import { fetchAllInOneDownload, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
-
-async function resolveYoutube(input) {
-    if (/youtu\.be|youtube\.com/i.test(input)) return input;
-    const search = await yts(input);
-    const first = search?.videos?.[0];
-    if (!first) throw new Error('Song not found');
-    return first;
-}
+import axios from 'axios';
 
 export default {
     name: 'play',
     aliases: ['song', 'sing', 'music'],
     category: 'media',
-    description: 'Download and send song audio with cover art',
+    description: 'Search YouTube song and send MP3',
     usage: 'play <song name|youtube link>',
     cooldown: 6,
     args: true,
@@ -22,47 +14,62 @@ export default {
     async execute({ sock, message, args, from }) {
         try {
             const query = args.join(' ').trim();
-            if (!query) throw new Error('Please provide a song name');
+            if (!query) throw new Error('🎵 Provide a song name');
 
-            const resolved = await resolveYoutube(query);
-            const video = typeof resolved === 'string' ? { url: resolved } : resolved;
-            const url = video.url;
-            const data = await fetchAllInOneDownload(url);
-            const mediaUrl = pickBestMedia(data, 'audio');
-            if (!mediaUrl) throw new Error('Audio not available from API response');
-            const meta = parseAllInOneMeta(data);
+            await sock.sendMessage(from, { react: { text: '🎶', key: message.key } });
 
-            const thumbnail = meta.thumbnail || video?.thumbnail;
-
-            if (thumbnail) {
-                await sock.sendMessage(from, {
-                    image: { url: thumbnail },
-                    caption: [
-                        '🖼️ *Album Cover*',
-                        `• Title: ${meta.title || video?.title || 'Unknown'}`,
-                        `• Artist: ${meta.artist || video?.author?.name || 'Unknown'}`
-                    ].join('\n')
-                }, { quoted: message });
+            const search = await yts(query);
+            if (!search?.videos?.length) {
+                await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
+                return await sock.sendMessage(from, { text: '❌ No results found' }, { quoted: message });
             }
 
-            if (video?.title || meta.title) {
-                const details = [
-                    '🎵 *Now Playing*',
-                    `• Title: ${meta.title || video.title || 'Unknown'}`,
-                    `• Artist: ${meta.artist || video.author?.name || 'Unknown'}`,
-                    `• Duration: ${meta.duration || video.timestamp || 'Unknown'}`,
-                    `• Link: ${video.url || meta.sourceUrl || url}`
-                ].join('\n');
-                await sock.sendMessage(from, { text: details }, { quoted: message });
+            const video = search.videos[0];
+            const apiUrl = 'https://api.ootaizumi.web.id/downloader/youtube';
+            const { data } = await axios.get(apiUrl, {
+                params: {
+                    url: video.url,
+                    format: 'mp3'
+                },
+                timeout: 40000
+            });
+
+            if (!data?.status || !data?.result?.download) {
+                throw new Error('Download failed');
             }
+
+            const result = data.result;
+            const detailText = [
+                '🎵 *PLAY RESULT*',
+                `📝 *Title:* ${result.title || video.title || 'Unknown'}`,
+                `👤 *Channel:* ${result.author?.channelTitle || video.author?.name || 'Unknown'}`,
+                `⏱️ *Duration:* ${video.timestamp || 'Unknown'}`,
+                `👀 *Views:* ${Number(video.views || 0).toLocaleString()}`,
+                `🔗 *URL:* ${video.url}`
+            ].join('\n');
+            await sock.sendMessage(from, { text: detailText }, { quoted: message });
 
             await sock.sendMessage(from, {
-                audio: { url: mediaUrl },
+                audio: { url: result.download },
                 mimetype: 'audio/mpeg',
-                ptt: false
+                fileName: `${(result.title || video.title || 'audio').replace(/[\\/:*?"<>|]/g, '').slice(0, 120)}.mp3`,
+                ptt: false,
+                contextInfo: {
+                    externalAdReply: {
+                        title: result.title || video.title || 'YouTube Audio',
+                        body: result.author?.channelTitle || video.author?.name || 'YouTube',
+                        thumbnailUrl: result.thumbnail || video.thumbnail,
+                        sourceUrl: video.url,
+                        mediaType: 1,
+                        renderLargerThumbnail: true
+                    }
+                }
             }, { quoted: message });
+
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
         } catch (error) {
             await sock.sendMessage(from, { text: `❌ Play failed: ${error.message}` }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
         }
     }
 };

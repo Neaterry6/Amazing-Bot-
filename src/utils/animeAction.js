@@ -12,9 +12,18 @@ export async function runAnimeAction({ sock, message, from, action }) {
     const senderName = message?.pushName || 'Someone';
     const caption = `${senderName} gives a ${action}!`;
 
+    const isVideoLike = /\.(mp4|webm)(\?|$)/i.test(mediaUrl);
+    if (isVideoLike) {
+        await sock.sendMessage(from, {
+            video: { url: mediaUrl },
+            gifPlayback: true,
+            caption
+        }, { quoted: message });
+        return;
+    }
+
     await sock.sendMessage(from, {
-        video: { url: mediaUrl },
-        gifPlayback: true,
+        image: { url: mediaUrl },
         caption
     }, { quoted: message });
 }
