@@ -1,5 +1,5 @@
 import { createCanvas } from '@napi-rs/canvas';
-import { getUser, createUser } from '../../models/User.js';
+import { getUser, createUser, updateUser } from '../../models/User.js';
 
 function getLevelData(user) {
     const level = user?.economy?.level || 1;
@@ -32,7 +32,27 @@ export default {
             }
 
             const name = message.pushName || user?.name || 'User';
-            const { level, xp, nextXp } = getLevelData(user);
+            const oldLevel = user?.economy?.level || 1;
+            const oldXp = user?.economy?.xp || 0;
+            const xpGain = Math.max(15, Math.floor(Math.random() * 40) + 10);
+            let newXp = oldXp + xpGain;
+            let newLevel = oldLevel;
+            let neededXp = Math.max(newLevel * 100, 100);
+            while (newXp >= neededXp) {
+                newXp -= neededXp;
+                newLevel += 1;
+                neededXp = Math.max(newLevel * 100, 100);
+            }
+
+            await updateUser(sender, {
+                name,
+                profilePic: user?.profilePic || null,
+                'economy.level': newLevel,
+                'economy.xp': newXp,
+                'statistics.lastActive': new Date()
+            });
+
+            const { level, xp, nextXp } = { level: newLevel, xp: newXp, nextXp: neededXp };
             const progress = Math.max(0, Math.min(1, xp / nextXp));
 
             const canvas = createCanvas(1000, 360);
@@ -54,7 +74,8 @@ export default {
 
             ctx.fillStyle = '#d1d5db';
             ctx.font = '24px Sans';
-            ctx.fillText(`You reached level ${level}`, 40, 185);
+            const title = newLevel > oldLevel ? `You reached level ${level}` : `Level ${level} progress`;
+            ctx.fillText(title, 40, 185);
 
             ctx.fillStyle = '#374151';
             ctx.fillRect(40, 240, 920, 40);
@@ -66,9 +87,18 @@ export default {
             ctx.fillText(`${xp} / ${nextXp} XP`, 430, 267);
 
             const buffer = canvas.toBuffer('image/png');
+            let profilePicUrl = '';
+            try {
+                profilePicUrl = await sock.profilePictureUrl(sender, 'image');
+            } catch {}
+
+            await updateUser(sender, {
+                profilePic: profilePicUrl || user?.profilePic || null
+            });
+
             await sock.sendMessage(from, {
                 image: buffer,
-                caption: `🚀 ${name}, keep going! Next milestone awaits.`
+                caption: `🚀 ${name}, +${xpGain} XP gained.\n⭐ Level: ${oldLevel} → ${newLevel}\n✨ XP: ${xp}/${nextXp}`
             }, { quoted: message });
         } catch (error) {
             await sock.sendMessage(from, { text: `❌ levelup failed: ${error.message}` }, { quoted: message });

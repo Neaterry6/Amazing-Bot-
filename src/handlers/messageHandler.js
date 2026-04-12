@@ -56,6 +56,32 @@ function stripJid(jid) {
         .replace(/[^0-9]/g, '');
 }
 
+function collectPhoneCandidatesFromMessage(message = {}) {
+    const candidates = new Set();
+    const key = message?.key || {};
+    const msg = message?.message || {};
+    const ctx = msg?.extendedTextMessage?.contextInfo
+        || msg?.imageMessage?.contextInfo
+        || msg?.videoMessage?.contextInfo
+        || msg?.documentMessage?.contextInfo
+        || msg?.ephemeralMessage?.message?.extendedTextMessage?.contextInfo
+        || {};
+
+    const jidValues = [
+        key?.remoteJid,
+        key?.participant,
+        key?.participantAlt,
+        key?.participantPn,
+        ctx?.participant,
+        ctx?.remoteJid
+    ];
+    for (const v of jidValues) {
+        const n = stripJid(v);
+        if (n && n.length >= 7) candidates.add(n);
+    }
+    return [...candidates];
+}
+
 function getBotPhone(sock) {
     const candidates = [sock.user?.id, sock.authState?.creds?.me?.id];
     for (const c of candidates) {
@@ -132,6 +158,7 @@ function resolvePrivateSenderPhone(sock, fromMe, remoteJid, userJid) {
 async function isOwner(senderPhone, message, sock) {
     const nums = new Set();
     if (senderPhone && senderPhone.length >= 7) nums.add(senderPhone);
+    for (const n of collectPhoneCandidatesFromMessage(message)) nums.add(n);
     if (message?.key?.fromMe) {
         const botNum = getBotPhone(sock);
         if (botNum) nums.add(botNum);
@@ -154,6 +181,7 @@ async function isSudo(senderPhone, message, sock) {
     if (await isOwner(senderPhone, message, sock)) return true;
     const nums = new Set();
     if (senderPhone && senderPhone.length >= 7) nums.add(senderPhone);
+    for (const n of collectPhoneCandidatesFromMessage(message)) nums.add(n);
     if (message?.key?.remoteJid && !message.key.remoteJid.endsWith('@g.us')) {
         const jid = message.key.remoteJid;
         if (!isLid(jid)) {

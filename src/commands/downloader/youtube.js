@@ -23,6 +23,9 @@ export default {
 
     async execute({ sock, message, args, from, sender }) {
         try {
+            const normalize = (jid = '') => String(jid).replace(/@s\.whatsapp\.net|@c\.us|@lid|:\d+/g, '').replace(/[^0-9]/g, '');
+            const senderNum = normalize(sender);
+
             let type = null;
             if (['audio', '-a'].includes(args[0].toLowerCase())) {
                 type = 'audio';
@@ -63,42 +66,47 @@ export default {
             global.replyHandlers[sentMsg.key.id] = {
                 command: 'ytb',
                 handler: async (replyText, replyMessage) => {
-                    const replySender = replyMessage.key.participant || replyMessage.key.remoteJid;
-                    if (replySender !== sender) return;
+                    try {
+                        const replySender = replyMessage.key.participant || replyMessage.key.remoteJid;
+                        const replySenderNum = normalize(replySender);
+                        if (!replySenderNum || replySenderNum !== senderNum) return;
 
-                    const choice = parseInt(replyText.trim(), 10);
-                    if (Number.isNaN(choice) || choice < 1 || choice > videos.length) {
-                        return await sock.sendMessage(from, { text: '❌ Invalid choice. Send 1-5.' }, { quoted: replyMessage });
-                    }
+                        const choice = parseInt(replyText.trim(), 10);
+                        if (Number.isNaN(choice) || choice < 1 || choice > videos.length) {
+                            return await sock.sendMessage(from, { text: '❌ Invalid choice. Send 1-5.' }, { quoted: replyMessage });
+                        }
 
-                    const selected = videos[choice - 1];
-                    const { link, meta } = await getDownloadForType(selected.url, type);
-                    const title = meta.title || selected.title;
-                    const artist = meta.artist || selected.author.name;
+                        const selected = videos[choice - 1];
+                        const { link, meta } = await getDownloadForType(selected.url, type);
+                        const title = meta.title || selected.title;
+                        const artist = meta.artist || selected.author.name;
 
-                    if (type === 'audio') {
-                        await sock.sendMessage(from, {
-                            audio: { url: link },
-                            mimetype: 'audio/mpeg',
-                            fileName: `${title}.mp3`,
-                            ptt: false,
-                            contextInfo: {
-                                externalAdReply: {
-                                    title,
-                                    body: artist,
-                                    thumbnailUrl: meta.thumbnail || selected.thumbnail,
-                                    mediaType: 1,
-                                    renderLargerThumbnail: true
+                        if (type === 'audio') {
+                            await sock.sendMessage(from, {
+                                audio: { url: link },
+                                mimetype: 'audio/mpeg',
+                                fileName: `${title}.mp3`,
+                                ptt: false,
+                                contextInfo: {
+                                    externalAdReply: {
+                                        title,
+                                        body: artist,
+                                        thumbnailUrl: meta.thumbnail || selected.thumbnail,
+                                        mediaType: 1,
+                                        renderLargerThumbnail: true
+                                    }
                                 }
-                            }
-                        }, { quoted: replyMessage });
-                    } else {
-                        await sock.sendMessage(from, {
-                            video: { url: link },
-                            mimetype: 'video/mp4',
-                            fileName: `${title}.mp4`,
-                            caption: `📺 *${title}*\n👤 ${artist}`
-                        }, { quoted: replyMessage });
+                            }, { quoted: replyMessage });
+                        } else {
+                            await sock.sendMessage(from, {
+                                video: { url: link },
+                                mimetype: 'video/mp4',
+                                fileName: `${title}.mp4`,
+                                caption: `📺 *${title}*\n👤 ${artist}`
+                            }, { quoted: replyMessage });
+                        }
+                    } catch (e) {
+                        await sock.sendMessage(from, { text: `❌ Failed to process selection: ${e.message}` }, { quoted: replyMessage });
                     }
                 }
             };

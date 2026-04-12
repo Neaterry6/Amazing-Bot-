@@ -18,6 +18,7 @@ export default {
             const contextInfo = message.message?.extendedTextMessage?.contextInfo;
             const mentioned = contextInfo?.mentionedJid;
             const quotedUser = contextInfo?.participant;
+            const remoteJid = message.key?.remoteJid || '';
             
             let targetJid = null;
             
@@ -31,7 +32,7 @@ export default {
                 }, { quoted: message });
             }
             
-            const fullJid = targetJid.includes('@') ? targetJid : `${targetJid}@s.whatsapp.net`;
+            let fullJid = targetJid.includes('@') ? targetJid : `${targetJid}@s.whatsapp.net`;
 
             const pickPhoneFromMetadata = async (jidLike) => {
                 const normalizedInput = String(jidLike || '').trim();
@@ -54,6 +55,30 @@ export default {
                 }
                 return '';
             };
+
+            const resolveFromMentions = async () => {
+                if (!mentioned?.length || !from.endsWith('@g.us')) return '';
+                try {
+                    const metadata = await sock.groupMetadata(remoteJid || from);
+                    const participants = metadata?.participants || [];
+                    for (const participant of participants) {
+                        const jid = String(participant?.id || '');
+                        if (!jid) continue;
+                        const jidBase = jid.split('@')[0].split(':')[0];
+                        const matched = mentioned.some((m) => {
+                            const mBase = String(m || '').split('@')[0].split(':')[0];
+                            return m === jid || (mBase && jidBase && mBase === jidBase);
+                        });
+                        if (matched && jid.endsWith('@s.whatsapp.net')) return jid;
+                    }
+                } catch {}
+                return '';
+            };
+
+            if (fullJid.endsWith('@lid')) {
+                const resolvedMentionJid = await resolveFromMentions();
+                if (resolvedMentionJid) fullJid = resolvedMentionJid;
+            }
 
             let phoneNumber = normalizePhone(fullJid);
             if (fullJid.endsWith('@lid') || phoneNumber.length > 15 || phoneNumber.length < 10) {
@@ -120,7 +145,7 @@ export default {
             await updateSessionControl(sock, { sudoers: [...sessionControl.sudoers, phoneNumber] });
             
             await sock.sendMessage(from, {
-                    text: `✅ *Sudo Admin Added*\n\n👤 *User:* +${phoneNumber}\n📱 *Number:* ${phoneNumber}\n🔐 *Permissions:* Owner-level access\n📝 *Saved to:* .env file\n\n💡 This user can now use all owner commands!\n\n⚠️ *Note:* Restart the bot for full effect.\n\n*Resolved from:* ${fullJid}`,
+                    text: `✅ *Sudo Admin Added*\n\n👤 *User:* @${phoneNumber}\n📱 *Number:* ${phoneNumber}\n🆔 *JID:* ${normalizedJid}\n🔐 *Permissions:* Owner-level access\n📝 *Saved to:* .env file\n\n💡 This user can now use all owner commands!\n\n⚠️ *Note:* Restart the bot for full effect.\n\n*Resolved from:* ${fullJid}`,
                 mentions: [normalizedJid]
             }, { quoted: message });
             
