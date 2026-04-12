@@ -72,6 +72,7 @@ global.replyHandlers[sent.key.id] = {
 - `morse` (utility)
 - `googleimg` (utility)
 - `goatai` (ai command generator, owner-only)
+- `ngl` (utility, owner-only, single-send guard)
 
 ## Moderation/safety notes
 
