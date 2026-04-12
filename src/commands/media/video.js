@@ -1,5 +1,5 @@
-import axios from 'axios';
 import yts from 'yt-search';
+import { fetchAllInOneDownload, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
 
 async function resolveYoutube(input) {
     if (/youtu\.be|youtube\.com/i.test(input)) return input;
@@ -13,7 +13,7 @@ export default {
     name: 'video',
     aliases: ['ytmp4', 'videodl'],
     category: 'media',
-    description: 'Download and send MP4 using apiskeith API',
+    description: 'Download and send MP4 using all-in-one API',
     usage: 'video <song name|youtube link>',
     cooldown: 6,
     args: true,
@@ -23,13 +23,14 @@ export default {
         try {
             const query = args.join(' ').trim();
             const url = await resolveYoutube(query);
-            const api = `https://apiskeith.top/download/ytmp4?url=${encodeURIComponent(url)}`;
-            const { data } = await axios.get(api, { timeout: 30000 });
-            if (!data?.status || !data?.result) throw new Error('Video not available');
+            const data = await fetchAllInOneDownload(url);
+            const mediaUrl = pickBestMedia(data, 'video');
+            if (!mediaUrl) throw new Error('Video not available');
+            const meta = parseAllInOneMeta(data);
 
             await sock.sendMessage(from, {
-                video: { url: data.result },
-                caption: '✅ Video downloaded'
+                video: { url: mediaUrl },
+                caption: `✅ Video downloaded\n\n🎬 ${meta.title}\n👤 ${meta.artist}`
             }, { quoted: message });
         } catch (error) {
             await sock.sendMessage(from, { text: `❌ Video failed: ${error.message}` }, { quoted: message });

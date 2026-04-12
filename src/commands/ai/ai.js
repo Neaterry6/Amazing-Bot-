@@ -7,9 +7,9 @@ const HISTORY_FILE = path.join(DATA_DIR, 'ai_history.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'ai_settings.json');
 const MAX_HISTORY = 20;
 const REPLY_TTL = 10 * 60 * 1000;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyC6pBs6VepLVzINT9NV3U36bv6Pu8_jic0';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
+const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'llama-3.3-70b';
+const CEREBRAS_URL = process.env.CEREBRAS_BASE_URL || 'https://api.cerebras.ai/v1/chat/completions';
 
 const PERSONALITIES = {
     normal:    'You are a helpful, friendly AI assistant. Be concise and clear.',
@@ -67,29 +67,32 @@ async function saveHistory(uid, history) {
     await fs.writeJSON(HISTORY_FILE, all, { spaces: 2 });
 }
 
-async function askGemini(personality, history) {
+async function askCerebras(personality, history) {
+    if (!CEREBRAS_API_KEY) throw new Error('Missing CEREBRAS_API_KEY');
     const systemPrompt = PERSONALITIES[personality] || PERSONALITIES.ilom;
-    const prompt = history.map(h => `${h.role.toUpperCase()}: ${h.content}`).join('\n');
-    const response = await axios.post(GEMINI_URL, {
-        contents: [{
-            parts: [{
-                text: `${systemPrompt}\n\n${prompt}`
-            }]
-        }]
+    const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.map((h) => ({ role: h.role === 'assistant' ? 'assistant' : 'user', content: h.content }))
+    ];
+    const response = await axios.post(CEREBRAS_URL, {
+        model: CEREBRAS_MODEL,
+        messages,
+        max_tokens: 900,
+        temperature: 0.7
     }, {
         headers: {
             'Content-Type': 'application/json',
-            'X-goog-api-key': GEMINI_API_KEY
+            Authorization: `Bearer ${CEREBRAS_API_KEY}`
         },
         timeout: 30000
     });
-    const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!text) throw new Error('Empty response from Gemini');
+    const text = response.data?.choices?.[0]?.message?.content?.trim() || '';
+    if (!text) throw new Error('Empty response from Cerebras');
     return text;
 }
 
 async function getAIResponse(settings, history) {
-    return await askGemini(settings.personality, history);
+    return await askCerebras(settings.personality, history);
 }
 
 async function sendVoiceReply(sock, from, text, quoted) {
@@ -154,7 +157,8 @@ function buildChainHandler(sock, from, uid, sender) {
             const aiText = await getAIResponse(settings, history);
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
-            const sent = await sock.sendMessage(from, { text: aiText }, { quoted: replyMessage });
+            const mentions = replyMessage.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            const sent = await sock.sendMessage(from, { text: aiText, mentions }, { quoted: replyMessage });
             if (settings.voiceMode) {
                 await sendVoiceReply(sock, from, aiText, replyMessage);
             }
@@ -264,7 +268,8 @@ export default {
             if (!aiText) throw new Error('Empty response received');
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
-            const sent = await sock.sendMessage(from, { text: aiText }, { quoted: message });
+            const mentions = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+            const sent = await sock.sendMessage(from, { text: aiText, mentions }, { quoted: message });
             if (settings.voiceMode || /start responding with vn/i.test(body)) {
                 settings.voiceMode = true;
                 await saveSettings(uid, settings);
