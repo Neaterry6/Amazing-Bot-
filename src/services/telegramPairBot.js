@@ -465,14 +465,37 @@ export async function startTelegramPairBot({
         await tgCall(token, 'setMyCommands', {
             commands: [
                 { command: 'menu', description: 'Show full menu and actions' },
+                { command: 'start', description: 'Start bot and open quick menu' },
                 { command: 'pair', description: 'Generate WhatsApp pair code' },
                 { command: 'pairs', description: 'List your pair records' },
+                { command: 'listpair', description: 'List all your linked sessions' },
+                { command: 'delpair', description: 'Delete a linked pair session' },
                 { command: 'ilomai', description: 'Ask Ilom AI anything' },
                 { command: 'img', description: 'Generate image from prompt' },
+                { command: 'tts', description: 'Convert text to voice note' },
                 { command: 'play', description: 'Get audio by song name' },
                 { command: 'lyrics', description: 'Fetch song lyrics' },
                 { command: 'url', description: 'Upload replied image and get URL' },
-                { command: 'help', description: 'How to use this bot' }
+                { command: 'fetch', description: 'Fetch URL and inspect response' },
+                { command: 'owners', description: 'Show owner numbers' },
+                { command: 'ping', description: 'Show bot latency' },
+                { command: 'uptime', description: 'Show bot uptime' },
+                { command: 'cmds', description: 'Show command shortcut list' },
+                { command: 'buttons', description: 'Show quick action buttons' },
+                { command: 'help', description: 'How to use this bot' },
+                { command: 'news', description: 'Get latest headlines' },
+                { command: 'weather', description: 'Check weather by city' },
+                { command: 'movie', description: 'Search movie details' },
+                { command: 'wiki', description: 'Wikipedia summary search' },
+                { command: 'joke', description: 'Random joke' },
+                { command: 'fact', description: 'Random fact' },
+                { command: 'quote', description: 'Inspirational quote' },
+                { command: 'math', description: 'Evaluate math expression' },
+                { command: 'translate', description: 'Translate text' },
+                { command: 'anime', description: 'Search anime titles' },
+                { command: 'yts', description: 'Search YouTube titles' },
+                { command: 'status', description: 'Show service status' },
+                { command: 'repo', description: 'Show project repository link' }
             ]
         }).catch(() => {});
         logger.info('Telegram pair bot started.');

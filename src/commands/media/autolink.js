@@ -2,6 +2,7 @@ import axios from 'axios';
 import fs from 'fs-extra';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { fetchAllInOneDownload, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -19,12 +20,6 @@ const supportedPlatforms = {
 
 const HOURLY_LIMIT = 25;
 const SETTINGS_FILE = path.join(__dirname, '../../cache/autolink_settings.json');
-
-const ALLDL_APIS = [
-    'https://dev-priyanshi.onrender.com/api/alldl?url=',
-    'https://api.agatz.xyz/api/allDl?url=',
-    'https://api.betabotz.eu.org/api/download/alldl?url='
-];
 
 function loadSettings() {
     try {
@@ -72,37 +67,16 @@ function extractValidUrls(text) {
 }
 
 async function getVideoData(url) {
-    let lastError = null;
-
-    for (const api of ALLDL_APIS) {
-        try {
-            const endpoint = `${api}${encodeURIComponent(url)}`;
-            const response = await axios.get(endpoint, {
-                timeout: 25000,
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
-
-            const body = response.data || {};
-            const data = body.data || body.result || body;
-
-            const downloadUrl =
-                data.high || data.low || data.url || data.video || data.download || data.hd || data.sd ||
-                data?.links?.[0]?.url;
-
-            if (!downloadUrl) throw new Error('No download URL found in API response');
-
-            return {
-                title: data.title || data.caption || 'Video',
-                thumbnail: data.thumbnail || data.thumb || null,
-                downloadUrl,
-                quality: data.high || data.hd ? 'High' : 'Standard'
-            };
-        } catch (error) {
-            lastError = error;
-        }
-    }
-
-    throw new Error(`All free APIs failed. Last error: ${lastError?.message || 'Unknown'}`);
+    const payload = await fetchAllInOneDownload(url);
+    const meta = parseAllInOneMeta(payload);
+    const downloadUrl = pickBestMedia(payload, 'video') || pickBestMedia(payload, 'audio');
+    if (!downloadUrl) throw new Error('No download URL found in API response');
+    return {
+        title: meta.title || 'Media',
+        thumbnail: meta.thumbnail || null,
+        downloadUrl,
+        quality: 'Auto'
+    };
 }
 
 async function downloadVideo(videoData, chatId) {

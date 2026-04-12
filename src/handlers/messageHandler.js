@@ -415,12 +415,15 @@ class MessageHandler {
             try { await collectSticker(sock, message, from); } catch {}
 
             const text = messageContent.text;
+            const hasText = !!(text && text.trim().length);
 
             if (!isOwnerUser && !isSudoUser && senderPhone && this.isSpamming(senderPhone)) return;
 
             const handleAutoDownload = await getAutoDownload();
             const autoHandled = await handleAutoDownload(sock, message, from, senderJid, text);
             if (autoHandled) return;
+
+            if (!hasText) return;
 
             if (replyHandler && typeof replyHandler.handler === 'function') {
                 try { await replyHandler.handler(text, message); return; }

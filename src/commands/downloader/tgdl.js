@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { fetchAllInOneDownload, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
 
 export default {
     name: 'tgdl',
@@ -12,14 +12,13 @@ export default {
     async execute({ sock, message, args, from }) {
         try {
             const url = args[0];
-            const api = `https://apiskeith.top/download/telegram?url=${encodeURIComponent(url)}`;
-            const { data } = await axios.get(api, { timeout: 30000 });
-            if (!data?.status || !data?.result) throw new Error('No download result');
-
-            const mediaUrl = data.result;
+            const data = await fetchAllInOneDownload(url);
+            const mediaUrl = pickBestMedia(data, 'video') || pickBestMedia(data, 'audio');
+            if (!mediaUrl) throw new Error('No download result');
+            const meta = parseAllInOneMeta(data);
             const isVideo = /\.mp4|video/i.test(mediaUrl);
             if (isVideo) {
-                await sock.sendMessage(from, { video: { url: mediaUrl }, caption: '✅ Telegram media' }, { quoted: message });
+                await sock.sendMessage(from, { video: { url: mediaUrl }, caption: `✅ Telegram media\n\n🎬 ${meta.title}` }, { quoted: message });
             } else {
                 await sock.sendMessage(from, { document: { url: mediaUrl }, fileName: 'telegram-media' }, { quoted: message });
             }

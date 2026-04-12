@@ -14,11 +14,11 @@ import { clearAllPairedSessions } from '../../services/pairingService.js';
 const STATE_FILE = path.join(process.cwd(), 'data', 'ilom-mode.json');
 const SESSION_FILE = path.join(process.cwd(), 'data', 'ilom-sessions.json');
 const MEMORY_FILE = path.join(process.cwd(), 'data', 'ilom-memory.json');
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+const CEREBRAS_MODEL = process.env.CEREBRAS_MODEL || 'llama-3.3-70b';
+const CEREBRAS_URL = process.env.CEREBRAS_BASE_URL || 'https://api.cerebras.ai/v1/chat/completions';
 const IMAGE_API_URL = 'https://apiskeith.top/ai/magicstudio';
 const IMAGE_FALLBACK_URL = 'https://theone-fast-image-gen.vercel.app/download-image';
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY || '';
 const ILOM_PREFIX_REGEX = /^@?ilom\b/i;
 const COMMAND_ROOT = path.join(process.cwd(), 'src', 'commands');
 const VALID_CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
@@ -249,19 +249,25 @@ async function runLocalCommand(rawCmd = '') {
 }
 
 async function askAI(prompt) {
-    if (!GEMINI_API_KEY) {
-        throw new Error('Missing GEMINI_API_KEY. Add your Gemini API key in environment variables.');
+    if (!CEREBRAS_API_KEY) {
+        throw new Error('Missing CEREBRAS_API_KEY. Add your Cerebras API key in environment variables.');
     }
-    const { data } = await axios.post(GEMINI_URL, {
-        contents: [{ parts: [{ text: prompt }] }]
+    const { data } = await axios.post(CEREBRAS_URL, {
+        model: CEREBRAS_MODEL,
+        messages: [
+            { role: 'system', content: 'You are Ilom, an assistant for a WhatsApp bot. Be concise, helpful, and safe.' },
+            { role: 'user', content: prompt }
+        ],
+        max_tokens: 900,
+        temperature: 0.7
     }, {
         headers: {
             'Content-Type': 'application/json',
-            'X-goog-api-key': GEMINI_API_KEY
+            Authorization: `Bearer ${CEREBRAS_API_KEY}`
         },
         timeout: 30000
     });
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    const text = data?.choices?.[0]?.message?.content?.trim() || '';
     if (!text) throw new Error('AI service returned empty response.');
     return text;
 }

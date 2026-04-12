@@ -1,5 +1,5 @@
-import axios from 'axios';
 import yts from 'yt-search';
+import { fetchAllInOneDownload, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
 
 async function resolveYoutube(input) {
     if (/youtu\.be|youtube\.com/i.test(input)) return input;
@@ -13,7 +13,7 @@ export default {
     name: 'play',
     aliases: ['song', 'sing', 'music'],
     category: 'media',
-    description: 'Download and send MP3 using apiskeith API',
+    description: 'Download and send song audio with cover art',
     usage: 'play <song name|youtube link>',
     cooldown: 6,
     args: true,
@@ -27,23 +27,37 @@ export default {
             const resolved = await resolveYoutube(query);
             const video = typeof resolved === 'string' ? { url: resolved } : resolved;
             const url = video.url;
-            const api = `https://apiskeith.top/download/audio?url=${encodeURIComponent(url)}`;
-            const { data } = await axios.get(api, { timeout: 30000 });
-            if (!data?.status || !data?.result) throw new Error('Audio not available');
+            const data = await fetchAllInOneDownload(url);
+            const mediaUrl = pickBestMedia(data, 'audio');
+            if (!mediaUrl) throw new Error('Audio not available from API response');
+            const meta = parseAllInOneMeta(data);
 
-            if (video?.title) {
+            const thumbnail = meta.thumbnail || video?.thumbnail;
+
+            if (thumbnail) {
+                await sock.sendMessage(from, {
+                    image: { url: thumbnail },
+                    caption: [
+                        '🖼️ *Album Cover*',
+                        `• Title: ${meta.title || video?.title || 'Unknown'}`,
+                        `• Artist: ${meta.artist || video?.author?.name || 'Unknown'}`
+                    ].join('\n')
+                }, { quoted: message });
+            }
+
+            if (video?.title || meta.title) {
                 const details = [
                     '🎵 *Now Playing*',
-                    `• Title: ${video.title || 'Unknown'}`,
-                    `• Artist: ${video.author?.name || 'Unknown'}`,
-                    `• Duration: ${video.timestamp || 'Unknown'}`,
-                    `• Link: ${video.url}`
+                    `• Title: ${meta.title || video.title || 'Unknown'}`,
+                    `• Artist: ${meta.artist || video.author?.name || 'Unknown'}`,
+                    `• Duration: ${meta.duration || video.timestamp || 'Unknown'}`,
+                    `• Link: ${video.url || meta.sourceUrl || url}`
                 ].join('\n');
                 await sock.sendMessage(from, { text: details }, { quoted: message });
             }
 
             await sock.sendMessage(from, {
-                audio: { url: data.result },
+                audio: { url: mediaUrl },
                 mimetype: 'audio/mpeg',
                 ptt: false
             }, { quoted: message });
