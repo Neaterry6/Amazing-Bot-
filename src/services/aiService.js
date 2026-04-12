@@ -189,9 +189,7 @@ class AIService {
 
             let response = null;
 
-            if (config.apis.openai.apiKey && Math.random() < 0.7) {
-                response = await this.getChatGPTResponse(cleanPrompt, user, context);
-            } else if (config.apis.gemini.apiKey) {
+            if (config.apis.gemini.apiKey) {
                 response = await this.getGeminiResponse(cleanPrompt, user, context);
             }
 
