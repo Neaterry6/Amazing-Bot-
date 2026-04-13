@@ -7,6 +7,10 @@ export default {
     cooldown: 3,
 
     async execute({ sock, message, args, from, isGroup }) {
+        const normalizeNum = (value = '') => String(value)
+            .replace(/@s\.whatsapp\.net|@c\.us|@lid|:\d+/g, '')
+            .replace(/[^0-9]/g, '');
+
         const mention = message.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0]
             || message.message?.extendedTextMessage?.contextInfo?.participant;
 
@@ -18,12 +22,14 @@ export default {
             }, { quoted: message });
         }
 
-        const raw = mention || `${(args[0] || '').replace(/\D/g, '')}@s.whatsapp.net`;
+        const rawInput = mention || args[0] || '';
+        const num = normalizeNum(rawInput);
+        const raw = num ? `${num}@s.whatsapp.net` : '';
         if (!raw || raw === '@s.whatsapp.net') {
             return await sock.sendMessage(from, { text: '❌ Mention a user or pass a number.' }, { quoted: message });
         }
 
-        const [result] = await sock.onWhatsApp(raw);
+        const [result] = await sock.onWhatsApp(raw).catch(() => []);
         if (!result?.exists) {
             return await sock.sendMessage(from, { text: '❌ User not found on WhatsApp.' }, { quoted: message });
         }

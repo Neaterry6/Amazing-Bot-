@@ -1,6 +1,8 @@
 import axios from 'axios';
+import { ApifyClient } from 'apify-client';
 
 const OMEGA_API = 'https://omegatech-api.dixonomega.tech/api/download/all?url=';
+const APIFY_ACTOR_ID = 'easyapi/all-in-one-media-downloader';
 
 function firstNonEmpty(...items) {
     for (const it of items) {
@@ -75,6 +77,15 @@ export function parseAllInOneMeta(payload = {}) {
 }
 
 export async function fetchAllInOneDownload(url) {
+    const apifyToken = (process.env.APIFY_API_TOKEN || '').trim();
+    if (apifyToken) {
+        const client = new ApifyClient({ token: apifyToken });
+        const input = { url };
+        const run = await client.actor(APIFY_ACTOR_ID).call(input);
+        const { items } = await client.dataset(run.defaultDatasetId).listItems({ limit: 1 });
+        if (items?.length) return items[0];
+    }
+
     const endpoint = `${OMEGA_API}${encodeURIComponent(url)}`;
     const { data } = await axios.get(endpoint, {
         timeout: 45000,

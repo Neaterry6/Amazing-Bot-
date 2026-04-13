@@ -73,6 +73,7 @@
     "@whiskeysockets/baileys": "7.0.0-rc.9",
     "aki-api": "npm:@aqul/akinator-api@3.0.1",
     "api-qasim": "^4.0.2",
+    "apify-client": "^2.12.4",
     "archiver": "^7.0.1",
     "awesome-phonenumber": "^7.8.0",
     "axios": "^1.13.6",

@@ -421,9 +421,8 @@ class MessageHandler {
             const chatHandler = findChatHandler(from);
             const hasActiveHandler = !!(replyHandler || chatHandler);
 
-            if (fromMe && !config.selfMode && !isOwnerUser && !isSudoUser && !hasActiveHandler) {
-                return;
-            }
+            // Always allow handling self messages so owner can reply to themselves
+            // and interactive reply handlers keep working consistently.
 
             if (isGroup && !fromMe) {
                 try { if (await checkBan(sock, message)) return; } catch {}

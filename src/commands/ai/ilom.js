@@ -7,7 +7,6 @@ import { commandManager } from '../../utils/commandManager.js';
 
 dotenv.config();
 
-const API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 const GEMINI_CODE_MODEL = process.env.GEMINI_CODE_MODEL || 'gemini-1.5-pro';
 
@@ -51,10 +50,15 @@ ABILITIES:
 `;
 }
 
-async function gemini(model, prompt) {
-    if (!API_KEY) throw new Error('GEMINI_API_KEY not set in environment.');
+function getApiKey() {
+    return (process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_1 || '').trim();
+}
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`;
+async function gemini(model, prompt) {
+    const apiKey = getApiKey();
+    if (!apiKey) throw new Error('GEMINI_API_KEY not set in environment.');
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const res = await axios.post(endpoint, {
         contents: [{ parts: [{ text: prompt }] }]
@@ -103,7 +107,7 @@ export default {
 
     async execute({ sock, message, args, from, sender }) {
         try {
-            if (!API_KEY) {
+            if (!getApiKey()) {
                 return sock.sendMessage(from, {
                     text: '❌ GEMINI_API_KEY not set in environment.'
                 }, { quoted: message });
@@ -159,7 +163,12 @@ ${historyText}
 ${fileCode ? `CODE:\n${fileCode}` : ''}
 
 USER:
-${userText}`;
+${userText}
+
+COMMAND TEMPLATE REQUIREMENT:
+- When creating commands, output complete JS command file using export default.
+- Include: name, category, description, usage, cooldown, and execute().
+- Prefer code block output.`;
 
             await sock.sendMessage(from, { text: '🧠 ILOM thinking...' }, { quoted: message });
 

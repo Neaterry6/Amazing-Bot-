@@ -43,7 +43,7 @@ function resolveIncomingParticipant(incomingMessage) {
 
     return key.participant
         || context?.participant
-        || key.remoteJid
+        || (key.remoteJid?.endsWith('@g.us') ? '' : key.remoteJid)
         || '';
 }
 
