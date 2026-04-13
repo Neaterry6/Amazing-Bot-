@@ -26,6 +26,15 @@ function normalize(jid = '') {
     return String(jid).replace(/@s\.whatsapp\.net|@c\.us|@lid|:\d+/g, '').replace(/[^0-9]/g, '');
 }
 
+function resolveIncomingParticipant(incomingMessage) {
+    const key = incomingMessage?.key || {};
+    const context = incomingMessage?.message?.extendedTextMessage?.contextInfo
+        || incomingMessage?.message?.imageMessage?.contextInfo
+        || incomingMessage?.message?.videoMessage?.contextInfo
+        || null;
+    return key.participant || context?.participant || key.remoteJid || '';
+}
+
 async function sendDrop(sock, groupJid) {
     const poke = pokemons[Math.floor(Math.random() * pokemons.length)];
     const image = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${poke.id}.png`;
@@ -50,7 +59,7 @@ async function sendDrop(sock, groupJid) {
             if (!guess || guess !== state.pokemonName) return;
 
             state.claimed = true;
-            const sender = replyMessage.key.participant || replyMessage.key.remoteJid;
+            const sender = resolveIncomingParticipant(replyMessage);
             const senderNum = normalize(sender);
             if (!senderNum) return;
 

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import FormData from 'form-data';
+import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 export default {
     name: 'url',
@@ -28,7 +29,12 @@ export default {
 
             await sock.sendMessage(from, { react: { text: '⏳', key: message.key } });
 
-            const imageBuffer = await sock.downloadMediaMessage(target);
+            const imageBuffer = await downloadMediaMessage(
+                target,
+                'buffer',
+                {},
+                { reuploadRequest: sock.updateMediaMessage }
+            );
             if (!imageBuffer || !Buffer.isBuffer(imageBuffer) || imageBuffer.length === 0) {
                 throw new Error('Could not read image data');
             }

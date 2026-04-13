@@ -44,11 +44,12 @@ async function waitForReaction(sock, from, messageId, emoji, actorJid = '', time
             if (!settled) { settled = true; cleanup(); resolve(false); }
         }, timeoutMs);
 
+        const accepted = Array.isArray(emoji) ? emoji : [emoji];
         const checkReaction = (remoteJid, reactionKey, reactionText, reactor = '') => {
             if (settled) return;
             if (remoteJid !== from) return;
             if (reactionKey?.id !== messageId) return;
-            if (reactionText !== emoji) return;
+            if (!accepted.includes(reactionText)) return;
             if (actor && reactor && reactor !== actor) return;
             settled = true;
             clearTimeout(timer);
@@ -225,12 +226,22 @@ export default {
                     }
                     const content = fs.readFileSync(fullPath, 'utf8');
                     const fileName = path.basename(cmdPath);
-                    await sock.sendMessage(from, {
-                        document: Buffer.from(content, 'utf8'),
-                        mimetype: 'text/javascript',
-                        fileName,
-                        caption: `📄  ${fileName}\n📂  ${cmdPath}\n💾  ${fmtSize(Buffer.byteLength(content, 'utf8'))}\n📝  ${content.split('\n').length} lines`
+                    const prompt = await sock.sendMessage(from, {
+                        text: `📄 *${fileName}*\nReact ❤ in 10s to receive raw code block.\nIf no reaction, I will send as file.`
                     }, { quoted: message });
+
+                    const wantsRaw = await waitForReaction(sock, from, prompt.key.id, ['❤', '❤️'], sender, 10_000);
+                    if (wantsRaw) {
+                        const codeBlock = `\`\`\`javascript\n${content.slice(0, 3900)}\n\`\`\``;
+                        await sock.sendMessage(from, { text: codeBlock }, { quoted: message });
+                    } else {
+                        await sock.sendMessage(from, {
+                            document: Buffer.from(content, 'utf8'),
+                            mimetype: 'application/javascript',
+                            fileName,
+                            caption: `📄  ${fileName}\n📂  ${cmdPath}\n💾  ${fmtSize(Buffer.byteLength(content, 'utf8'))}\n📝  ${content.split('\n').length} lines`
+                        }, { quoted: message });
+                    }
                     break;
                 }
 
