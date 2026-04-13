@@ -34,12 +34,21 @@ function jidIdentity(jid = '') {
         .replace(/[^0-9]/g, '');
 }
 
-function resolveIncomingParticipant(incomingMessage) {
+function resolveIncomingParticipant(incomingMessage, sock) {
     const key = incomingMessage?.key || {};
     const context = incomingMessage?.message?.extendedTextMessage?.contextInfo
         || incomingMessage?.message?.imageMessage?.contextInfo
         || incomingMessage?.message?.videoMessage?.contextInfo
+        || incomingMessage?.message?.documentMessage?.contextInfo
+        || incomingMessage?.message?.ephemeralMessage?.message?.extendedTextMessage?.contextInfo
         || null;
+
+    if (key.fromMe) {
+        return key.participant
+            || sock?.user?.id
+            || sock?.authState?.creds?.me?.id
+            || '';
+    }
 
     return key.participant
         || context?.participant
@@ -181,7 +190,7 @@ export default {
             handler: async (text, incomingMessage) => {
                 const live = sessions.get(from);
                 if (!live) return;
-                const participant = resolveIncomingParticipant(incomingMessage);
+                const participant = resolveIncomingParticipant(incomingMessage, sock);
                 const body = (text || '').trim().toLowerCase();
 
                 if (live.phase === 'join' && body === 'join') {
