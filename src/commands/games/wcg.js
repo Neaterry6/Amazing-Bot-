@@ -5,6 +5,7 @@ const JOIN_WINDOW_MS = 40_000;
 const TURN_MS = 20_000;
 const MIN_LEN = 3;
 const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
+const dictionaryCache = new Map();
 
 function normalizeWord(word) {
     return String(word || '').toLowerCase().replace(/[^a-z]/g, '');
@@ -15,11 +16,21 @@ function randomLetter() {
 }
 
 async function isDictionaryWord(word) {
+    if (dictionaryCache.has(word)) return dictionaryCache.get(word);
     try {
         const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-        return res.ok;
+        if (res.status === 429) {
+            // Avoid blocking gameplay when dictionary API is rate-limited.
+            dictionaryCache.set(word, true);
+            return true;
+        }
+        const ok = res.ok;
+        dictionaryCache.set(word, ok);
+        return ok;
     } catch {
-        return false;
+        // Network failures should not hard-fail active matches.
+        dictionaryCache.set(word, true);
+        return true;
     }
 }
 

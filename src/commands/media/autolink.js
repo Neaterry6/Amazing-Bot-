@@ -1,45 +1,36 @@
-import axios from 'axios';
+import ky from 'ky';
 import fs from 'fs-extra';
 import path, { dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { fetchAllInOneDownload, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const groupSettings = new Map();
 const downloadQueue = new Map();
 const userDownloadLimits = new Map();
 
 const supportedPlatforms = {
-    youtube: /(?:youtube\.com|youtu\.be)\//i,
-    facebook: /(?:facebook\.com|fb\.watch)\//i,
-    instagram: /instagram\.com\/(?:p|reel)\//i,
-    tiktok: /tiktok\.com\/.*\/video\//i,
-    twitter: /(?:twitter\.com|x\.com)\/\w+\/status\//i
+    youtube: /^((?:https?:)?\/\/)?((?:www|m)\.)?((?:youtube\.com|youtu\.be))(\/(?:[\w\-]+\?v=|embed\/|v\/)?)([\w\-]+)(\S+)?$/i,
+    facebook: /^(https?:\/\/)?((?:www|m|web)\.)?(facebook|fb)\.(com|watch)\/.*$/i,
+    instagram: /^(https?:\/\/)?(www\.)?(instagram\.com|instagr\.am)\/(?:p|reel)\/([A-Za-z0-9\-_]+)/i,
+    tiktok: /^(https?:\/\/)?((?:www|m|vm|vt)\.)?tiktok\.com\/.*$/i,
+    twitter: /^(https?:\/\/)?(www\.)?(twitter\.com|x\.com)\/\w+\/status\/\d+/i
 };
 
 const HOURLY_LIMIT = 25;
-const SETTINGS_FILE = path.join(__dirname, '../../cache/autolink_settings.json');
+const GROUP_SETTINGS_FILE = path.join(__dirname, '../../cache/group_download_settings.json');
 
-function loadSettings() {
+function loadGroupSettings() {
     try {
-        if (fs.existsSync(SETTINGS_FILE)) {
-            const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-            Object.entries(data).forEach(([key, value]) => groupSettings.set(key, value));
+        if (fs.existsSync(GROUP_SETTINGS_FILE)) {
+            return JSON.parse(fs.readFileSync(GROUP_SETTINGS_FILE, 'utf8'));
         }
-    } catch (error) {
-        console.error('Error loading autolink settings:', error);
-    }
+    } catch {}
+    return {};
 }
 
-function saveSettings() {
-    try {
-        const data = Object.fromEntries(groupSettings);
-        fs.ensureDirSync(path.dirname(SETTINGS_FILE));
-        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2));
-    } catch (error) {
-        console.error('Error saving autolink settings:', error);
-    }
+function saveGroupSettings(settings) {
+    fs.ensureDirSync(path.dirname(GROUP_SETTINGS_FILE));
+    fs.writeFileSync(GROUP_SETTINGS_FILE, JSON.stringify(settings, null, 2));
 }
 
 function checkRateLimit(userId) {
@@ -52,138 +43,149 @@ function checkRateLimit(userId) {
     }
 
     if (userLimit.count >= HOURLY_LIMIT) return false;
+
     userLimit.count++;
     userDownloadLimits.set(userId, userLimit);
     return true;
 }
 
 function extractValidUrls(text) {
-    if (!text || typeof text !== 'string') return [];
-    const baseRegex = /(https?:\/\/[^\s]+)/gi;
-    const matches = text.match(baseRegex) || [];
-    return matches
-        .map((url) => ({ url, platform: Object.entries(supportedPlatforms).find(([, re]) => re.test(url))?.[0] || 'unknown' }))
-        .filter((x) => x.platform !== 'unknown');
+    const urls = [];
+    const source = String(text || '');
+
+    for (const [platform, regex] of Object.entries(supportedPlatforms)) {
+        const matches = source.matchAll(new RegExp(regex, 'gi'));
+        for (const match of matches) {
+            urls.push({ url: match[0], platform });
+        }
+    }
+    return urls;
 }
 
 async function getVideoData(url) {
-    const payload = await fetchAllInOneDownload(url);
-    const meta = parseAllInOneMeta(payload);
-    const downloadUrl = pickBestMedia(payload, 'video') || pickBestMedia(payload, 'audio');
-    if (!downloadUrl) throw new Error('No download URL found in API response');
-    return {
-        title: meta.title || 'Media',
-        thumbnail: meta.thumbnail || null,
-        downloadUrl,
-        quality: 'Auto'
-    };
+    try {
+        const response = await ky
+            .get('https://dev-priyanshi.onrender.com/api/alldl', {
+                searchParams: { url },
+                timeout: 30000,
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+            })
+            .json();
+
+        if (!response?.status || !response?.data) {
+            throw new Error('Invalid api response');
+        }
+
+        const data = response.data;
+        const downloadUrl = data.high || data.low;
+
+        if (!downloadUrl) throw new Error('No download URL found');
+
+        return {
+            title: data.title || 'Video',
+            thumbnail: data.thumbnail,
+            downloadUrl,
+            quality: data.high ? 'High' : 'Low'
+        };
+    } catch (error) {
+        throw new Error(`Failed to get video data: ${error.message}`);
+    }
 }
 
-async function downloadVideo(videoData, chatId) {
-    const videoPath = path.join(__dirname, `../../cache/temp_video_${chatId}_${Date.now()}.mp4`);
+async function downloadVideo(videoData, threadID) {
+    const videoPath = path.join(__dirname, `../../cache/temp_video_${threadID}_${Date.now()}.mp4`);
     fs.ensureDirSync(path.dirname(videoPath));
 
-    const videoResponse = await axios({
-        url: videoData.downloadUrl,
-        method: 'GET',
-        responseType: 'stream',
-        timeout: 90000,
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-
-    const writer = fs.createWriteStream(videoPath);
-    videoResponse.data.pipe(writer);
-
-    return await new Promise((resolve, reject) => {
-        writer.on('finish', () => resolve(videoPath));
-        writer.on('error', reject);
-        videoResponse.data.on('error', reject);
-        setTimeout(() => {
-            writer.destroy(new Error('Download timeout'));
-            reject(new Error('Download timeout'));
-        }, 150000);
-    });
+    try {
+        const response = await ky.get(videoData.downloadUrl, {
+            timeout: 60000,
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        });
+        const buffer = Buffer.from(await response.arrayBuffer());
+        await fs.writeFile(videoPath, buffer);
+        return videoPath;
+    } catch (error) {
+        throw new Error(`Download failed: ${error.message}`);
+    }
 }
-
-loadSettings();
 
 export default {
     name: 'autolink',
     aliases: ['autodl', 'autodownload'],
     category: 'media',
-    description: 'Auto-download social links using free APIs',
+    description: 'Auto download supported links in group',
     usage: 'autolink <on|off|status>',
     example: 'autolink on',
-    cooldown: 3,
+    cooldown: 5,
     permissions: ['user'],
     args: false,
     minArgs: 0,
     maxArgs: 1,
     groupOnly: true,
 
-    async execute({ sock, message, args, from, sender, prefix, isGroupAdmin }) {
-        if (!args?.length) {
+    async execute({ sock, message, args, from, sender }) {
+        const settings = loadGroupSettings();
+
+        if (!args[0] || !['on', 'off', 'status'].includes(args[0].toLowerCase())) {
             return await sock.sendMessage(from, {
                 text:
-                    `📱 *Autolink Commands*\n\n` +
-                    `• ${prefix}autolink on\n` +
-                    `• ${prefix}autolink off\n` +
-                    `• ${prefix}autolink status\n\n` +
-                    `Supported: ${Object.keys(supportedPlatforms).join(', ')}`
+                    '📱 *Autolink Commands:*\n' +
+                    '• `autolink on` - Enable auto download\n' +
+                    '• `autolink off` - Disable auto download\n' +
+                    '• `autolink status` - Check current status\n\n' +
+                    `🎥 Supported platforms: ${Object.keys(supportedPlatforms).join(', ')}`
             }, { quoted: message });
         }
 
         const command = args[0].toLowerCase();
 
         if (command === 'status') {
-            const isEnabled = groupSettings.get(from) || false;
-            const limits = userDownloadLimits.get(sender) || { count: 0, timestamp: Date.now() };
-            const resetAt = new Date(limits.timestamp + 3600000).toLocaleTimeString();
+            const status = settings[from] ? 'enabled' : 'disabled';
+            const limits = userDownloadLimits.get(sender) || { count: 0 };
+            const resetTime = new Date(Date.now() + 3600000).toLocaleTimeString();
 
             return await sock.sendMessage(from, {
                 text:
-                    `📊 *Autolink Status*\n\n` +
-                    `State: ${isEnabled ? '✅ Enabled' : '❌ Disabled'}\n` +
-                    `Your usage: ${limits.count}/${HOURLY_LIMIT}\n` +
-                    `Resets: ${resetAt}`
+                    `📊 *Auto Download Status:*\n` +
+                    `➤ Current state: ${status}\n` +
+                    `➤ Your downloads: ${limits.count}/${HOURLY_LIMIT} (resets at ${resetTime})\n` +
+                    '➤ Quality: High (when available)\n' +
+                    `➤ Supported: ${Object.keys(supportedPlatforms).join(', ')}\n\n` +
+                    '💡 Just send any supported video link to auto-download!'
             }, { quoted: message });
         }
 
-        if (!['on', 'off'].includes(command)) {
-            return await sock.sendMessage(from, {
-                text: `⚠️ Use: ${prefix}autolink <on|off|status>`
-            }, { quoted: message });
-        }
+        settings[from] = command === 'on';
+        saveGroupSettings(settings);
 
-        if (!isGroupAdmin) {
-            return await sock.sendMessage(from, {
-                text: '❌ Only group admins can change autolink settings.'
-            }, { quoted: message });
-        }
-
-        groupSettings.set(from, command === 'on');
-        saveSettings();
+        const statusEmoji = command === 'on' ? '✅' : '❌';
+        const statusText = command === 'on' ? 'enabled' : 'disabled';
 
         return await sock.sendMessage(from, {
-            text: command === 'on'
-                ? '✅ Autolink enabled. Send supported links to auto-download.'
-                : '❌ Autolink disabled.'
+            text:
+                `${statusEmoji} Auto download ${statusText} for this chat!\n\n` +
+                (command === 'on'
+                    ? `🎯 Send any video link from: ${Object.keys(supportedPlatforms).join(', ')}\n⚡ Downloads will be in high quality automatically!`
+                    : '💤 Auto download is now disabled.')
         }, { quoted: message });
     }
 };
 
 export async function handleAutoDownload(sock, message, from, sender, text) {
-    const isEnabled = groupSettings.get(from);
-    if (!isEnabled || !from.endsWith('@g.us')) return false;
+    const settings = loadGroupSettings();
+    if (!settings[from]) return false;
 
-    const urls = extractValidUrls(text);
-    if (!urls.length) return false;
+    const urls = extractValidUrls(text || '');
+    if (urls.length === 0) return false;
 
     if (!checkRateLimit(sender)) {
-        const limits = userDownloadLimits.get(sender);
-        const resetTime = new Date(limits.timestamp + 3600000).toLocaleTimeString();
+        const resetTime = new Date(Date.now() + 3600000).toLocaleTimeString();
         await sock.sendMessage(from, {
-            text: `⚠️ Limit reached (${HOURLY_LIMIT}/hour). Try again at ${resetTime}.`
+            text:
+                '⚠️ Rate limit reached!\n' +
+                `➤ Limit: ${HOURLY_LIMIT} downloads per hour\n` +
+                `➤ Resets at: ${resetTime}\n\n` +
+                '💡 This prevents api abuse and ensures service stability.'
         }, { quoted: message });
         return true;
     }
@@ -204,20 +206,24 @@ export async function handleAutoDownload(sock, message, from, sender, text) {
             await sock.sendMessage(from, {
                 video: { url: videoPath },
                 caption:
-                    `🎥 *Auto Downloaded*\n\n` +
-                    `Platform: ${platform}\n` +
-                    `Title: ${videoData.title}\n` +
-                    `Quality: ${videoData.quality}\n\n` +
-                    `Original: ${url}`,
-                mimetype: 'video/mp4'
+                    '🎥 Auto-Downloaded Video\n' +
+                    `➤ Platform: ${platform.charAt(0).toUpperCase() + platform.slice(1)}\n` +
+                    `➤ Title: ${videoData.title}\n` +
+                    `➤ Quality: ${videoData.quality}\n` +
+                    `➤ Original: ${url}`
             }, { quoted: message });
 
             await fs.remove(videoPath).catch(() => {});
             await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
         } catch (error) {
+            console.error(`Download error for ${url}:`, error.message);
             await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
             await sock.sendMessage(from, {
-                text: `❌ Failed to download ${platform} link.\nReason: ${error.message}`
+                text:
+                    `❌ Download failed for ${platform}\n` +
+                    `➤ Error: ${error.message}\n` +
+                    `➤ URL: ${url}\n\n` +
+                    '💡 This might be due to: private content, expired link, or api issues.'
             }, { quoted: message });
         } finally {
             threadQueue.delete(url);

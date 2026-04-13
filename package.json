@@ -161,7 +161,8 @@
     "xmlhttprequest": "^1.8.0",
     "yargs": "^18.0.0",
     "yt-search": "^2.13.1",
-    "ytdl-core": "npm:@distube/ytdl-core@latest"
+    "ytdl-core": "npm:@distube/ytdl-core@latest",
+    "ky": "^1.7.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
