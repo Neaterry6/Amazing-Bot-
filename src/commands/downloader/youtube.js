@@ -23,8 +23,6 @@ export default {
 
     async execute({ sock, message, args, from, sender }) {
         try {
-            const normalize = (jid = '') => String(jid).replace(/@s\.whatsapp\.net|@c\.us|@lid|:\d+/g, '').replace(/[^0-9]/g, '');
-            const senderNum = normalize(sender);
 
             let type = null;
             if (['audio', '-a'].includes(args[0].toLowerCase())) {
@@ -67,10 +65,6 @@ export default {
                 command: 'ytb',
                 handler: async (replyText, replyMessage) => {
                     try {
-                        const replySender = replyMessage.key.participant || replyMessage.key.remoteJid;
-                        const replySenderNum = normalize(replySender);
-                        if (!replySenderNum || replySenderNum !== senderNum) return;
-
                         const choice = parseInt(replyText.trim(), 10);
                         if (Number.isNaN(choice) || choice < 1 || choice > videos.length) {
                             return await sock.sendMessage(from, { text: '❌ Invalid choice. Send 1-5.' }, { quoted: replyMessage });

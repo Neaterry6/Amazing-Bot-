@@ -1,7 +1,4 @@
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
-import FormData from 'form-data';
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default {
     name: 'remini',
@@ -29,23 +26,8 @@ export default {
                 }
             );
 
-            const form = new FormData();
-            form.append('reqtype', 'fileupload');
-            form.append('fileToUpload', buffer, {
-                filename: 'image.jpg',
-                contentType: 'image/jpeg'
-            });
-
-            const uploadRes = await fetch('https://catbox.moe/user/api.php', {
-                method: 'POST',
-                body: form,
-                headers: form.getHeaders()
-            });
-            const imgUrl = (await uploadRes.text()).trim();
-
-            if (!uploadRes.ok || !imgUrl.startsWith('https://')) throw new Error('Upload failed');
-
-            await sleep(1500);
+            const { uploadToImgBB } = await import('../../utils/imgbb.js');
+            const imgUrl = await uploadToImgBB(buffer);
 
             const reminiUrl = `https://omegatech-api.dixonomega.tech/api/tools/remini?url=${encodeURIComponent(imgUrl)}`;
             const reminiRes = await fetch(reminiUrl);

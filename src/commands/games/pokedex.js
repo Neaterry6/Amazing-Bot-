@@ -1,6 +1,8 @@
 import fs from 'fs-extra';
 
-const POKE_DB_PATH = 'pokedb.json';
+import path from 'path';
+
+const POKE_DB_PATH = path.join(process.cwd(), 'data', 'pokedb.json');
 
 function resolveTarget(message, sender) {
     const ctx = message.message?.extendedTextMessage?.contextInfo;
@@ -30,8 +32,8 @@ export default {
         try {
             const exists = await fs.pathExists(POKE_DB_PATH);
             if (!exists) {
-                await sock.sendMessage(from, { text: '❌ pokedb.json not found.' }, { quoted: message });
-                return;
+                await fs.ensureDir(path.dirname(POKE_DB_PATH));
+                await fs.writeJson(POKE_DB_PATH, {}, { spaces: 2 });
             }
 
             const pokedb = await fs.readJson(POKE_DB_PATH);

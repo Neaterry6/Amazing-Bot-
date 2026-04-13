@@ -1,18 +1,39 @@
+import axios from 'axios';
 import { fetchAllInOneDownload, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
 
+const MALVRYX_KEY = 'mlvx_free_9d0115d2137e2709c61fe5850f562086a0547e2b49c00f903fcec632564cb9ca';
+const MALVRYX_BASE = 'https://apis.malvryx.dev/api/downloader';
+
 function detectCommand(message, fallback = 'fbdl') {
-    const text = message?.message?.conversation
-        || message?.message?.extendedTextMessage?.text
-        || '';
+    const text = message?.message?.conversation || message?.message?.extendedTextMessage?.text || '';
     const token = text.trim().split(/\s+/)[0].replace(/^[^a-zA-Z]+/, '').toLowerCase();
     return token || fallback;
+}
+
+async function fetchViaMalvryx(url) {
+    const headers = { 'X-API-Key': MALVRYX_KEY, 'Content-Type': 'application/json' };
+
+    let taskId = '';
+    try {
+        const start = await axios.get(`${MALVRYX_BASE}/aiovdl1`, { params: { url }, headers, timeout: 20000 });
+        taskId = start?.data?.taskId || start?.data?.result?.taskId || '';
+        if (start?.data?.result?.download) return start.data;
+    } catch {}
+
+    const status = await axios.get(`${MALVRYX_BASE}/aiovdl1-task`, {
+        params: { taskId, url },
+        headers,
+        timeout: 30000
+    });
+
+    return status.data;
 }
 
 export default {
     name: 'fbdl',
     aliases: ['fb', 'fbdownload', 'igdl', 'tkdl', 'ttdl', 'tiktokdl', 'instagramdl'],
     category: 'downloader',
-    description: 'Download social media content (FB/IG/TikTok) via all-in-one API',
+    description: 'Download social media content (FB/IG/TikTok)',
     usage: 'fbdl <url> | igdl <url> | tkdl <url>',
     cooldown: 8,
     args: true,
@@ -25,7 +46,13 @@ export default {
                 return await sock.sendMessage(from, { text: '❌ Send a valid URL.' }, { quoted: message });
             }
 
-            const payload = await fetchAllInOneDownload(url);
+            let payload;
+            try {
+                payload = await fetchViaMalvryx(url);
+            } catch {
+                payload = await fetchAllInOneDownload(url);
+            }
+
             const media = pickBestMedia(payload, 'video') || pickBestMedia(payload, 'audio');
             if (!media) throw new Error('No downloadable media found');
 
