@@ -8,7 +8,7 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'ai_settings.json');
 const MAX_HISTORY = 20;
 const REPLY_TTL = 10 * 60 * 1000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
 
 const PERSONALITIES = {
@@ -77,19 +77,32 @@ async function askGemini(personality, history) {
 
     const prompt = `${systemPrompt}\n\nConversation:\n${chat}\n\nAssistant:`;
 
-    const response = await axios.post(
-        `${GEMINI_BASE_URL}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-        {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 900
-            }
-        },
-        { timeout: 30000 }
-    );
+    const models = [GEMINI_MODEL, 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    let response = null;
+    let lastErr = null;
 
-    const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    for (const model of [...new Set(models)]) {
+        try {
+            response = await axios.post(
+                `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+                {
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: {
+                        temperature: 0.7,
+                        maxOutputTokens: 900
+                    }
+                },
+                { timeout: 30000 }
+            );
+            if (response?.data) break;
+        } catch (err) {
+            lastErr = err;
+            if (err?.response?.status !== 404) throw err;
+        }
+    }
+
+    if (!response?.data && lastErr) throw lastErr;
+    const text = response?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     if (!text) throw new Error('Empty response from Gemini');
     return text;
 }

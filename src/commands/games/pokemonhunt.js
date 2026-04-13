@@ -1,6 +1,8 @@
 import fs from 'fs-extra';
 
-const POKE_DB_PATH = 'pokedb.json';
+import path from 'path';
+
+const POKE_DB_PATH = path.join(process.cwd(), 'data', 'pokedb.json');
 const DROP_STATE = {
     timers: new Map(),
     activeDrops: new Map() // groupJid => { messageId, pokemonName, claimed }

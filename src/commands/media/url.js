@@ -1,5 +1,3 @@
-import axios from 'axios';
-import FormData from 'form-data';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 export default {
@@ -39,20 +37,8 @@ export default {
                 throw new Error('Could not read image data');
             }
 
-            const apiKey = (process.env.IMGBB_API_KEY || '').trim();
-            if (!apiKey) throw new Error('IMGBB_API_KEY is missing');
-
-            const formData = new FormData();
-            formData.append('image', imageBuffer.toString('base64'));
-
-            const res = await axios.post(
-                `https://api.imgbb.com/1/upload?key=${encodeURIComponent(apiKey)}`,
-                formData,
-                { headers: formData.getHeaders(), timeout: 30000 }
-            );
-
-            const imageUrl = res?.data?.data?.url;
-            if (!imageUrl) throw new Error('Upload succeeded but no URL was returned');
+            const { uploadToImgBB } = await import('../../utils/imgbb.js');
+            const imageUrl = await uploadToImgBB(imageBuffer);
 
             await sock.sendMessage(from, {
                 text: `✅ Image uploaded successfully!\n\n🔗 ${imageUrl}`
