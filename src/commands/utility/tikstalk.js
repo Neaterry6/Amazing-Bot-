@@ -1,100 +1,125 @@
-import axios from 'axios';
+import ky from 'ky';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
 
-function formatNum(value) {
-    const n = Number(value || 0);
-    if (!Number.isFinite(n)) return '0';
-    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+function nFormatter(num) {
+    const n = Number(num || 0);
+    if (n >= 1e9) return `${(n / 1e9).toFixed(1).replace(/\.0$/, '')}G`;
+    if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
+    if (n >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.0$/, '')}K`;
     return String(n);
 }
 
-function pickProfile(payload) {
-    return payload?.data?.userInfo?.user
-        || payload?.user
-        || payload?.author
-        || payload?.data?.author
-        || null;
-}
+async function stalkTikTok(username) {
+    const solver = await ky
+        .get('https://omegatech-api.dixonomega.tech/api/tools/cf-bypass', {
+            searchParams: {
+                url: 'https://www.anonymous-viewer.com',
+                siteKey: '0x4AAAAAABNbm8zfrpvm5sRD',
+                type: 'turnstile-min'
+            },
+            timeout: 30000
+        })
+        .json();
 
-function pickStats(payload) {
-    return payload?.data?.userInfo?.stats
-        || payload?.stats
-        || payload?.authorStats
-        || payload?.data?.authorStats
-        || {};
-}
-
-async function getTikTokProfile(username) {
-    const clean = username.replace(/^@/, '').trim();
-    const url = `https://www.tikwm.com/api/user/info?unique_id=${encodeURIComponent(clean)}`;
-    const { data } = await axios.get(url, { timeout: 25000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-    const user = pickProfile(data);
-    const stats = pickStats(data);
-    if (!user) throw new Error('User not found');
-    return { clean, user, stats };
-}
-
-async function buildCard(profile) {
-    const w = 1200;
-    const h = 675;
-    const canvas = createCanvas(w, h);
-    const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = '#08111d';
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.fillStyle = '#09c4ff';
-    ctx.fillRect(0, 0, w, 75);
-    ctx.fillStyle = '#00161f';
-    ctx.font = 'bold 44px Sans';
-    ctx.fillText('TIKTOK STALK REPORT', 340, 50);
-
-    const avatarUrl = profile.user.avatarLarger || profile.user.avatarMedium || profile.user.avatarThumb;
-    if (avatarUrl) {
-        const avatarBuf = await axios.get(avatarUrl, { responseType: 'arraybuffer', timeout: 20000 });
-        const avatar = await loadImage(Buffer.from(avatarBuf.data));
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(130, 200, 95, 0, Math.PI * 2);
-        ctx.closePath();
-        ctx.clip();
-        ctx.drawImage(avatar, 35, 105, 190, 190);
-        ctx.restore();
+    if (!solver?.success || !solver?.result?.token) {
+        throw new Error('Cloudflare Handshake Failed.');
     }
 
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 58px Sans';
-    ctx.fillText(profile.user.nickname || profile.clean, 260, 165);
-    ctx.fillStyle = '#11d4ff';
-    ctx.font = '36px Sans';
-    ctx.fillText(`@${profile.user.uniqueId || profile.clean}`, 260, 215);
+    const data = await ky
+        .get('https://www.anonymous-viewer.com/api/tiktok/display', {
+            searchParams: { username },
+            headers: {
+                accept: '*/*',
+                'user-agent': 'Mozilla/5.0 (Linux; Android 10)',
+                'x-turnstile-token': solver.result.token,
+                referer: `https://www.anonymous-viewer.com/tiktok/${username}`
+            },
+            timeout: 30000
+        })
+        .json();
 
-    const cards = [
-        ['FOLLOWERS', formatNum(profile.stats.followerCount)],
-        ['FOLLOWING', formatNum(profile.stats.followingCount)],
-        ['HEARTS', formatNum(profile.stats.heartCount)],
-        ['VIDEOS', formatNum(profile.stats.videoCount)]
-    ];
+    return data;
+}
 
-    cards.forEach(([label, value], i) => {
-        const x = 40 + i * 285;
-        const y = 380;
-        ctx.fillStyle = '#111a2a';
-        ctx.fillRect(x, y, 255, 170);
-        ctx.fillStyle = '#12d9ff';
-        ctx.font = 'bold 54px Sans';
-        ctx.fillText(value, x + 20, y + 75);
-        ctx.fillStyle = '#7f8ca6';
-        ctx.font = '30px Sans';
-        ctx.fillText(label, x + 20, y + 130);
-    });
+async function buildDossier(info, stats) {
+    const width = 1000;
+    const height = 600;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
 
-    ctx.fillStyle = '#8ea1b8';
-    ctx.font = '26px Sans';
-    const bio = String(profile.user.signature || 'No bio').slice(0, 90);
-    ctx.fillText(`BIO: ${bio}`, 40, 610);
+    ctx.fillStyle = '#020205';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = 'rgba(0, 210, 255, 0.1)';
+    for (let i = 0; i < width; i += 50) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i, height);
+        ctx.stroke();
+    }
+
+    ctx.fillStyle = '#00d2ff';
+    ctx.fillRect(0, 0, width, 80);
+
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 40px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('TIKTOK INTELLIGENCE DOSSIER', width / 2, 55);
+
+    let pfp;
+    try {
+        pfp = await loadImage(info.avatarLarger || info.avatarThumb);
+    } catch {
+        pfp = await loadImage('https://telegra.ph/file/24167bc30c0f9cc20079b.jpg');
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(180, 250, 110, 0, Math.PI * 2);
+    ctx.strokeStyle = '#00d2ff';
+    ctx.lineWidth = 10;
+    ctx.stroke();
+    ctx.clip();
+    ctx.drawImage(pfp, 70, 140, 220, 220);
+    ctx.restore();
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 45px sans-serif';
+    ctx.fillText(info.nickname || info.uniqueId, 330, 170);
+
+    ctx.fillStyle = '#00d2ff';
+    ctx.font = '22px monospace';
+    ctx.fillText(`@${info.uniqueId}`, 330, 205);
+
+    const drawStat = (label, value, x, y) => {
+        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+        ctx.fillRect(x, y, 200, 80);
+
+        ctx.fillStyle = '#00d2ff';
+        ctx.font = 'bold 24px sans-serif';
+        ctx.fillText(nFormatter(value), x + 20, y + 40);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '14px sans-serif';
+        ctx.fillText(label.toUpperCase(), x + 20, y + 65);
+    };
+
+    drawStat('Followers', stats.followerCount, 330, 240);
+    drawStat('Following', stats.followingCount, 550, 240);
+    drawStat('Hearts', stats.heartCount, 770, 240);
+    drawStat('Videos', stats.videoCount, 330, 340);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'italic 18px sans-serif';
+    const bio = info.signature || 'No signature provided.';
+    const safeBio = bio.length > 60 ? `${bio.slice(0, 60)}...` : bio;
+    ctx.fillText(`BIO: ${safeBio}`, 330, 460);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText('LADY-TRISH INTELLIGENCE • POWERED BY OMEGATECH', width / 2, 560);
 
     return canvas.toBuffer('image/png');
 }
@@ -103,32 +128,63 @@ export default {
     name: 'tikstalk',
     aliases: ['ttstalk', 'tiktokstalk'],
     category: 'utility',
-    description: 'Get TikTok profile report card image',
+    description: 'TikTok stalk with profile dossier card',
     usage: 'tikstalk <username>',
-    example: 'tikstalk puzplespeedy',
+    example: 'tikstalk khaby.lame',
     cooldown: 7,
     args: true,
     minArgs: 1,
 
     async execute({ sock, message, args, from }) {
+        const input = args.join(' ').trim();
+        if (!input) {
+            return await sock.sendMessage(from, {
+                text: '⚠️ Input Required\nExample: .tikstalk khaby.lame'
+            }, { quoted: message });
+        }
+
+        await sock.sendMessage(from, { react: { text: '🔍', key: message.key } });
+        await sock.sendMessage(from, {
+            text: '✨ Lady-Trish Crawler: Bypassing Cloudflare and extracting user metadata...'
+        }, { quoted: message });
+
         try {
-            const username = args.join(' ').trim();
-            if (!username) {
-                return await sock.sendMessage(from, { text: '❌ Usage: .tikstalk <username>' }, { quoted: message });
+            const username = input.replace('@', '');
+            const res = await stalkTikTok(username);
+            const info = res?.profile?.userInfo?.user;
+            const stats = res?.profile?.userInfo?.stats;
+            const latestPost = res?.posts?.originalItems?.[0];
+
+            if (!info || !stats) {
+                throw new Error('Subject not found in TikTok database.');
             }
 
-            await sock.sendMessage(from, { react: { text: '⏳', key: message.key } });
-            const profile = await getTikTokProfile(username);
-            const card = await buildCard(profile);
+            const buffer = await buildDossier(info, stats);
 
-            await sock.sendMessage(from, {
-                image: card,
-                caption: `✅ TikTok report for @${profile.user.uniqueId || profile.clean}`
-            }, { quoted: message });
+            let caption =
+                `👤 TIKTOK PROFILE STALKED\n\n` +
+                `📌 Name: ${info.nickname || 'Unknown'}\n` +
+                `🆔 Username: @${info.uniqueId || username}\n` +
+                `👥 Followers: ${Number(stats.followerCount || 0).toLocaleString()}\n` +
+                `❤️ Total Likes: ${Number(stats.heartCount || 0).toLocaleString()}\n` +
+                `🎬 Posts: ${Number(stats.videoCount || 0).toLocaleString()}\n` +
+                `📖 Signature: ${info.signature || 'No Bio'}\n` +
+                `🔗 Profile Link: https://www.tiktok.com/@${info.uniqueId || username}`;
+
+            if (latestPost?.stats) {
+                caption +=
+                    `\n\n📺 Latest Video Info:\n` +
+                    `📝 Caption: ${latestPost.desc || 'No description'}\n` +
+                    `📊 Views: ${Number(latestPost.stats.playCount || 0).toLocaleString()}\n` +
+                    `💬 Comments: ${Number(latestPost.stats.commentCount || 0).toLocaleString()}`;
+            }
+
+            await sock.sendMessage(from, { image: buffer, caption }, { quoted: message });
             await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
-        } catch (e) {
+        } catch (error) {
+            console.error(error);
             await sock.sendMessage(from, {
-                text: `❌ tikstalk failed: ${e.message}`
+                text: `❌ Stalk Failed: ${error.message || String(error)}\n\nNote: API or solver might be down.`
             }, { quoted: message });
             await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
         }
