@@ -27,6 +27,13 @@ function resolveStanzaId(message) {
     const m = message.message;
     if (!m) return null;
 
+    const inner = m.ephemeralMessage?.message
+        || m.viewOnceMessage?.message
+        || m.viewOnceMessageV2?.message
+        || m.viewOnceMessageV2Extension?.message
+        || m.editedMessage?.message
+        || null;
+
     const ctx =
         m.extendedTextMessage?.contextInfo ||
         m.imageMessage?.contextInfo ||
@@ -34,9 +41,12 @@ function resolveStanzaId(message) {
         m.audioMessage?.contextInfo ||
         m.documentMessage?.contextInfo ||
         m.stickerMessage?.contextInfo ||
-        m.ephemeralMessage?.message?.extendedTextMessage?.contextInfo ||
-        m.viewOnceMessage?.message?.imageMessage?.contextInfo ||
-        m.viewOnceMessage?.message?.videoMessage?.contextInfo ||
+        m.buttonsResponseMessage?.contextInfo ||
+        m.listResponseMessage?.contextInfo ||
+        inner?.extendedTextMessage?.contextInfo ||
+        inner?.imageMessage?.contextInfo ||
+        inner?.videoMessage?.contextInfo ||
+        inner?.documentMessage?.contextInfo ||
         null;
 
     return ctx?.stanzaId || null;
