@@ -8,6 +8,7 @@ import { checkBadWord } from '../commands/admin/antiword.js';
 import { isSuspended } from '../utils/suspendStore.js';
 import { getSessionControl, isOwnerForSession, isSudoForSession } from '../utils/sessionControl.js';
 import { isTopOwner } from '../utils/privilegedUsers.js';
+import { initWhitelist, isWhitelisted } from '../commands/owner/whitelist.js';
 
 let autoDownloadHandler = null;
 
@@ -456,6 +457,11 @@ class MessageHandler {
 
             if (!isOwnerUser && !isSudoUser && senderPhone && this.isSpamming(senderPhone)) return;
 
+            if (sessionControl.privateMode && !isOwnerUser && !isSudoUser && !fromMe) return;
+
+            const whitelistData = initWhitelist();
+            if (whitelistData?.enabled && !isOwnerUser && !isSudoUser && !isWhitelisted(senderJid, whitelistData)) return;
+
             const handleAutoDownload = await getAutoDownload();
             const autoHandled = await handleAutoDownload(sock, message, from, senderJid, text);
             if (autoHandled) return;
@@ -476,10 +482,6 @@ class MessageHandler {
             }
 
             if (!text?.length) return;
-
-            if (sessionControl.privateMode && !isOwnerUser && !isSudoUser && !fromMe) return;
-
-            if (config.whitelist?.enabled && !isOwnerUser && !isSudoUser) return;
 
             const ownerNoPrefix = config.ownerNoPrefix && (isOwnerUser || isSudoUser);
             const activePrefix = sessionControl.prefix || config.prefix;
@@ -551,11 +553,11 @@ class MessageHandler {
                 this.stopRecording(from);
                 if (isPrefixed) {
                     const suggestions = commandHandler.searchCommands(commandName);
-                    let response = `Command "${commandName}" not found.`;
+                    let response = 'Unknown command.';
                     if (suggestions?.length > 0) {
                         response += `\n\nDid you mean:\n${suggestions.slice(0, 3).map(c => `${activePrefix}${c.name}`).join('\n')}`;
                     }
-                    response += `\n\nType ${activePrefix}help for all commands`;
+                    response += `\n\nTry ${activePrefix}help`;
                     await sock.sendMessage(from, { text: response }, { quoted: message });
                 }
                 return;
