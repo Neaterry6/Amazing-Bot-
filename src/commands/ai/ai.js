@@ -1,12 +1,15 @@
 import fs from 'fs-extra';
 import path from 'path';
 import axios from 'axios';
+import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai');
 const HISTORY_FILE = path.join(DATA_DIR, 'ai_history.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'ai_settings.json');
 const MAX_HISTORY = 20;
 const REPLY_TTL = 10 * 60 * 1000;
+const OMEGA_GPT_API = 'https://omegatech-api.dixonomega.tech/api/ai/gpt';
+const OMEGA_GLM_API = 'https://omegatech-api.dixonomega.tech/api/ai/glm';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
@@ -67,58 +70,157 @@ async function saveHistory(uid, history) {
     await fs.writeJSON(HISTORY_FILE, all, { spaces: 2 });
 }
 
-async function askGemini(personality, history) {
-    if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
-
+async function askOmegaAI(personality, history) {
     const systemPrompt = PERSONALITIES[personality] || PERSONALITIES.ilom;
     const chat = history
         .map((h) => `${h.role === 'assistant' ? 'Assistant' : 'User'}: ${h.content}`)
         .join('\n');
 
-    const prompt = `${systemPrompt}\n\nConversation:\n${chat}\n\nAssistant:`;
+    const prompt = `${systemPrompt}\n\nConversation:\n${chat}\n\nAssistant:`
+        .slice(0, 14000);
+    const latestQuestion = history.filter((h) => h.role === 'user').slice(-1)[0]?.content || 'Hello';
 
-    const models = [GEMINI_MODEL, 'gemini-2.0-flash', 'gemini-1.5-flash'];
-    let response = null;
-    let lastErr = null;
+    const parseText = (payload) => payload?.result
+        || payload?.response
+        || payload?.answer
+        || payload?.message
+        || payload?.text
+        || payload?.data?.result
+        || payload?.data?.answer
+        || '';
 
-    for (const model of [...new Set(models)]) {
-        try {
-            response = await axios.post(
-                `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-                {
-                    contents: [{ parts: [{ text: prompt }] }],
-                    generationConfig: {
-                        temperature: 0.7,
-                        maxOutputTokens: 900
-                    }
-                },
-                { timeout: 30000 }
-            );
-            if (response?.data) break;
-        } catch (err) {
-            lastErr = err;
-            if (err?.response?.status !== 404) throw err;
-        }
-    }
+    try {
+        const gptResponse = await axios.get(OMEGA_GPT_API, {
+            params: {
+                question: String(latestQuestion).slice(0, 3000),
+                prompt
+            },
+            timeout: 120000
+        });
+        const text = String(parseText(gptResponse.data)).trim();
+        if (text) return text;
+    } catch {}
 
-    if (!response?.data && lastErr) throw lastErr;
-    const text = response?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-    if (!text) throw new Error('Empty response from Gemini');
-    return text;
+    const glmResponse = await axios.get(OMEGA_GLM_API, {
+        params: { prompt },
+        timeout: 120000
+    });
+    const glmText = String(parseText(glmResponse.data)).trim();
+    if (!glmText) throw new Error('Empty response from Omega APIs');
+    return glmText;
 }
 
 async function getAIResponse(settings, history) {
-    return await askGemini(settings.personality, history);
+    return await askOmegaAI(settings.personality, history);
 }
 
 async function sendVoiceReply(sock, from, text, quoted) {
-    const voiceText = encodeURIComponent(String(text).slice(0, 200));
-    const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${voiceText}`;
+    const cleanText = String(text || '').trim().slice(0, 600);
+    if (!cleanText) return;
+    const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=Joanna&text=${encodeURIComponent(cleanText)}`;
+    const audioRes = await axios.get(ttsUrl, {
+        responseType: 'arraybuffer',
+        timeout: 120000,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
     await sock.sendMessage(from, {
-        audio: { url: ttsUrl },
+        audio: Buffer.from(audioRes.data),
         mimetype: 'audio/mpeg',
         ptt: true
     }, { quoted });
+}
+
+async function analyzeImageWithGemini(buffer, prompt = 'Describe this image in clear detail.') {
+    if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
+    const b64 = Buffer.from(buffer).toString('base64');
+    const model = GEMINI_MODEL || 'gemini-2.0-flash';
+
+    const response = await axios.post(
+        `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+            contents: [{
+                parts: [
+                    { text: prompt },
+                    { inline_data: { mime_type: 'image/jpeg', data: b64 } }
+                ]
+            }],
+            generationConfig: { temperature: 0.5, maxOutputTokens: 900 }
+        },
+        { timeout: 120000 }
+    );
+
+    const text = response?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!text) throw new Error('Image analysis returned empty response');
+    return text;
+}
+
+function normalizeWeather(data) {
+    if (!data) return 'Weather info not available.';
+    if (typeof data === 'string') return data;
+
+    const result = data.result || data.data || data.weather || data;
+    if (typeof result === 'string') return result;
+
+    const location = result.location?.name || result.city || result.name || result.address || 'Unknown location';
+    const current = result.current || result.condition || result.now || result;
+    const forecast = Array.isArray(result.forecast) ? result.forecast[0] : null;
+
+    const pieces = [
+        `📍 Location: ${location}`,
+        `🌡️ Temperature: ${current.temp_c ?? current.temp ?? current.temperature ?? 'N/A'}°C`,
+        `🤒 Feels like: ${current.feelslike_c ?? current.feelsLike ?? current.feels_like ?? 'N/A'}°C`,
+        `☁️ Condition: ${current.condition?.text ?? current.weather ?? current.description ?? 'N/A'}`,
+        `💧 Humidity: ${current.humidity ?? 'N/A'}%`,
+        `💨 Wind: ${current.wind_kph ?? current.windSpeed ?? current.wind ?? 'N/A'} km/h`
+    ];
+
+    if (forecast) {
+        pieces.push(
+            `🌅 Sunrise: ${forecast.astro?.sunrise || 'N/A'}`,
+            `🌇 Sunset: ${forecast.astro?.sunset || 'N/A'}`
+        );
+    }
+
+    return pieces.join('\n');
+}
+
+async function getWeather(location) {
+    try {
+        const { data } = await axios.get(`https://arychauhann.onrender.com/api/weather?search=${encodeURIComponent(location)}`, {
+            timeout: 45000
+        });
+        return normalizeWeather(data);
+    } catch {
+        const fallback = await axios.get(`https://wttr.in/${encodeURIComponent(location)}?format=j1`, {
+            timeout: 30000,
+            headers: { 'User-Agent': 'curl/8.0.1' }
+        });
+        const current = fallback.data?.current_condition?.[0];
+        if (!current) return 'Weather service busy.';
+        return [
+            `📍 Location: ${location}`,
+            `🌡️ Temperature: ${current.temp_C || 'N/A'}°C`,
+            `🤒 Feels like: ${current.FeelsLikeC || 'N/A'}°C`,
+            `☁️ Condition: ${current.weatherDesc?.[0]?.value || 'N/A'}`,
+            `💧 Humidity: ${current.humidity || 'N/A'}%`,
+            `💨 Wind: ${current.windspeedKmph || 'N/A'} km/h`
+        ].join('\n');
+    }
+}
+
+async function getDownloadUrl(url) {
+    const { data } = await axios.get('https://dev-priyanshi.onrender.com/api/alldl', {
+        params: { url },
+        timeout: 45000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    });
+    const payload = data?.data || data?.result || data;
+    const mediaUrl = payload?.high || payload?.low || payload?.url || payload?.download;
+    if (!mediaUrl) throw new Error('No downloadable media URL found');
+    return {
+        mediaUrl,
+        title: payload?.title || 'Downloaded media'
+    };
 }
 
 function extractBodyText(message, args) {
@@ -257,6 +359,27 @@ export default {
             return await sock.sendMessage(from, { text: '✅ Settings and memory reset.' }, { quoted: message });
         }
 
+        if (/^(weather|forecast)\s+/i.test(body)) {
+            const location = body.replace(/^(weather|forecast)\s+/i, '').trim();
+            const weather = await getWeather(location || 'Nigeria');
+            return await sock.sendMessage(from, { text: `🌤️ Weather Update\n\n${weather}` }, { quoted: message });
+        }
+
+        if (/^(dl|download)\s+/i.test(body)) {
+            const url = body.replace(/^(dl|download)\s+/i, '').trim();
+            if (!url) return await sock.sendMessage(from, { text: '❌ Provide a valid URL.' }, { quoted: message });
+            await sock.sendMessage(from, { text: '⏳ Fetching media...' }, { quoted: message });
+            try {
+                const media = await getDownloadUrl(url);
+                return await sock.sendMessage(from, {
+                    video: { url: media.mediaUrl },
+                    caption: `📥 ${media.title}\n🔗 ${url}`
+                }, { quoted: message });
+            } catch (error) {
+                return await sock.sendMessage(from, { text: `❌ Download failed.\n${error.message}` }, { quoted: message });
+            }
+        }
+
         if (body.toLowerCase().startsWith('vn ')) {
             const mode = body.toLowerCase().split(/\s+/)[1];
             settings.voiceMode = mode === 'on';
@@ -273,6 +396,21 @@ export default {
             settings.personality = mode;
             await saveSettings(uid, settings);
             return await sock.sendMessage(from, { text: `✅ Personality set to: ${mode}` }, { quoted: message });
+        }
+
+        const quotedImage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+        const directImage = message.message?.imageMessage;
+        if (quotedImage || directImage) {
+            await sock.sendMessage(from, { text: '📸 Analyzing image, please wait...' }, { quoted: message });
+            try {
+                const target = quotedImage ? { message: { imageMessage: quotedImage } } : message;
+                const buffer = await downloadMediaMessage(target, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
+                const prompt = body && body.toLowerCase() !== 'ai' ? body : 'Describe this image clearly and mention important details.';
+                const explanation = await analyzeImageWithGemini(buffer, prompt);
+                return await sock.sendMessage(from, { text: `🖼️ ${explanation}` }, { quoted: message });
+            } catch (error) {
+                return await sock.sendMessage(from, { text: `❌ Image analysis failed: ${error.message}` }, { quoted: message });
+            }
         }
 
         await sock.sendMessage(from, { text: '⏳ Thinking...' }, { quoted: message });

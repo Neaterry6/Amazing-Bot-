@@ -7,11 +7,12 @@ import { commandManager } from '../../utils/commandManager.js';
 
 dotenv.config();
 
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
-const GEMINI_CODE_MODEL = process.env.GEMINI_CODE_MODEL || 'gemini-1.5-pro';
+const OMEGA_GPT_API = 'https://omegatech-api.dixonomega.tech/api/ai/gpt';
+const OMEGA_GLM_API = 'https://omegatech-api.dixonomega.tech/api/ai/glm';
 
 const MEMORY_PATH = './data/ilom_memory.json';
 const COMMANDS_PATH = './src/commands';
+const REPO_ROOT = process.cwd();
 const LONG_OUTPUT_LIMIT = 3500;
 
 function loadMemory() {
@@ -46,27 +47,42 @@ ABILITIES:
 - Generate commands
 - Fix/edit existing commands
 - Install command plugins into src/commands/<category>/<name>.js
+- Access and modify existing bot files when a valid relative path is provided
 - Analyze user-replied code file
 `;
 }
 
-function getApiKey() {
-    return (process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY_1 || '').trim();
-}
+async function askIlomApi(prompt, question) {
+    const parseText = (payload) => payload?.result
+        || payload?.response
+        || payload?.answer
+        || payload?.message
+        || payload?.text
+        || payload?.data?.result
+        || payload?.data?.answer
+        || '';
 
-async function gemini(model, prompt) {
-    const apiKey = getApiKey();
-    if (!apiKey) throw new Error('GEMINI_API_KEY not set in environment.');
+    try {
+        const gptResponse = await axios.get(OMEGA_GPT_API, {
+            params: {
+                question: String(question || 'Generate code').slice(0, 3000),
+                prompt: String(prompt).slice(0, 14000)
+            },
+            timeout: 120000
+        });
+        const text = String(parseText(gptResponse.data)).trim();
+        if (text) return text;
+    } catch {}
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-    const res = await axios.post(endpoint, {
-        contents: [{ parts: [{ text: prompt }] }]
-    }, { timeout: 60000 });
-
-    const output = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!output) throw new Error('Gemini returned empty response.');
-    return output;
+    const glmResponse = await axios.get(OMEGA_GLM_API, {
+        params: {
+            prompt: String(prompt).slice(0, 14000)
+        },
+        timeout: 120000
+    });
+    const glmText = String(parseText(glmResponse.data)).trim();
+    if (!glmText) throw new Error('Omega APIs returned empty response.');
+    return glmText;
 }
 
 function extractCommandInfo(code) {
@@ -91,6 +107,23 @@ function saveCommand(code) {
     return filePath;
 }
 
+function saveGeneratedOutput(output) {
+    const fileMatch = output.match(/^\s*FILE:\s*([^\n]+)\n([\s\S]*)$/i);
+    if (fileMatch) {
+        const relPath = fileMatch[1].trim().replace(/^\/+/, '');
+        const content = fileMatch[2].trim();
+        const safeBase = path.resolve(REPO_ROOT);
+        const resolved = path.resolve(REPO_ROOT, relPath);
+        if (!resolved.startsWith(safeBase)) throw new Error('Unsafe target path');
+        fs.mkdirSync(path.dirname(resolved), { recursive: true });
+        fs.writeFileSync(resolved, content);
+        return resolved;
+    }
+
+    if (output.includes('export default')) return saveCommand(output);
+    return null;
+}
+
 function getQuotedMessage(message) {
     return message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 }
@@ -99,20 +132,14 @@ export default {
     name: 'ilomcreate',
     aliases: ['ilom', 'agent', 'cmdai'],
     category: 'ai',
-    description: 'Autonomous AI command creator + installer (Gemini)',
+    description: 'Autonomous AI command creator + installer',
     usage: 'ilomcreate <prompt>',
     cooldown: 3,
     permissions: ['user'],
-    minArgs: 0,
+        minArgs: 0,
 
     async execute({ sock, message, args, from, sender }) {
         try {
-            if (!getApiKey()) {
-                return sock.sendMessage(from, {
-                    text: '❌ GEMINI_API_KEY not set in environment.'
-                }, { quoted: message });
-            }
-
             const memory = loadMemory();
             const userMemory = memory[sender] || { history: [], mode: 'coder' };
 
@@ -168,33 +195,26 @@ ${userText}
 COMMAND TEMPLATE REQUIREMENT:
 - When creating commands, output complete JS command file using export default.
 - Include: name, category, description, usage, cooldown, and execute().
-- Prefer code block output.`;
+- To overwrite existing files, respond with:
+FILE: relative/path/from/repo
+<full file content>
+- Prefer raw code output without markdown wrappers.`;
 
             await sock.sendMessage(from, { text: '🧠 ILOM thinking...' }, { quoted: message });
 
-            let output = '';
-            const wantsCode = /\b(command|plugin|fix|code|script|js)\b/i.test(userText) || Boolean(fileCode);
-            const preferredModel = wantsCode ? GEMINI_CODE_MODEL : GEMINI_MODEL;
-
-            try {
-                output = await gemini(preferredModel, finalPrompt);
-            } catch (primaryError) {
-                output = await gemini('gemini-1.5-flash', finalPrompt).catch(() => {
-                    throw primaryError;
-                });
-            }
+            const output = await askIlomApi(finalPrompt, userText);
 
             userMemory.history.push({ role: 'user', text: userText });
             userMemory.history.push({ role: 'ai', text: output });
             memory[sender] = userMemory;
             saveMemory(memory);
 
-            if (output.includes('export default')) {
-                const installedPath = saveCommand(output);
+            const installedPath = saveGeneratedOutput(output);
+            if (installedPath) {
                 await commandManager.reloadAllCommands().catch(() => null);
 
                 return sock.sendMessage(from, {
-                    text: `✅ Command installed successfully!\n\n📂 ${installedPath}\n\n🔄 If needed, restart bot to ensure full reload.`
+                    text: `✅ File updated successfully!\n\n📂 ${installedPath}\n\n🔄 If needed, restart bot to ensure full reload.`
                 }, { quoted: message });
             }
 
