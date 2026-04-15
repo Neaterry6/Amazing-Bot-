@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const RAPID_API_URL = 'https://all-in-one-vidoe-downloader.p.rapidapi.com/download';
 const RAPID_API_HOST = 'all-in-one-vidoe-downloader.p.rapidapi.com';
-const RAPID_API_KEY = '0b5f407b6fmsh8fbf701195b2ab5p1ba0c5jsn00af0a6169c2';
+const RAPID_API_KEY = process.env.RAPID_API_KEY || '';
 
 function firstNonEmpty(...items) {
     for (const it of items) {
@@ -61,6 +61,7 @@ export function parseAllInOneMeta(payload = {}) {
 }
 
 export async function fetchAllInOneDownload(url) {
+    if (!RAPID_API_KEY) throw new Error('Missing RAPID_API_KEY');
     const { data } = await axios.get(RAPID_API_URL, {
         params: { url },
         timeout: 45000,
@@ -71,4 +72,13 @@ export async function fetchAllInOneDownload(url) {
         }
     });
     return data;
+}
+
+export async function fetchAllInOneFallback(url) {
+    const { data } = await axios.get('https://dev-priyanshi.onrender.com/api/alldl', {
+        params: { url },
+        timeout: 45000,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    return data?.data || data?.result || data;
 }

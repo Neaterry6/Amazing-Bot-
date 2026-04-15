@@ -9,6 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
+const CODE_MAX_BYTES = 80 * 1024;
+const BOT_JID = process.env.BOT_JID || '867051314767696@bot';
 
 function fmtSize(bytes) {
     if (bytes < 1024) return `${bytes} B`;
@@ -25,6 +27,52 @@ function successBox(title, lines) {
 
 function errorBox(title, detail = '') {
     return [`❌  ${title}`, detail ? `\n  ${detail}` : ''].join('');
+}
+
+function detectLang(fileName) {
+    const ext = path.extname(fileName).toLowerCase();
+    const map = { '.js': 'javascript', '.ts': 'typescript', '.json': 'json', '.py': 'python', '.sh': 'bash', '.md': 'markdown' };
+    return map[ext] || 'text';
+}
+
+function tokenize(codeStr, lang = 'javascript') {
+    const keywords = {
+        javascript: ['import', 'export', 'const', 'let', 'var', 'function', 'return', 'async', 'await', 'class', 'new', 'if', 'else', 'for', 'while', 'try', 'catch'],
+        typescript: ['import', 'export', 'const', 'let', 'var', 'function', 'return', 'async', 'await', 'class', 'interface', 'type', 'enum'],
+        python: ['import', 'from', 'def', 'return', 'class', 'if', 'else', 'for', 'while', 'try', 'except']
+    };
+    const langKeys = keywords[lang] || keywords.javascript;
+    return codeStr.split('\n').map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return { highlightType: 0, codeContent: `${line}\n` };
+        if (trimmed.startsWith('//') || trimmed.startsWith('#') || trimmed.startsWith('--') || trimmed.startsWith('*')) return { highlightType: 4, codeContent: `${line}\n` };
+        const hasKeyword = langKeys.some((kw) => new RegExp(`(^|\\s|\\(|;)${kw}(\\s|\\(|;|$|:)`).test(trimmed));
+        if (hasKeyword) return { highlightType: 1, codeContent: `${line}\n` };
+        if (trimmed.includes('(')) return { highlightType: 3, codeContent: `${line}\n` };
+        if ((line.match(/"/g) || []).length >= 2 || (line.match(/'/g) || []).length >= 2) return { highlightType: 2, codeContent: `${line}\n` };
+        return { highlightType: 0, codeContent: `${line}\n` };
+    });
+}
+
+async function sendNativeCodeBlock(sock, jid, codeContent, fileName = 'code.js') {
+    const lang = detectLang(fileName);
+    const blocks = tokenize(codeContent, lang);
+    return sock.relayMessage(jid, {
+        botForwardedMessage: {
+            message: {
+                richResponseMessage: {
+                    messageType: 1,
+                    submessages: [{ messageType: 5, codeMetadata: { codeLanguage: lang, codeBlocks: blocks } }],
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedAiBotMessageInfo: { botJid: BOT_JID },
+                        forwardOrigin: 4
+                    }
+                }
+            }
+        }
+    }, {});
 }
 
 async function waitForReaction(sock, from, messageId, emoji, actorJid = '', timeoutMs = 60000) {
@@ -226,21 +274,18 @@ export default {
                     }
                     const content = fs.readFileSync(fullPath, 'utf8');
                     const fileName = path.basename(cmdPath);
-                    const prompt = await sock.sendMessage(from, {
-                        text: `📄 *${fileName}*\nReact ❤ in 10s to receive raw code block.\nIf no reaction, I will send as file.`
-                    }, { quoted: message });
-
-                    const wantsRaw = await waitForReaction(sock, from, prompt.key.id, ['❤', '❤️'], sender, 10_000);
-                    if (wantsRaw) {
-                        const codeBlock = `\`\`\`javascript\n${content.slice(0, 3900)}\n\`\`\``;
-                        await sock.sendMessage(from, { text: codeBlock }, { quoted: message });
-                    } else {
+                    if (Buffer.byteLength(content, 'utf8') > CODE_MAX_BYTES) {
                         await sock.sendMessage(from, {
                             document: Buffer.from(content, 'utf8'),
                             mimetype: 'application/javascript',
                             fileName,
                             caption: `📄  ${fileName}\n📂  ${cmdPath}\n💾  ${fmtSize(Buffer.byteLength(content, 'utf8'))}\n📝  ${content.split('\n').length} lines`
                         }, { quoted: message });
+                    } else {
+                        await sock.sendMessage(from, {
+                            text: `📄 *${fileName}*\nMode: Native code view\nLines: ${content.split('\n').length}\nSize: ${fmtSize(Buffer.byteLength(content, 'utf8'))}`
+                        }, { quoted: message });
+                        await sendNativeCodeBlock(sock, from, content, fileName);
                     }
                     break;
                 }

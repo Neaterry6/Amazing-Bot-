@@ -1,15 +1,19 @@
 import fs from 'fs-extra';
 import path from 'path';
 import axios from 'axios';
+import FormData from 'form-data';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai');
 const HISTORY_FILE = path.join(DATA_DIR, 'ai_history.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'ai_settings.json');
-const MAX_HISTORY = 20;
+const LOW_RESOURCE_MODE = process.env.LOW_RESOURCE_MODE === 'true';
+const MAX_HISTORY = LOW_RESOURCE_MODE ? 8 : 20;
 const REPLY_TTL = 10 * 60 * 1000;
-const OMEGA_GPT_API = 'https://omegatech-api.dixonomega.tech/api/ai/gpt';
-const OMEGA_GLM_API = 'https://omegatech-api.dixonomega.tech/api/ai/glm';
+const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const GROQ_AUDIO_MODEL = process.env.GROQ_AUDIO_MODEL || 'whisper-large-v3-turbo';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
@@ -70,44 +74,54 @@ async function saveHistory(uid, history) {
     await fs.writeJSON(HISTORY_FILE, all, { spaces: 2 });
 }
 
+function stripTrailingDetailsBlock(text) {
+    const trimmedEnd = String(text || '').replace(/\s+$/g, '');
+    const closeTag = '</details>';
+    const lower = trimmedEnd.toLowerCase();
+    const closeIndex = lower.lastIndexOf(closeTag);
+
+    if (closeIndex < 0 || closeIndex + closeTag.length !== trimmedEnd.length) return String(text || '');
+
+    const openIndex = lower.lastIndexOf('<details', closeIndex);
+    if (openIndex < 0) return String(text || '');
+
+    return trimmedEnd.slice(0, openIndex).trimEnd();
+}
+
 async function askOmegaAI(personality, history) {
+    if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY in environment');
+
     const systemPrompt = PERSONALITIES[personality] || PERSONALITIES.ilom;
-    const chat = history
-        .map((h) => `${h.role === 'assistant' ? 'Assistant' : 'User'}: ${h.content}`)
-        .join('\n');
+    const messages = [
+        { role: 'system', content: `${systemPrompt}
+Never include <think>, <details>, or hidden reasoning in responses. Reply once with the final answer only.` },
+        ...history.slice(-MAX_HISTORY).map((h) => ({
+            role: h.role === 'assistant' ? 'assistant' : 'user',
+            content: String(h.content || '').slice(0, 4000)
+        }))
+    ];
 
-    const prompt = `${systemPrompt}\n\nConversation:\n${chat}\n\nAssistant:`
-        .slice(0, 14000);
-    const latestQuestion = history.filter((h) => h.role === 'user').slice(-1)[0]?.content || 'Hello';
+    const { data } = await axios.post(
+        `${GROQ_BASE_URL}/chat/completions`,
+        {
+            model: GROQ_MODEL,
+            messages,
+            temperature: LOW_RESOURCE_MODE ? 0.4 : 0.6,
+            max_tokens: LOW_RESOURCE_MODE ? 700 : 1200
+        },
+        {
+            timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+            headers: {
+                Authorization: `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
+        }
+    );
 
-    const parseText = (payload) => payload?.result
-        || payload?.response
-        || payload?.answer
-        || payload?.message
-        || payload?.text
-        || payload?.data?.result
-        || payload?.data?.answer
-        || '';
-
-    try {
-        const gptResponse = await axios.get(OMEGA_GPT_API, {
-            params: {
-                question: String(latestQuestion).slice(0, 3000),
-                prompt
-            },
-            timeout: 120000
-        });
-        const text = String(parseText(gptResponse.data)).trim();
-        if (text) return text;
-    } catch {}
-
-    const glmResponse = await axios.get(OMEGA_GLM_API, {
-        params: { prompt },
-        timeout: 120000
-    });
-    const glmText = String(parseText(glmResponse.data)).trim();
-    if (!glmText) throw new Error('Empty response from Omega APIs');
-    return glmText;
+    const raw = data?.choices?.[0]?.message?.content || '';
+    const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
+    if (!cleaned) throw new Error('Empty response from Groq');
+    return cleaned;
 }
 
 async function getAIResponse(settings, history) {
@@ -115,7 +129,7 @@ async function getAIResponse(settings, history) {
 }
 
 async function sendVoiceReply(sock, from, text, quoted) {
-    const cleanText = String(text || '').trim().slice(0, 600);
+    const cleanText = String(text || '').trim().slice(0, LOW_RESOURCE_MODE ? 320 : 600);
     if (!cleanText) return;
     const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=Joanna&text=${encodeURIComponent(cleanText)}`;
     const audioRes = await axios.get(ttsUrl, {
@@ -130,10 +144,41 @@ async function sendVoiceReply(sock, from, text, quoted) {
     }, { quoted });
 }
 
+async function transcribeAudioWithGroq(buffer) {
+    if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY for audio transcription');
+    const form = new FormData();
+    form.append('file', buffer, { filename: 'voice.ogg', contentType: 'audio/ogg' });
+    form.append('model', GROQ_AUDIO_MODEL);
+
+    const { data } = await axios.post(
+        `${GROQ_BASE_URL}/audio/transcriptions`,
+        form,
+        {
+            timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+            headers: {
+                ...form.getHeaders(),
+                Authorization: `Bearer ${GROQ_API_KEY}`
+            },
+            maxBodyLength: Infinity
+        }
+    );
+    return String(data?.text || '').trim();
+}
+
+async function extractAudioPrompt(message, sock) {
+    const quotedAudio = message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
+    const ownAudio = message.message?.audioMessage;
+    if (!quotedAudio && !ownAudio) return '';
+
+    const target = quotedAudio ? { message: { audioMessage: quotedAudio } } : message;
+    const buffer = await downloadMediaMessage(target, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
+    return await transcribeAudioWithGroq(buffer);
+}
+
 async function analyzeImageWithGemini(buffer, prompt = 'Describe this image in clear detail.') {
     if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
     const b64 = Buffer.from(buffer).toString('base64');
-    const model = GEMINI_MODEL || 'gemini-2.0-flash';
+    const model = String(GEMINI_MODEL || 'gemini-2.0-flash').replace(/^models\//i, '');
 
     const response = await axios.post(
         `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
@@ -258,15 +303,20 @@ function buildChainHandler(sock, from, uid, sender) {
             if (normReply !== normSender && normReply !== normFrom) return;
         }
 
-        const userText = replyText?.trim();
+        let userText = replyText?.trim();
+        if (!userText) {
+            try {
+                userText = await extractAudioPrompt(replyMessage, sock);
+            } catch (err) {
+                return await sock.sendMessage(from, { text: `❌ Voice transcription failed: ${err.message}` }, { quoted: replyMessage });
+            }
+        }
         if (!userText) return;
 
         if (userText.toLowerCase() === 'clear') {
             await saveHistory(uid, []);
             return await sock.sendMessage(from, { text: 'Memory cleared.' }, { quoted: replyMessage });
         }
-
-        await sock.sendMessage(from, { text: '⏳ Thinking...' }, { quoted: replyMessage });
 
         try {
             const settings = await loadSettings(uid);
@@ -324,6 +374,9 @@ export default {
     async execute({ sock, message, args, from, sender, prefix }) {
         const uid = sender;
         let body = extractBodyText(message, args);
+        if (!body) {
+            try { body = await extractAudioPrompt(message, sock); } catch {}
+        }
 
         const quotedText = getQuotedText(message);
         if (quotedText && body) body = `Context: "${quotedText}"\n\nQuestion: ${body}`;
@@ -412,8 +465,6 @@ export default {
                 return await sock.sendMessage(from, { text: `❌ Image analysis failed: ${error.message}` }, { quoted: message });
             }
         }
-
-        await sock.sendMessage(from, { text: '⏳ Thinking...' }, { quoted: message });
 
         try {
             const history = await loadHistory(uid);

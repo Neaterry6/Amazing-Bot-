@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const CODE_CHUNK_SIZE = 3400;
+const CODE_MAX_BYTES = 80 * 1024;
+const BOT_JID = process.env.BOT_JID || '867051314767696@bot';
 const COMMAND_CATEGORIES = ['admin', 'ai', 'downloader', 'economy', 'fun', 'games', 'general', 'media', 'owner', 'utility'];
 
 function normalizeInputPath(input = '') {
@@ -18,19 +19,57 @@ function isSafeRelativePath(filePath = '') {
     return true;
 }
 
-function splitCodeBlock(content, language = 'javascript') {
-    const out = [];
-    for (let i = 0; i < content.length; i += CODE_CHUNK_SIZE) {
-        out.push(content.slice(i, i + CODE_CHUNK_SIZE));
-    }
-    return out.map((chunk, index) => `\`\`\`${language}\n${chunk}\n\`\`\`\nPart ${index + 1}/${out.length}`);
+function detectLang(fileName) {
+    const ext = path.extname(fileName).toLowerCase();
+    const map = { '.js': 'javascript', '.ts': 'typescript', '.json': 'json', '.py': 'python', '.sh': 'bash', '.md': 'markdown' };
+    return map[ext] || 'text';
+}
+
+function tokenize(codeStr, lang = 'javascript') {
+    const keywords = {
+        javascript: ['import', 'export', 'const', 'let', 'var', 'function', 'return', 'async', 'await', 'class', 'new', 'if', 'else', 'for', 'while', 'try', 'catch'],
+        typescript: ['import', 'export', 'const', 'let', 'var', 'function', 'return', 'async', 'await', 'class', 'interface', 'type', 'enum'],
+        python: ['import', 'from', 'def', 'return', 'class', 'if', 'else', 'for', 'while', 'try', 'except']
+    };
+    const langKeys = keywords[lang] || keywords.javascript;
+    return codeStr.split('\n').map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return { highlightType: 0, codeContent: `${line}\n` };
+        if (trimmed.startsWith('//') || trimmed.startsWith('#') || trimmed.startsWith('--') || trimmed.startsWith('*')) return { highlightType: 4, codeContent: `${line}\n` };
+        const hasKeyword = langKeys.some((kw) => new RegExp(`(^|\\s|\\(|;)${kw}(\\s|\\(|;|$|:)`).test(trimmed));
+        if (hasKeyword) return { highlightType: 1, codeContent: `${line}\n` };
+        if (trimmed.includes('(')) return { highlightType: 3, codeContent: `${line}\n` };
+        if ((line.match(/"/g) || []).length >= 2 || (line.match(/'/g) || []).length >= 2) return { highlightType: 2, codeContent: `${line}\n` };
+        return { highlightType: 0, codeContent: `${line}\n` };
+    });
+}
+
+async function sendNativeCodeBlock(sock, jid, codeContent, fileName = 'code.js') {
+    const lang = detectLang(fileName);
+    const blocks = tokenize(codeContent, lang);
+    return sock.relayMessage(jid, {
+        botForwardedMessage: {
+            message: {
+                richResponseMessage: {
+                    messageType: 1,
+                    submessages: [{ messageType: 5, codeMetadata: { codeLanguage: lang, codeBlocks: blocks } }],
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedAiBotMessageInfo: { botJid: BOT_JID },
+                        forwardOrigin: 4
+                    }
+                }
+            }
+        }
+    }, {});
 }
 
 export default {
     name: 'plugins',
     aliases: ['pluginfile', 'plug'],
     category: 'owner',
-    description: 'Fetch and send command files as chat code blocks.',
+    description: 'Fetch and send command files as native WhatsApp code view blocks.',
     usage: 'plugins get <category/file.js>',
     example: 'plugins get media/togcstatus.js',
     cooldown: 1,
@@ -92,14 +131,15 @@ export default {
         }
 
         const content = fs.readFileSync(resolvedTarget, 'utf8');
-        const parts = splitCodeBlock(content, 'javascript');
+        if (Buffer.byteLength(content, 'utf8') > CODE_MAX_BYTES) {
+            return await sock.sendMessage(from, {
+                text: `❌ File too large for native code view.\nUse cmd get to receive as file.\nSize: ${Buffer.byteLength(content, 'utf8')} bytes`
+            }, { quoted: message });
+        }
 
         await sock.sendMessage(from, {
             text: `📄 *${relPath}*\nLines: ${content.split('\n').length}\nSize: ${Buffer.byteLength(content, 'utf8')} bytes`
         }, { quoted: message });
-
-        for (const part of parts) {
-            await sock.sendMessage(from, { text: part }, { quoted: message });
-        }
+        await sendNativeCodeBlock(sock, from, content, path.basename(relPath));
     }
 };
