@@ -6,6 +6,8 @@ const QWEN_BASE = process.env.QWEN_API_BASE_URL || '';
 const QWEN_TOKEN = process.env.QWEN_TOKEN || process.env.QWEN_API_TOKEN || '';
 const QWEN_MODEL = process.env.QWEN_MODEL || 'qwen-plus';
 const TTS_VOICE = process.env.LONER_TTS_VOICE || 'Joanna';
+const CLAUDE_API_BASE_URL = process.env.CLAUDE_API_BASE_URL || 'https://omegatech-api.dixonomega.tech/api/ai';
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'Claude-pro';
 
 const defaults = { mode: 'chat', vn: false };
 const memory = new Map();
@@ -17,22 +19,36 @@ async function tts(text) {
 }
 
 async function qwenChat(prompt, mode = 'chat') {
-    if (QWEN_BASE && QWEN_TOKEN) {
-        const { data } = await axios.post(`${QWEN_BASE.replace(/\/$/, '')}/chat/completions`, {
-            model: mode === 'coder' ? (process.env.QWEN_CODER_MODEL || QWEN_MODEL) : QWEN_MODEL,
-            messages: [{ role: 'user', content: prompt }]
-        }, {
-            timeout: 120000,
-            headers: { Authorization: `Bearer ${QWEN_TOKEN}`, 'Content-Type': 'application/json' }
-        });
-        return data?.choices?.[0]?.message?.content?.trim();
-    }
+    try {
+        if (QWEN_BASE && QWEN_TOKEN) {
+            const { data } = await axios.post(`${QWEN_BASE.replace(/\/$/, '')}/chat/completions`, {
+                model: mode === 'coder' ? (process.env.QWEN_CODER_MODEL || QWEN_MODEL) : QWEN_MODEL,
+                messages: [{ role: 'user', content: prompt }]
+            }, {
+                timeout: 120000,
+                headers: { Authorization: `Bearer ${QWEN_TOKEN}`, 'Content-Type': 'application/json' }
+            });
+            const text = data?.choices?.[0]?.message?.content?.trim();
+            if (text) return text;
+        }
+    } catch {}
 
-    const { data } = await axios.post(`${GROQ_BASE_URL}/chat/completions`, {
-        model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-        messages: [{ role: 'user', content: prompt }]
-    }, { headers: { Authorization: `Bearer ${GROQ_API_KEY}` }, timeout: 120000 });
-    return data?.choices?.[0]?.message?.content?.trim();
+    try {
+        const { data } = await axios.post(`${GROQ_BASE_URL}/chat/completions`, {
+            model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+            messages: [{ role: 'user', content: prompt }]
+        }, { headers: { Authorization: `Bearer ${GROQ_API_KEY}` }, timeout: 120000 });
+        const text = data?.choices?.[0]?.message?.content?.trim();
+        if (text) return text;
+    } catch {}
+
+    const { data } = await axios.get(`${CLAUDE_API_BASE_URL}/${encodeURIComponent(CLAUDE_MODEL)}`, {
+        params: { prompt },
+        timeout: 120000
+    });
+    const text = data?.response?.trim();
+    if (!text) throw new Error('No AI provider returned a response');
+    return text;
 }
 
 export default {

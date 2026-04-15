@@ -3,12 +3,15 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
+import commandManager from '../../utils/commandManager.js';
 
 dotenv.config();
 
 const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_ILOM_MODEL || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const CLAUDE_API_BASE_URL = process.env.CLAUDE_API_BASE_URL || 'https://omegatech-api.dixonomega.tech/api/ai';
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'Claude-pro';
 
 const MEMORY_PATH = './data/ilom_memory.json';
 const COMMANDS_PATH = './src/commands';
@@ -71,32 +74,41 @@ function getRepoSnapshot() {
 }
 
 async function askIlomApi(prompt, question) {
-    if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY in environment');
+    try {
+        if (GROQ_API_KEY) {
+            const { data } = await axios.post(
+                `${GROQ_BASE_URL}/chat/completions`,
+                {
+                    model: GROQ_MODEL,
+                    messages: [
+                        { role: 'system', content: prompt },
+                        { role: 'user', content: String(question || 'Continue').slice(0, 4000) }
+                    ],
+                    temperature: LOW_RESOURCE_MODE ? 0.2 : 0.4,
+                    max_tokens: LOW_RESOURCE_MODE ? 950 : 1800
+                },
+                {
+                    timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+                    headers: {
+                        Authorization: `Bearer ${GROQ_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
 
-    const { data } = await axios.post(
-        `${GROQ_BASE_URL}/chat/completions`,
-        {
-            model: GROQ_MODEL,
-            messages: [
-                { role: 'system', content: prompt },
-                { role: 'user', content: String(question || 'Continue').slice(0, 4000) }
-            ],
-            temperature: LOW_RESOURCE_MODE ? 0.2 : 0.4,
-            max_tokens: LOW_RESOURCE_MODE ? 950 : 1800
-        },
-        {
-            timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
-            headers: {
-                Authorization: `Bearer ${GROQ_API_KEY}`,
-                'Content-Type': 'application/json'
-            }
+            const raw = data?.choices?.[0]?.message?.content || '';
+            const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
+            if (cleaned) return cleaned;
         }
-    );
+    } catch {}
 
-    const raw = data?.choices?.[0]?.message?.content || '';
-    const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
-    if (!cleaned) throw new Error('Groq returned empty response.');
-    return cleaned;
+    const { data } = await axios.get(`${CLAUDE_API_BASE_URL}/${encodeURIComponent(CLAUDE_MODEL)}`, {
+        params: { prompt: `${prompt}\n\n${String(question || 'Continue').slice(0, 4000)}` },
+        timeout: LOW_RESOURCE_MODE ? 70000 : 120000
+    });
+    const response = String(data?.response || '').trim();
+    if (!response) throw new Error('AI providers returned empty response.');
+    return response;
 }
 
 function extractCommandInfo(code) {

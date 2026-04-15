@@ -7,6 +7,8 @@ const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const SYSTEM = 'You are Raph. Human-like, witty, short replies.';
+const CLAUDE_API_BASE_URL = process.env.CLAUDE_API_BASE_URL || 'https://omegatech-api.dixonomega.tech/api/ai';
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'Claude-pro';
 
 function initDb() {
     if (!fs.existsSync(path.dirname(DB_PATH))) fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -16,13 +18,22 @@ function getDb() { initDb(); return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'))
 function saveDb(v) { fs.writeFileSync(DB_PATH, JSON.stringify(v, null, 2)); }
 
 async function ask(text) {
-    const { data } = await axios.post(`${GROQ_BASE_URL}/chat/completions`, {
-        model: GROQ_MODEL,
-        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: text }],
-        temperature: 0.7,
-        max_tokens: 300
-    }, { headers: { Authorization: `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 90000 });
-    return data?.choices?.[0]?.message?.content?.trim();
+    try {
+        const { data } = await axios.post(`${GROQ_BASE_URL}/chat/completions`, {
+            model: GROQ_MODEL,
+            messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: text }],
+            temperature: 0.7,
+            max_tokens: 300
+        }, { headers: { Authorization: `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 90000 });
+        const reply = data?.choices?.[0]?.message?.content?.trim();
+        if (reply) return reply;
+    } catch {}
+
+    const { data } = await axios.get(`${CLAUDE_API_BASE_URL}/${encodeURIComponent(CLAUDE_MODEL)}`, {
+        params: { prompt: `${SYSTEM}\n\n${text}` },
+        timeout: 90000
+    });
+    return data?.response?.trim();
 }
 
 async function tts(text) {
