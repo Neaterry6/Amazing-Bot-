@@ -14,7 +14,7 @@ const MEMORY_PATH = './data/ilom_memory.json';
 const COMMANDS_PATH = './src/commands';
 const REPO_ROOT = process.cwd();
 const LOW_RESOURCE_MODE = process.env.LOW_RESOURCE_MODE === 'true';
-const LONG_OUTPUT_LIMIT = LOW_RESOURCE_MODE ? 5000 : 12000;
+const LONG_OUTPUT_LIMIT = LOW_RESOURCE_MODE ? 2200 : 3500;
 const REPLY_TTL = 10 * 60 * 1000;
 
 function loadMemory() {
@@ -47,19 +47,10 @@ function getModePrompt(mode) {
 You are ILOMCREATE Agent.
 
 STRICT RULES:
-- You operate from the bot root folder and can reason about any folder and file in the repository tree.
+- You operate from the bot root folder and can reason about logs, src, temp, and data folders.
 - For code tasks return final code directly; no markdown wrappers.
 - Never output <think> or hidden reasoning.
-- Keep responses production-safe.
-
-You can read files, list files, edit files, rename files, and delete files.
-When you need to perform an action, write your command inside exactly one <execute_commands> tag.
-That tag must contain a JSON array of command objects.
-For editing, only include changed lines with accurate line numbers.
-Use only one <execute_commands> tag per message.
-Read or edit the same file only once per turn.
-Read/edit at most 100 lines per single command object.
-After sending a command, stop and wait for the next response.
+- Keep responses concise and production-safe.
 
 CURRENT MODE: ${mode}
 `;
@@ -242,6 +233,7 @@ FILE: relative/path/from/repo
             const shouldInstall = /\b(install|save|write|apply|overwrite|replace)\b/i.test(userText);
             const installedPath = shouldInstall ? saveGeneratedOutput(output) : null;
             if (installedPath) {
+                await commandManager.reloadAllCommands().catch(() => null);
                 const sent = await sock.sendMessage(from, {
                     text: `✅ File updated successfully!\n\n📂 ${installedPath}\n\n🔄 If needed, restart bot to ensure full reload.`
                 }, { quoted: message });
@@ -249,16 +241,6 @@ FILE: relative/path/from/repo
                     await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
                 });
                 return;
-            }
-
-            if (!shouldInstall && /^\s*FILE:/i.test(output)) {
-                const sent = await sock.sendMessage(from, {
-                    text: `✅ Generated file content (not installed).\nReply with: install this`
-                }, { quoted: message });
-                registerReplyHandler(sent.key.id, async (replyText, replyMessage) => {
-                    await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
-                });
-                return sock.sendMessage(from, { text: output }, { quoted: message });
             }
 
             if (output.length > LONG_OUTPUT_LIMIT) {
