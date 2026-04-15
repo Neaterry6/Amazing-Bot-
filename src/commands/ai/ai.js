@@ -16,6 +16,9 @@ const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
+const CLAUDE_API_BASE_URL = process.env.CLAUDE_API_BASE_URL || 'https://omegatech-api.dixonomega.tech/api/ai';
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'Claude-pro';
+const CLAUDE_SESSION_FILE = path.join(DATA_DIR, 'claude_sessions.json');
 
 const PERSONALITIES = {
     normal:    'You are a helpful, friendly AI assistant. Be concise and clear.',
@@ -73,6 +76,25 @@ async function saveHistory(uid, history) {
     await fs.writeJSON(HISTORY_FILE, all, { spaces: 2 });
 }
 
+async function loadClaudeSession(uid) {
+    await ensureDir();
+    try {
+        const all = await fs.readJSON(CLAUDE_SESSION_FILE);
+        return all?.[uid] || null;
+    } catch {
+        return null;
+    }
+}
+
+async function saveClaudeSession(uid, sessionId) {
+    await ensureDir();
+    let all = {};
+    try { all = await fs.readJSON(CLAUDE_SESSION_FILE); } catch {}
+    if (!sessionId) delete all[uid];
+    else all[uid] = sessionId;
+    await fs.writeJSON(CLAUDE_SESSION_FILE, all, { spaces: 2 });
+}
+
 function stripTrailingDetailsBlock(text) {
     const trimmedEnd = String(text || '').replace(/\s+$/g, '');
     const closeTag = '</details>';
@@ -123,8 +145,36 @@ Never include <think>, <details>, or hidden reasoning in responses. Reply once w
     return cleaned;
 }
 
-async function getAIResponse(settings, history) {
-    return await askOmegaAI(settings.personality, history);
+async function askClaudeAI(uid, prompt) {
+    const sessionId = await loadClaudeSession(uid);
+    const params = { prompt };
+    if (sessionId) params.sessionId = sessionId;
+
+    const { data } = await axios.get(
+        `${CLAUDE_API_BASE_URL}/${encodeURIComponent(CLAUDE_MODEL)}`,
+        {
+            params,
+            timeout: LOW_RESOURCE_MODE ? 70000 : 120000
+        }
+    );
+
+    if (data?.sessionId) await saveClaudeSession(uid, data.sessionId);
+    const text = String(data?.response || '').trim();
+    if (!text) throw new Error('Claude returned empty response');
+    return text;
+}
+
+async function getAIResponse(uid, settings, history) {
+    try {
+        return await askOmegaAI(settings.personality, history);
+    } catch (error) {
+        const status = error?.response?.status;
+        if (status === 404 || status === 429 || /Missing GROQ_API_KEY/i.test(String(error?.message || ''))) {
+            const prompt = history.filter((h) => h.role !== 'system').map((h) => `${h.role}: ${h.content}`).join('\n');
+            return await askClaudeAI(uid, prompt.slice(-3500));
+        }
+        throw error;
+    }
 }
 
 async function sendVoiceReply(sock, from, text, quoted) {
@@ -145,6 +195,7 @@ async function sendVoiceReply(sock, from, text, quoted) {
 
 async function transcribeAudioWithGroq(buffer) {
     if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY for audio transcription');
+    const GROQ_AUDIO_MODEL = process.env.GROQ_AUDIO_MODEL || 'whisper-large-v3';
     const form = new FormData();
     form.append('file', buffer, { filename: 'voice.ogg', contentType: 'audio/ogg' });
     form.append('model', GROQ_AUDIO_MODEL);
@@ -321,7 +372,7 @@ function buildChainHandler(sock, from, uid, sender) {
             const settings = await loadSettings(uid);
             const history = await loadHistory(uid);
             history.push({ role: 'user', content: userText });
-            const aiText = await getAIResponse(settings, history);
+            const aiText = await getAIResponse(uid, settings, history);
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
             const mentions = replyMessage.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
@@ -353,10 +404,24 @@ function buildHelp(settings, historyLen, prefix) {
         `${p}ai vn on`,
         `${p}ai vn off`,
         `${p}ai -mode:<name>`,
+        `${p}ai claude <prompt>`,
+        `${p}ai list`,
         ``,
         `Personalities: ${Object.keys(PERSONALITIES).join(', ')}`,
         ``,
         `Reply to any AI message to continue the conversation.`
+    ].join('\n');
+}
+
+function buildAiList() {
+    return [
+        '🧠 Available AI Providers',
+        '',
+        `• Groq Chat: ${GROQ_MODEL} (${GROQ_BASE_URL})`,
+        `• Gemini Vision: ${GEMINI_MODEL} (${GEMINI_BASE_URL})`,
+        `• Claude Chat: ${CLAUDE_MODEL} (${CLAUDE_API_BASE_URL})`,
+        '',
+        'Tip: use "ai claude <prompt>" for Claude session chat.'
     ].join('\n');
 }
 
@@ -404,10 +469,14 @@ export default {
                 ].join('\n')
             }, { quoted: message });
         }
+        if (body.toLowerCase() === 'list' || body.toLowerCase() === 'models') {
+            return await sock.sendMessage(from, { text: buildAiList() }, { quoted: message });
+        }
 
         if (body.toLowerCase() === '-reset') {
             await saveSettings(uid, { ...DEFAULT_SETTINGS });
             await saveHistory(uid, []);
+            await saveClaudeSession(uid, null);
             return await sock.sendMessage(from, { text: '✅ Settings and memory reset.' }, { quoted: message });
         }
 
@@ -450,6 +519,19 @@ export default {
             return await sock.sendMessage(from, { text: `✅ Personality set to: ${mode}` }, { quoted: message });
         }
 
+        if (/^claude\s+/i.test(body)) {
+            const prompt = body.replace(/^claude\s+/i, '').trim();
+            if (!prompt) return await sock.sendMessage(from, { text: '❌ Provide a prompt for Claude.' }, { quoted: message });
+            try {
+                const response = await askClaudeAI(uid, prompt);
+                const sent = await sock.sendMessage(from, { text: response }, { quoted: message });
+                registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
+                return;
+            } catch (error) {
+                return await sock.sendMessage(from, { text: `❌ Claude error: ${error.message}` }, { quoted: message });
+            }
+        }
+
         const quotedImage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
         const directImage = message.message?.imageMessage;
         if (quotedImage || directImage) {
@@ -468,7 +550,7 @@ export default {
         try {
             const history = await loadHistory(uid);
             history.push({ role: 'user', content: body });
-            const aiText = await getAIResponse(settings, history);
+            const aiText = await getAIResponse(uid, settings, history);
             if (!aiText) throw new Error('Empty response received');
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
