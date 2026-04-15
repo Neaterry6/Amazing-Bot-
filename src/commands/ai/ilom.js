@@ -7,13 +7,16 @@ import { commandManager } from '../../utils/commandManager.js';
 
 dotenv.config();
 
-const OMEGA_GPT_API = 'https://omegatech-api.dixonomega.tech/api/ai/gpt';
-const OMEGA_GLM_API = 'https://omegatech-api.dixonomega.tech/api/ai/glm';
+const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_ILOM_MODEL || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
 const MEMORY_PATH = './data/ilom_memory.json';
 const COMMANDS_PATH = './src/commands';
 const REPO_ROOT = process.cwd();
-const LONG_OUTPUT_LIMIT = 3500;
+const LOW_RESOURCE_MODE = process.env.LOW_RESOURCE_MODE === 'true';
+const LONG_OUTPUT_LIMIT = LOW_RESOURCE_MODE ? 2200 : 3500;
+const REPLY_TTL = 10 * 60 * 1000;
 
 function loadMemory() {
     try {
@@ -29,60 +32,72 @@ function saveMemory(data) {
     fs.writeFileSync(MEMORY_PATH, JSON.stringify(data, null, 2));
 }
 
+function stripTrailingDetailsBlock(text) {
+    const trimmedEnd = String(text || '').replace(/\s+$/g, '');
+    const closeTag = '</details>';
+    const lower = trimmedEnd.toLowerCase();
+    const closeIndex = lower.lastIndexOf(closeTag);
+    if (closeIndex < 0 || closeIndex + closeTag.length !== trimmedEnd.length) return String(text || '');
+    const openIndex = lower.lastIndexOf('<details', closeIndex);
+    if (openIndex < 0) return String(text || '');
+    return trimmedEnd.slice(0, openIndex).trimEnd();
+}
+
 function getModePrompt(mode) {
     return `
-You are ILOM AI (Autonomous Coding Agent).
+You are ILOMCREATE Agent.
 
 STRICT RULES:
-- ALWAYS generate full WhatsApp bot command files when user asks for a command.
-- FOLLOW Amazing Bot command structure strictly.
-- Return clean JavaScript code only for code tasks.
-- If user asks normal chat, respond shortly.
-- If output is long, format clearly so it can be saved as a file.
-- Avoid broken command patterns. If a feature/API is unreliable, return a stable fallback implementation.
+- You operate from the bot root folder and can reason about logs, src, temp, and data folders.
+- For code tasks return final code directly; no markdown wrappers.
+- Never output <think> or hidden reasoning.
+- Keep responses concise and production-safe.
 
 CURRENT MODE: ${mode}
-
-ABILITIES:
-- Generate commands
-- Fix/edit existing commands
-- Install command plugins into src/commands/<category>/<name>.js
-- Access and modify existing bot files when a valid relative path is provided
-- Analyze user-replied code file
 `;
 }
 
+function getRepoSnapshot() {
+    const probes = ['logs', 'temp', 'downloads', 'data'];
+    const lines = [];
+    for (const probe of probes) {
+        const full = path.join(REPO_ROOT, probe);
+        if (!fs.existsSync(full)) continue;
+        try {
+            const entries = fs.readdirSync(full);
+            lines.push(`${probe}: ${entries.length} entries`);
+        } catch {}
+    }
+    return lines.join('\n');
+}
+
 async function askIlomApi(prompt, question) {
-    const parseText = (payload) => payload?.result
-        || payload?.response
-        || payload?.answer
-        || payload?.message
-        || payload?.text
-        || payload?.data?.result
-        || payload?.data?.answer
-        || '';
+    if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY in environment');
 
-    try {
-        const gptResponse = await axios.get(OMEGA_GPT_API, {
-            params: {
-                question: String(question || 'Generate code').slice(0, 3000),
-                prompt: String(prompt).slice(0, 14000)
-            },
-            timeout: 120000
-        });
-        const text = String(parseText(gptResponse.data)).trim();
-        if (text) return text;
-    } catch {}
-
-    const glmResponse = await axios.get(OMEGA_GLM_API, {
-        params: {
-            prompt: String(prompt).slice(0, 14000)
+    const { data } = await axios.post(
+        `${GROQ_BASE_URL}/chat/completions`,
+        {
+            model: GROQ_MODEL,
+            messages: [
+                { role: 'system', content: prompt },
+                { role: 'user', content: String(question || 'Continue').slice(0, 4000) }
+            ],
+            temperature: LOW_RESOURCE_MODE ? 0.2 : 0.4,
+            max_tokens: LOW_RESOURCE_MODE ? 950 : 1800
         },
-        timeout: 120000
-    });
-    const glmText = String(parseText(glmResponse.data)).trim();
-    if (!glmText) throw new Error('Omega APIs returned empty response.');
-    return glmText;
+        {
+            timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+            headers: {
+                Authorization: `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
+        }
+    );
+
+    const raw = data?.choices?.[0]?.message?.content || '';
+    const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
+    if (!cleaned) throw new Error('Groq returned empty response.');
+    return cleaned;
 }
 
 function extractCommandInfo(code) {
@@ -128,6 +143,16 @@ function getQuotedMessage(message) {
     return message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 }
 
+function registerReplyHandler(msgId, handler) {
+    if (!global.replyHandlers) global.replyHandlers = {};
+    global.replyHandlers[msgId] = { command: 'ilomcreate', handler };
+    setTimeout(() => { if (global.replyHandlers?.[msgId]) delete global.replyHandlers[msgId]; }, REPLY_TTL);
+}
+
+function normalizeText(raw = '') {
+    return String(raw || '').trim();
+}
+
 export default {
     name: 'ilomcreate',
     aliases: ['ilom', 'agent', 'cmdai'],
@@ -136,7 +161,7 @@ export default {
     usage: 'ilomcreate <prompt>',
     cooldown: 3,
     permissions: ['user'],
-        minArgs: 0,
+    minArgs: 0,
 
     async execute({ sock, message, args, from, sender }) {
         try {
@@ -144,11 +169,9 @@ export default {
             const userMemory = memory[sender] || { history: [], mode: 'coder' };
 
             const quoted = getQuotedMessage(message);
-            let userText = args.join(' ').trim();
+            let userText = normalizeText(args.join(' '));
 
-            if (!userText && quoted) {
-                userText = 'Continue previous task.';
-            }
+            if (!userText && quoted) userText = 'Continue previous task.';
 
             if (!userText) {
                 return sock.sendMessage(from, {
@@ -174,7 +197,7 @@ export default {
             let fileCode = '';
             if (quoted?.documentMessage) {
                 const buffer = await downloadMediaMessage({ message: quoted }, 'buffer', {}, sock);
-                fileCode = buffer.toString('utf8').slice(0, 9000);
+                fileCode = buffer.toString('utf8').slice(0, LOW_RESOURCE_MODE ? 5000 : 10000);
             }
 
             const historyText = userMemory.history
@@ -183,14 +206,15 @@ export default {
                 .join('\n');
 
             const finalPrompt = `${getModePrompt(userMemory.mode)}
+ROOT SNAPSHOT:
+${getRepoSnapshot() || 'No snapshot available'}
 
 CHAT HISTORY:
 ${historyText}
 
 ${fileCode ? `CODE:\n${fileCode}` : ''}
 
-USER:
-${userText}
+USER:\n${userText}
 
 COMMAND TEMPLATE REQUIREMENT:
 - When creating commands, output complete JS command file using export default.
@@ -199,8 +223,6 @@ COMMAND TEMPLATE REQUIREMENT:
 FILE: relative/path/from/repo
 <full file content>
 - Prefer raw code output without markdown wrappers.`;
-
-            await sock.sendMessage(from, { text: '🧠 ILOM thinking...' }, { quoted: message });
 
             const output = await askIlomApi(finalPrompt, userText);
 
@@ -212,10 +234,13 @@ FILE: relative/path/from/repo
             const installedPath = saveGeneratedOutput(output);
             if (installedPath) {
                 await commandManager.reloadAllCommands().catch(() => null);
-
-                return sock.sendMessage(from, {
+                const sent = await sock.sendMessage(from, {
                     text: `✅ File updated successfully!\n\n📂 ${installedPath}\n\n🔄 If needed, restart bot to ensure full reload.`
                 }, { quoted: message });
+                registerReplyHandler(sent.key.id, async (replyText, replyMessage) => {
+                    await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
+                });
+                return;
             }
 
             if (output.length > LONG_OUTPUT_LIMIT) {
@@ -225,14 +250,21 @@ FILE: relative/path/from/repo
                 fs.mkdirSync('./temp', { recursive: true });
                 fs.writeFileSync(filePath, output);
 
-                return sock.sendMessage(from, {
+                const sent = await sock.sendMessage(from, {
                     document: fs.readFileSync(filePath),
                     fileName,
                     mimetype: 'text/plain'
                 }, { quoted: message });
+                registerReplyHandler(sent.key.id, async (replyText, replyMessage) => {
+                    await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
+                });
+                return;
             }
 
-            await sock.sendMessage(from, { text: output }, { quoted: message });
+            const sent = await sock.sendMessage(from, { text: output }, { quoted: message });
+            registerReplyHandler(sent.key.id, async (replyText, replyMessage) => {
+                await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
+            });
         } catch (err) {
             await sock.sendMessage(from, {
                 text: `❌ AI Error: ${err.message}\n\nTry again shortly.`

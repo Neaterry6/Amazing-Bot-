@@ -159,6 +159,10 @@ const config = {
         spotify: {
             clientId: process.env.SPOTIFY_CLIENT_ID,
             clientSecret: process.env.SPOTIFY_CLIENT_SECRET
+        },
+        qwen: {
+            baseURL: process.env.QWEN_API_BASE_URL || '',
+            token: process.env.QWEN_TOKEN || process.env.QWEN_API_TOKEN || process.env.QWEN_API_KEY || ''
         }
     },
 
@@ -249,9 +253,10 @@ const config = {
     },
 
     performance: {
-        cacheSize: parseInt(process.env.CACHE_SIZE) || 1000,
-        cacheTTL: parseInt(process.env.CACHE_TTL) || 3600,
-        maxConcurrentCommands: parseInt(process.env.MAX_CONCURRENT_COMMANDS) || 50,
+        lowResourceMode: process.env.LOW_RESOURCE_MODE === 'true',
+        cacheSize: parseInt(process.env.CACHE_SIZE) || (process.env.LOW_RESOURCE_MODE === 'true' ? 300 : 1000),
+        cacheTTL: parseInt(process.env.CACHE_TTL) || (process.env.LOW_RESOURCE_MODE === 'true' ? 1800 : 3600),
+        maxConcurrentCommands: parseInt(process.env.MAX_CONCURRENT_COMMANDS) || (process.env.LOW_RESOURCE_MODE === 'true' ? 15 : 50),
         memoryThreshold: parseFloat(process.env.MEMORY_THRESHOLD) || 0.8,
         cpuThreshold: parseFloat(process.env.CPU_THRESHOLD) || 0.8
     }
