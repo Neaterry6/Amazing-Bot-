@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import axios from 'axios';
+import FormData from 'form-data';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai');
@@ -142,10 +143,41 @@ async function sendVoiceReply(sock, from, text, quoted) {
     }, { quoted });
 }
 
+async function transcribeAudioWithGroq(buffer) {
+    if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY for audio transcription');
+    const form = new FormData();
+    form.append('file', buffer, { filename: 'voice.ogg', contentType: 'audio/ogg' });
+    form.append('model', GROQ_AUDIO_MODEL);
+
+    const { data } = await axios.post(
+        `${GROQ_BASE_URL}/audio/transcriptions`,
+        form,
+        {
+            timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+            headers: {
+                ...form.getHeaders(),
+                Authorization: `Bearer ${GROQ_API_KEY}`
+            },
+            maxBodyLength: Infinity
+        }
+    );
+    return String(data?.text || '').trim();
+}
+
+async function extractAudioPrompt(message, sock) {
+    const quotedAudio = message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.audioMessage;
+    const ownAudio = message.message?.audioMessage;
+    if (!quotedAudio && !ownAudio) return '';
+
+    const target = quotedAudio ? { message: { audioMessage: quotedAudio } } : message;
+    const buffer = await downloadMediaMessage(target, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
+    return await transcribeAudioWithGroq(buffer);
+}
+
 async function analyzeImageWithGemini(buffer, prompt = 'Describe this image in clear detail.') {
     if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
     const b64 = Buffer.from(buffer).toString('base64');
-    const model = GEMINI_MODEL || 'gemini-2.0-flash';
+    const model = String(GEMINI_MODEL || 'gemini-2.0-flash').replace(/^models\//i, '');
 
     const response = await axios.post(
         `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
@@ -270,7 +302,14 @@ function buildChainHandler(sock, from, uid, sender) {
             if (normReply !== normSender && normReply !== normFrom) return;
         }
 
-        const userText = replyText?.trim();
+        let userText = replyText?.trim();
+        if (!userText) {
+            try {
+                userText = await extractAudioPrompt(replyMessage, sock);
+            } catch (err) {
+                return await sock.sendMessage(from, { text: `❌ Voice transcription failed: ${err.message}` }, { quoted: replyMessage });
+            }
+        }
         if (!userText) return;
 
         if (userText.toLowerCase() === 'clear') {
@@ -334,6 +373,9 @@ export default {
     async execute({ sock, message, args, from, sender, prefix }) {
         const uid = sender;
         let body = extractBodyText(message, args);
+        if (!body) {
+            try { body = await extractAudioPrompt(message, sock); } catch {}
+        }
 
         const quotedText = getQuotedText(message);
         if (quotedText && body) body = `Context: "${quotedText}"\n\nQuestion: ${body}`;

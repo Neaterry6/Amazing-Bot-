@@ -1,8 +1,17 @@
 import yts from 'yt-search';
-import { fetchAllInOneDownload, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
+import { fetchAllInOneDownload, fetchAllInOneFallback, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
 
 async function getDownloadForType(videoUrl, type) {
-    const payload = await fetchAllInOneDownload(videoUrl);
+    let payload;
+    try {
+        payload = await fetchAllInOneDownload(videoUrl);
+    } catch (error) {
+        if (error?.response?.status === 403 || /rapid/i.test(error?.message || '')) {
+            payload = await fetchAllInOneFallback(videoUrl);
+        } else {
+            throw error;
+        }
+    }
     const link = pickBestMedia(payload, type === 'audio' ? 'audio' : 'video');
     if (!link) throw new Error('No downloadable media link returned by API');
     const meta = parseAllInOneMeta(payload);

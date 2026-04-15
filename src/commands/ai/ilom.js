@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
-import { commandManager } from '../../utils/commandManager.js';
 
 dotenv.config();
 
@@ -219,7 +218,7 @@ USER:\n${userText}
 COMMAND TEMPLATE REQUIREMENT:
 - When creating commands, output complete JS command file using export default.
 - Include: name, category, description, usage, cooldown, and execute().
-- To overwrite existing files, respond with:
+- To overwrite existing files ONLY when user clearly asks install/save/write/apply, respond with:
 FILE: relative/path/from/repo
 <full file content>
 - Prefer raw code output without markdown wrappers.`;
@@ -231,7 +230,8 @@ FILE: relative/path/from/repo
             memory[sender] = userMemory;
             saveMemory(memory);
 
-            const installedPath = saveGeneratedOutput(output);
+            const shouldInstall = /\b(install|save|write|apply|overwrite|replace)\b/i.test(userText);
+            const installedPath = shouldInstall ? saveGeneratedOutput(output) : null;
             if (installedPath) {
                 await commandManager.reloadAllCommands().catch(() => null);
                 const sent = await sock.sendMessage(from, {
