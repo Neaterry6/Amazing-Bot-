@@ -42,16 +42,17 @@ async function tts(text) {
     return Buffer.from(data);
 }
 
-function registerRaph(sock, chatJid) {
+function registerRaph(sock, chatJid = '*') {
     if (!global.chatHandlers) global.chatHandlers = {};
     global.chatHandlers[chatJid] = {
         command: 'raph',
         handler: async (text, incomingMessage) => {
             if (!text || /^[.!#/]/.test(text)) return;
             if (incomingMessage.key.fromMe) return;
+            const targetChat = incomingMessage.key.remoteJid || chatJid;
             const db = getDb();
-            const chatCfg = db.chats[chatJid] || {};
-            const isPrivate = !chatJid.endsWith('@g.us');
+            const chatCfg = db.chats[targetChat] || {};
+            const isPrivate = !String(targetChat).endsWith('@g.us');
             const enabled = chatCfg.enabled === true || db.global.all || (isPrivate && db.global.private);
             if (!enabled) return;
 
@@ -59,10 +60,10 @@ function registerRaph(sock, chatJid) {
             if (!reply) return;
             if (db.global.voice) {
                 const audio = await tts(reply);
-                await sock.sendMessage(chatJid, { audio, mimetype: 'audio/mpeg', ptt: false }, { quoted: incomingMessage });
+                await sock.sendMessage(targetChat, { audio, mimetype: 'audio/mpeg', ptt: false }, { quoted: incomingMessage });
                 return;
             }
-            await sock.sendMessage(chatJid, { text: reply }, { quoted: incomingMessage });
+            await sock.sendMessage(targetChat, { text: reply }, { quoted: incomingMessage });
         }
     };
 }
@@ -77,6 +78,7 @@ export default {
 
     async execute({ sock, message, args, from }) {
         const db = getDb();
+        if ((db.global.all || db.global.private) && !global.chatHandlers?.['*']) registerRaph(sock, '*');
         const action = (args[0] || '').toLowerCase();
         const target = (args[1] || '').toLowerCase();
 
@@ -87,9 +89,15 @@ export default {
         }
 
         const enable = action === 'on';
-        if (target === '/all') db.global.all = enable;
-        else if (target === '/private') db.global.private = enable;
-        else if (target === '/voice') db.global.voice = enable;
+        if (target === '/all') {
+            db.global.all = enable;
+            if (enable) registerRaph(sock, '*');
+            else if (!db.global.private && global.chatHandlers?.['*']) delete global.chatHandlers['*'];
+        } else if (target === '/private') {
+            db.global.private = enable;
+            if (enable) registerRaph(sock, '*');
+            else if (!db.global.all && global.chatHandlers?.['*']) delete global.chatHandlers['*'];
+        } else if (target === '/voice') db.global.voice = enable;
         else {
             if (!db.chats[from]) db.chats[from] = {};
             db.chats[from].enabled = enable;

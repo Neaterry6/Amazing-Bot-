@@ -16,7 +16,7 @@ function extractMeta(code) {
     const aliases = aliasesMatch?.[1]
         ? aliasesMatch[1].split(',').map((v) => v.trim().replace(/^['"`]|['"`]$/g, '')).filter(Boolean)
         : [];
-    const convertedName = `${name.replace(/[^a-z0-9_-]/gi, '').toLowerCase()}xmd`;
+    const convertedName = name.replace(/[^a-z0-9_-]/gi, '').toLowerCase() || 'newcmd';
     return { convertedName, description, aliases };
 }
 
@@ -27,7 +27,7 @@ function toCaseTemplate(code, meta) {
 
 function toMineTemplate(code, meta) {
     const aliases = meta.aliases.map((a) => `'${a}'`).join(', ');
-    return `export default {\n  name: '${meta.convertedName}',\n  aliases: [${aliases}],\n  category: 'utility',\n  description: '${meta.description.replace(/'/g, "\\'")}',\n  usage: '${meta.convertedName}',\n  cooldown: 3,\n  async execute({ sock, message, args, from }) {\n${indentBlock(code, 4)}\n  }\n};`;
+    return `export default {\n  name: '${meta.convertedName}',\n  aliases: [${aliases}],\n  category: 'utility',\n  description: '${meta.description.replace(/'/g, "\\'")}',\n  usage: '${meta.convertedName} <args>',\n  cooldown: 3,\n  async execute({ sock, message, args, from }) {\n${indentBlock(code, 4)}\n  }\n};`;
 }
 
 function toPluginsTemplate(code, meta) {

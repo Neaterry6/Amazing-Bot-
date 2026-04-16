@@ -13,6 +13,11 @@ const REPLY_TTL = 10 * 60 * 1000;
 const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+const QWEN_BASE_URL = process.env.QWEN_BASE_URL || 'https://qwen.aikit.club/v1';
+const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || '';
+const QWEN_MODEL = process.env.QWEN_MODEL || 'Qwen3.6-Plus';
+const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen3.5-Plus';
+const QWEN_VIDEO_MODEL = process.env.QWEN_VIDEO_MODEL || 'Qwen3.5-Plus';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
@@ -24,6 +29,7 @@ const PERSONALITIES = {
     normal:    'You are a helpful, friendly AI assistant. Be concise and clear.',
     ilom:      'You are Ilom Bot, a confident and intelligent assistant. Be smooth, smart and direct. Keep replies sharp.',
     coder:     'You are an elite senior software engineer. Provide clean optimized code with no fluff unless asked.',
+    coderpro:  'You are Coder Pro: elite software architect, debugger, reverse engineer, and web scraper expert. Return production-ready code, clear file layout, and concise steps.' ,
     assistant: 'You are a professional assistant. Structured, straight to the point, always helpful.',
     funny:     'You are a witty comedian AI. Keep it clever and funny but still helpful.',
     teacher:   'You are a patient teacher. Explain clearly with examples and break down complex topics simply.',
@@ -31,6 +37,10 @@ const PERSONALITIES = {
 };
 
 const DEFAULT_SETTINGS = { personality: 'ilom', voiceMode: false };
+
+function delay(ms = 1200) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function normJid(jid) {
     return String(jid || '').replace(/@s\.whatsapp\.net|@c\.us|@g\.us|@broadcast|@lid/g, '').split(':')[0].replace(/[^0-9]/g, '');
@@ -110,8 +120,6 @@ function stripTrailingDetailsBlock(text) {
 }
 
 async function askOmegaAI(personality, history) {
-    if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY in environment');
-
     const systemPrompt = PERSONALITIES[personality] || PERSONALITIES.ilom;
     const messages = [
         { role: 'system', content: `${systemPrompt}
@@ -121,6 +129,32 @@ Never include <think>, <details>, or hidden reasoning in responses. Reply once w
             content: String(h.content || '').slice(0, 4000)
         }))
     ];
+
+    if (QWEN_API_KEY) {
+        const { data } = await axios.post(
+            `${QWEN_BASE_URL}/chat/completions`,
+            {
+                model: QWEN_MODEL,
+                messages,
+                temperature: LOW_RESOURCE_MODE ? 0.4 : 0.6,
+                max_tokens: LOW_RESOURCE_MODE ? 700 : 1200
+            },
+            {
+                timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+                headers: {
+                    Authorization: `Bearer ${QWEN_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        const raw = data?.choices?.[0]?.message?.content || '';
+        const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
+        if (!cleaned) throw new Error('Empty response from Qwen');
+        return cleaned;
+    }
+
+    if (!GROQ_API_KEY) throw new Error('Missing QWEN_API_KEY and GROQ_API_KEY in environment');
 
     const { data } = await axios.post(
         `${GROQ_BASE_URL}/chat/completions`,
@@ -143,6 +177,49 @@ Never include <think>, <details>, or hidden reasoning in responses. Reply once w
     const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
     if (!cleaned) throw new Error('Empty response from Groq');
     return cleaned;
+}
+
+async function qwenImageGeneration(prompt) {
+    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY');
+    const { data } = await axios.post(`${QWEN_BASE_URL}/images/generations`, {
+        model: QWEN_IMAGE_MODEL,
+        prompt,
+        size: '1024x1024'
+    }, {
+        timeout: 180000,
+        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+    });
+    const imageUrl = data?.data?.[0]?.url || data?.data?.[0]?.b64_json || data?.url;
+    if (!imageUrl) throw new Error('No generated image returned by Qwen API');
+    return imageUrl;
+}
+
+async function qwenVideoGeneration(prompt) {
+    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY');
+    const { data } = await axios.post(`${QWEN_BASE_URL}/videos/generations`, {
+        model: QWEN_VIDEO_MODEL,
+        prompt
+    }, {
+        timeout: 180000,
+        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+    });
+    return data;
+}
+
+async function qwenImageEdit(buffer, prompt) {
+    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY');
+    const form = new FormData();
+    form.append('model', QWEN_IMAGE_MODEL);
+    form.append('prompt', prompt);
+    form.append('image', buffer, { filename: 'edit.jpg', contentType: 'image/jpeg' });
+
+    const { data } = await axios.post(`${QWEN_BASE_URL}/images/edits`, form, {
+        timeout: 180000,
+        headers: { ...form.getHeaders(), Authorization: `Bearer ${QWEN_API_KEY}` }
+    });
+    const imageUrl = data?.data?.[0]?.url || data?.url;
+    if (!imageUrl) throw new Error('No edited image returned by Qwen API');
+    return imageUrl;
 }
 
 async function askClaudeAI(uid, prompt) {
@@ -169,7 +246,7 @@ async function getAIResponse(uid, settings, history) {
         return await askOmegaAI(settings.personality, history);
     } catch (error) {
         const status = error?.response?.status;
-        if (status === 404 || status === 429 || /Missing GROQ_API_KEY/i.test(String(error?.message || ''))) {
+        if (status === 401 || status === 404 || status === 429 || /Missing GROQ_API_KEY/i.test(String(error?.message || ''))) {
             const prompt = history.filter((h) => h.role !== 'system').map((h) => `${h.role}: ${h.content}`).join('\n');
             return await askClaudeAI(uid, prompt.slice(-3500));
         }
@@ -378,6 +455,7 @@ function buildChainHandler(sock, from, uid, sender) {
             const mentions = replyMessage.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
             const sent = await sock.sendMessage(from, { text: aiText, mentions }, { quoted: replyMessage });
             if (settings.voiceMode) {
+                await delay(1300);
                 await sendVoiceReply(sock, from, aiText, replyMessage);
             }
             registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
@@ -417,7 +495,10 @@ function buildAiList() {
     return [
         '🧠 Available AI Providers',
         '',
+        `• Qwen Chat: ${QWEN_MODEL} (${QWEN_BASE_URL})`,
         `• Groq Chat: ${GROQ_MODEL} (${GROQ_BASE_URL})`,
+        `• Qwen Image: ${QWEN_IMAGE_MODEL} (${QWEN_BASE_URL}/images/generations)`,
+        `• Qwen Video: ${QWEN_VIDEO_MODEL} (${QWEN_BASE_URL}/videos/generations)`,
         `• Gemini Vision: ${GEMINI_MODEL} (${GEMINI_BASE_URL})`,
         `• Claude Chat: ${CLAUDE_MODEL} (${CLAUDE_API_BASE_URL})`,
         '',
@@ -532,6 +613,60 @@ export default {
             }
         }
 
+
+        if (/^(img|image|imagine)\s+/i.test(body)) {
+            const prompt = body.replace(/^(img|image|imagine)\s+/i, '').trim();
+            if (!prompt) return await sock.sendMessage(from, { text: '❌ Provide prompt for image generation.' }, { quoted: message });
+            await sock.sendMessage(from, { text: '🎨 Generating image with Qwen... please wait.' }, { quoted: message });
+            await delay(1800);
+            try {
+                const imageUrl = await qwenImageGeneration(prompt);
+                return await sock.sendMessage(from, { image: { url: imageUrl }, caption: `🖼️ Qwen Image
+Prompt: ${prompt}` }, { quoted: message });
+            } catch (error) {
+                return await sock.sendMessage(from, { text: `❌ Image generation failed: ${error.message}` }, { quoted: message });
+            }
+        }
+
+        if (/^(vid|video)\s+/i.test(body)) {
+            const prompt = body.replace(/^(vid|video)\s+/i, '').trim();
+            if (!prompt) return await sock.sendMessage(from, { text: '❌ Provide prompt for video generation.' }, { quoted: message });
+            await sock.sendMessage(from, { text: '🎬 Generating video with Qwen... this may take longer.' }, { quoted: message });
+            await delay(2500);
+            try {
+                const out = await qwenVideoGeneration(prompt);
+                const videoUrl = out?.data?.[0]?.url || out?.url || out?.video;
+                if (videoUrl) {
+                    return await sock.sendMessage(from, { video: { url: videoUrl }, caption: `🎬 Qwen Video
+Prompt: ${prompt}` }, { quoted: message });
+                }
+                return await sock.sendMessage(from, { text: `✅ Video request submitted.
+${JSON.stringify(out).slice(0, 3000)}` }, { quoted: message });
+            } catch (error) {
+                return await sock.sendMessage(from, { text: `❌ Video generation failed: ${error.message}` }, { quoted: message });
+            }
+        }
+
+        if (/^edit(image)?\s+/i.test(body)) {
+            const prompt = body.replace(/^edit(image)?\s+/i, '').trim();
+            const quotedImageForEdit = message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
+            const directImageForEdit = message.message?.imageMessage;
+            if (!quotedImageForEdit && !directImageForEdit) {
+                return await sock.sendMessage(from, { text: '❌ Reply to an image with: ai edit <prompt>' }, { quoted: message });
+            }
+            await sock.sendMessage(from, { text: '🛠️ Editing image with Qwen...' }, { quoted: message });
+            await delay(2000);
+            try {
+                const target = quotedImageForEdit ? { message: { imageMessage: quotedImageForEdit } } : message;
+                const buffer = await downloadMediaMessage(target, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
+                const editedUrl = await qwenImageEdit(buffer, prompt || 'Improve image quality while keeping style');
+                return await sock.sendMessage(from, { image: { url: editedUrl }, caption: `✅ Image edited
+Prompt: ${prompt || 'default'}` }, { quoted: message });
+            } catch (error) {
+                return await sock.sendMessage(from, { text: `❌ Image edit failed: ${error.message}` }, { quoted: message });
+            }
+        }
+
         const quotedImage = message.message?.extendedTextMessage?.contextInfo?.quotedMessage?.imageMessage;
         const directImage = message.message?.imageMessage;
         if (quotedImage || directImage) {
@@ -559,6 +694,7 @@ export default {
             if (settings.voiceMode || /start responding with vn/i.test(body)) {
                 settings.voiceMode = true;
                 await saveSettings(uid, settings);
+                await delay(1300);
                 await sendVoiceReply(sock, from, aiText, message);
             }
             registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));

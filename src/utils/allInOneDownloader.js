@@ -24,7 +24,8 @@ export function pickBestMedia(data = {}, prefer = 'video') {
         data?.data?.download, data?.data?.url, data?.data?.link,
         data?.audio, data?.video,
         data?.result?.audio, data?.result?.video,
-        data?.data?.audio, data?.data?.video
+        data?.data?.audio, data?.data?.video,
+        data?.direct, data?.result?.direct, data?.data?.direct
     ];
 
     const nestedList = [
@@ -46,7 +47,21 @@ export function pickBestMedia(data = {}, prefer = 'video') {
         if (generic) candidates.push(generic);
     }
 
-    return firstNonEmpty(...candidates);
+    const flatCandidates = [];
+    for (const candidate of candidates) {
+        if (Array.isArray(candidate)) {
+            for (const item of candidate) {
+                if (typeof item === 'string') flatCandidates.push(item);
+                else if (item && typeof item === 'object') {
+                    flatCandidates.push(firstNonEmpty(item.url, item.link, item.video, item.audio, item.download));
+                }
+            }
+            continue;
+        }
+        flatCandidates.push(candidate);
+    }
+
+    return firstNonEmpty(...flatCandidates);
 }
 
 export function parseAllInOneMeta(payload = {}) {
