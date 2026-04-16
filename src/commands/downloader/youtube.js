@@ -12,7 +12,9 @@ async function getDownloadForType(videoUrl, type) {
             throw error;
         }
     }
-    const link = pickBestMedia(payload, type === 'audio' ? 'audio' : 'video');
+    let link = pickBestMedia(payload, type === 'audio' ? 'audio' : 'video');
+    if (!link && type === 'audio') link = pickBestMedia(payload, 'video');
+    if (!link && type === 'video') link = pickBestMedia(payload, 'audio');
     if (!link) throw new Error('No downloadable media link returned by API');
     const meta = parseAllInOneMeta(payload);
     return { link, meta };

@@ -216,7 +216,7 @@ function findReplyHandler(stanzaId) {
 
 function findChatHandler(chatJid) {
     if (!global.chatHandlers || !chatJid) return null;
-    return global.chatHandlers[chatJid] || null;
+    return global.chatHandlers[chatJid] || global.chatHandlers['*'] || null;
 }
 
 export function registerChatHandler(chatJid, handler, ttlMs = 10 * 60 * 1000) {

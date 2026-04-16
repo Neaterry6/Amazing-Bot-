@@ -256,3 +256,5 @@ export const searchCommands = (query) => commandManager.searchCommands(query);
 export const getSystemStats = () => commandManager.getSystemStats();
 export const recordCommandUsage = (name, time, success) => commandManager.recordCommandUsage(name, time, success);
 export const getTopCommands = (limit) => commandManager.getTopCommands(limit);
+
+export default commandManager;

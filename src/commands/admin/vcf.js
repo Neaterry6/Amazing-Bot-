@@ -49,7 +49,10 @@ export default {
                 const jid = participant.id || '';
                 const number = jid.split('@')[0]?.replace(/\D/g, '');
                 if (!number) continue;
-                const waName = await sock.getName(jid);
+                let waName = participant.notify || participant.name || participant.vname || participant.pushName || '';
+                if (!waName && typeof sock.getName === 'function') {
+                    try { waName = await sock.getName(jid); } catch {}
+                }
                 cards.push(buildContactCard({
                     fullName: waName || `GC Member ${idx}`,
                     number,

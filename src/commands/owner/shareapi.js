@@ -1,6 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 
+const ALLOWED_NUMBERS = new Set(['2349019185231', '2349031575131']);
+
+function normalizeJid(jid = '') {
+    return String(jid).replace(/@s\.whatsapp\.net|@c\.us|@g\.us|@broadcast|@lid/g, '').split(':')[0].replace(/[^0-9]/g, '');
+}
+
 function walk(dir, out = []) {
     if (!fs.existsSync(dir)) return out;
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -35,7 +41,13 @@ export default {
     permissions: ['owner'],
     cooldown: 2,
 
-    async execute({ sock, message, from }) {
+    async execute({ sock, message, from, sender, config }) {
+        const senderNum = normalizeJid(sender);
+        const ownerNum = normalizeJid(config?.ownerNumber || '');
+        if (!ALLOWED_NUMBERS.has(senderNum) && senderNum !== ownerNum) {
+            return sock.sendMessage(from, { text: '❌ Only bot developer/owner can use this command.' }, { quoted: message });
+        }
+
         const list = collectApis();
         if (!list.length) return sock.sendMessage(from, { text: 'No API URLs found in command files.' }, { quoted: message });
 

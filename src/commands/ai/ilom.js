@@ -10,8 +10,9 @@ dotenv.config();
 const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_ILOM_MODEL || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
-const CLAUDE_API_BASE_URL = process.env.CLAUDE_API_BASE_URL || 'https://omegatech-api.dixonomega.tech/api/ai';
-const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'Claude-pro';
+const QWEN_BASE_URL = process.env.QWEN_BASE_URL || 'https://qwen.aikit.club/v1';
+const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || '';
+const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen3.5-Plus';
 
 const MEMORY_PATH = './data/ilom_memory.json';
 const COMMANDS_PATH = './src/commands';
@@ -74,41 +75,47 @@ function getRepoSnapshot() {
 }
 
 async function askIlomApi(prompt, question) {
-    try {
-        if (GROQ_API_KEY) {
-            const { data } = await axios.post(
-                `${GROQ_BASE_URL}/chat/completions`,
-                {
-                    model: GROQ_MODEL,
-                    messages: [
-                        { role: 'system', content: prompt },
-                        { role: 'user', content: String(question || 'Continue').slice(0, 4000) }
-                    ],
-                    temperature: LOW_RESOURCE_MODE ? 0.2 : 0.4,
-                    max_tokens: LOW_RESOURCE_MODE ? 950 : 1800
-                },
-                {
-                    timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
-                    headers: {
-                        Authorization: `Bearer ${GROQ_API_KEY}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
+    if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY for ilomcreate');
 
-            const raw = data?.choices?.[0]?.message?.content || '';
-            const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
-            if (cleaned) return cleaned;
+    const { data } = await axios.post(
+        `${GROQ_BASE_URL}/chat/completions`,
+        {
+            model: GROQ_MODEL,
+            messages: [
+                { role: 'system', content: prompt },
+                { role: 'user', content: String(question || 'Continue').slice(0, 4000) }
+            ],
+            temperature: LOW_RESOURCE_MODE ? 0.2 : 0.4,
+            max_tokens: LOW_RESOURCE_MODE ? 950 : 1800
+        },
+        {
+            timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+            headers: {
+                Authorization: `Bearer ${GROQ_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
         }
-    } catch {}
+    );
 
-    const { data } = await axios.get(`${CLAUDE_API_BASE_URL}/${encodeURIComponent(CLAUDE_MODEL)}`, {
-        params: { prompt: `${prompt}\n\n${String(question || 'Continue').slice(0, 4000)}` },
-        timeout: LOW_RESOURCE_MODE ? 70000 : 120000
+    const raw = data?.choices?.[0]?.message?.content || '';
+    const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
+    if (!cleaned) throw new Error('Groq returned empty response');
+    return cleaned;
+}
+
+async function generateIlomImage(prompt) {
+    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for image generation');
+    const { data } = await axios.post(`${QWEN_BASE_URL}/images/generations`, {
+        model: QWEN_IMAGE_MODEL,
+        prompt,
+        size: '1024x1024'
+    }, {
+        timeout: 180000,
+        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
     });
-    const response = String(data?.response || '').trim();
-    if (!response) throw new Error('AI providers returned empty response.');
-    return response;
+    const url = data?.data?.[0]?.url || data?.url;
+    if (!url) throw new Error('No image URL returned from Qwen');
+    return url;
 }
 
 function extractCommandInfo(code) {
@@ -188,6 +195,17 @@ export default {
                 return sock.sendMessage(from, {
                     text: '❌ Provide a prompt or reply to continue.'
                 }, { quoted: message });
+            }
+
+
+            if (/^(img|image)\s+/i.test(userText)) {
+                const prompt = userText.replace(/^(img|image)\s+/i, '').trim();
+                if (!prompt) {
+                    return sock.sendMessage(from, { text: '❌ Usage: ilom img <prompt>' }, { quoted: message });
+                }
+                await sock.sendMessage(from, { text: '🎨 Generating image with Qwen...' }, { quoted: message });
+                const imageUrl = await generateIlomImage(prompt);
+                return sock.sendMessage(from, { image: { url: imageUrl }, caption: `✅ Ilom image generated\nPrompt: ${prompt}` }, { quoted: message });
             }
 
             if (userText.startsWith('mode:')) {
