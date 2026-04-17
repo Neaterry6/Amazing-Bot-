@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
-import commandManager from '../../utils/commandManager.js';
 
 dotenv.config();
 
@@ -15,11 +14,11 @@ const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN |
 const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen3.5-Plus';
 
 const MEMORY_PATH = './data/ilom_memory.json';
-const COMMANDS_PATH = './src/commands';
 const REPO_ROOT = process.cwd();
 const LOW_RESOURCE_MODE = process.env.LOW_RESOURCE_MODE === 'true';
 const LONG_OUTPUT_LIMIT = LOW_RESOURCE_MODE ? 2200 : 3500;
 const REPLY_TTL = 10 * 60 * 1000;
+const BOT_JID = process.env.BOT_JID || '867051314767696@bot';
 
 function loadMemory() {
     try {
@@ -120,45 +119,6 @@ async function generateIlomImage(prompt) {
     return url;
 }
 
-function extractCommandInfo(code) {
-    const nameMatch = code.match(/name:\s*['"`](.*?)['"`]/);
-    const categoryMatch = code.match(/category:\s*['"`](.*?)['"`]/);
-
-    const safeName = (nameMatch?.[1] || `cmd_${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
-    const safeCategory = (categoryMatch?.[1] || 'general').replace(/[^a-zA-Z0-9_-]/g, '').toLowerCase();
-
-    return { name: safeName || `cmd_${Date.now()}`, category: safeCategory || 'general' };
-}
-
-function saveCommand(code) {
-    const { name, category } = extractCommandInfo(code);
-    const dir = path.join(COMMANDS_PATH, category);
-
-    fs.mkdirSync(dir, { recursive: true });
-
-    const filePath = path.join(dir, `${name}.js`);
-    fs.writeFileSync(filePath, code);
-
-    return filePath;
-}
-
-function saveGeneratedOutput(output) {
-    const fileMatch = output.match(/^\s*FILE:\s*([^\n]+)\n([\s\S]*)$/i);
-    if (fileMatch) {
-        const relPath = fileMatch[1].trim().replace(/^\/+/, '');
-        const content = fileMatch[2].trim();
-        const safeBase = path.resolve(REPO_ROOT);
-        const resolved = path.resolve(REPO_ROOT, relPath);
-        if (!resolved.startsWith(safeBase)) throw new Error('Unsafe target path');
-        fs.mkdirSync(path.dirname(resolved), { recursive: true });
-        fs.writeFileSync(resolved, content);
-        return resolved;
-    }
-
-    if (output.includes('export default')) return saveCommand(output);
-    return null;
-}
-
 function getQuotedMessage(message) {
     return message.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 }
@@ -171,6 +131,52 @@ function registerReplyHandler(msgId, handler) {
 
 function normalizeText(raw = '') {
     return String(raw || '').trim();
+}
+
+function detectLang(fileName = 'code.js') {
+    const ext = path.extname(fileName).toLowerCase();
+    const map = { '.js': 'javascript', '.ts': 'typescript', '.json': 'json', '.py': 'python', '.sh': 'bash', '.md': 'markdown' };
+    return map[ext] || 'text';
+}
+
+function tokenize(codeStr, lang = 'javascript') {
+    const keywords = {
+        javascript: ['import', 'export', 'const', 'let', 'var', 'function', 'return', 'async', 'await', 'class', 'new', 'if', 'else', 'for', 'while', 'try', 'catch'],
+        typescript: ['import', 'export', 'const', 'let', 'var', 'function', 'return', 'async', 'await', 'class', 'interface', 'type', 'enum'],
+        python: ['import', 'from', 'def', 'return', 'class', 'if', 'else', 'for', 'while', 'try', 'except']
+    };
+    const langKeys = keywords[lang] || keywords.javascript;
+    return String(codeStr || '').split('\n').map((line) => {
+        const trimmed = line.trim();
+        if (!trimmed) return { highlightType: 0, codeContent: `${line}\n` };
+        if (trimmed.startsWith('//') || trimmed.startsWith('#') || trimmed.startsWith('--') || trimmed.startsWith('*')) return { highlightType: 4, codeContent: `${line}\n` };
+        const hasKeyword = langKeys.some((kw) => new RegExp(`(^|\\s|\\(|;)${kw}(\\s|\\(|;|$|:)`).test(trimmed));
+        if (hasKeyword) return { highlightType: 1, codeContent: `${line}\n` };
+        if (trimmed.includes('(')) return { highlightType: 3, codeContent: `${line}\n` };
+        if ((line.match(/"/g) || []).length >= 2 || (line.match(/'/g) || []).length >= 2) return { highlightType: 2, codeContent: `${line}\n` };
+        return { highlightType: 0, codeContent: `${line}\n` };
+    });
+}
+
+async function sendNativeCodeBlock(sock, jid, codeContent, fileName = 'code.js') {
+    const lang = detectLang(fileName);
+    const blocks = tokenize(codeContent, lang);
+    return sock.relayMessage(jid, {
+        botForwardedMessage: {
+            message: {
+                richResponseMessage: {
+                    messageType: 1,
+                    submessages: [{ messageType: 5, codeMetadata: { codeLanguage: lang, codeBlocks: blocks } }],
+                    contextInfo: {
+                        forwardingScore: 999,
+                        isForwarded: true,
+                        forwardedAiBotMessageInfo: { botJid: BOT_JID },
+                        forwardOrigin: 4
+                    }
+                }
+            }
+        }
+    }, {});
 }
 
 export default {
@@ -250,9 +256,7 @@ USER:\n${userText}
 COMMAND TEMPLATE REQUIREMENT:
 - When creating commands, output complete JS command file using export default.
 - Include: name, category, description, usage, cooldown, and execute().
-- To overwrite existing files ONLY when user clearly asks install/save/write/apply, respond with:
-FILE: relative/path/from/repo
-<full file content>
+- Never auto-install or auto-save files. Always return code directly in chat.
 - Prefer raw code output without markdown wrappers.`;
 
             const output = await askIlomApi(finalPrompt, userText);
@@ -262,15 +266,14 @@ FILE: relative/path/from/repo
             memory[sender] = userMemory;
             saveMemory(memory);
 
-            const explicitCreateIntent = /\b(create|generate|build|make)\b/i.test(userText) && /\b(command|plugin|bot cmd|bot command)\b/i.test(userText);
-            const shouldInstall = explicitCreateIntent && /\b(install|save|write|apply|overwrite|replace)\b/i.test(userText);
-            const installedPath = shouldInstall ? saveGeneratedOutput(output) : null;
-            if (installedPath) {
-                await commandManager.reloadAllCommands().catch(() => null);
-                const sent = await sock.sendMessage(from, {
-                    text: `✅ File updated successfully!\n\n📂 ${installedPath}\n\n🔄 If needed, restart bot to ensure full reload.`
+            const generatedCode = String(output || '').trim();
+            const looksLikeCode = generatedCode.includes('export default') || generatedCode.includes('module.exports') || generatedCode.includes('function ');
+            if (looksLikeCode) {
+                const sentInfo = await sock.sendMessage(from, {
+                    text: `📄 *Generated command output*\nMode: Native code view\nLines: ${generatedCode.split('\n').length}\nSize: ${Buffer.byteLength(generatedCode, 'utf8')} bytes`
                 }, { quoted: message });
-                registerReplyHandler(sent.key.id, async (replyText, replyMessage) => {
+                await sendNativeCodeBlock(sock, from, generatedCode, 'generated-command.js');
+                registerReplyHandler(sentInfo.key.id, async (replyText, replyMessage) => {
                     await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
                 });
                 return;
