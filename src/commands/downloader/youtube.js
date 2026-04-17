@@ -1,4 +1,5 @@
 import yts from 'yt-search';
+import axios from 'axios';
 import { fetchAllInOneDownload, fetchAllInOneFallback, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
 
 async function getDownloadForType(videoUrl, type) {
@@ -15,6 +16,15 @@ async function getDownloadForType(videoUrl, type) {
     let link = pickBestMedia(payload, type === 'audio' ? 'audio' : 'video');
     if (!link && type === 'audio') link = pickBestMedia(payload, 'video');
     if (!link && type === 'video') link = pickBestMedia(payload, 'audio');
+    if (!link) {
+        const format = type === 'audio' ? 'mp3' : 'mp4';
+        const { data } = await axios.get('https://api.ootaizumi.web.id/downloader/youtube', {
+            params: { url: videoUrl, format },
+            timeout: 45000
+        });
+        link = data?.result?.download || '';
+        payload = { ...(payload || {}), ...(data?.result || {}), title: data?.result?.title || payload?.title };
+    }
     if (!link) throw new Error('No downloadable media link returned by API');
     const meta = parseAllInOneMeta(payload);
     return { link, meta };

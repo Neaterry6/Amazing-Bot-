@@ -55,6 +55,8 @@ STRICT RULES:
 - For code tasks return final code directly; no markdown wrappers.
 - Never output <think> or hidden reasoning.
 - Keep responses concise and production-safe.
+- Default behavior is normal chat assistant.
+- Only generate command files when user explicitly asks to create/build/generate a command.
 
 CURRENT MODE: ${mode}
 `;
@@ -184,7 +186,7 @@ export default {
     async execute({ sock, message, args, from, sender }) {
         try {
             const memory = loadMemory();
-            const userMemory = memory[sender] || { history: [], mode: 'coder' };
+            const userMemory = memory[sender] || { history: [], mode: 'chat' };
 
             const quoted = getQuotedMessage(message);
             let userText = normalizeText(args.join(' '));
@@ -211,7 +213,7 @@ export default {
             if (userText.startsWith('mode:')) {
                 const mode = userText.split(':')[1]?.trim();
                 if (!mode) {
-                    return sock.sendMessage(from, { text: '❌ Usage: mode:<coder|pro|friendly|savage>' }, { quoted: message });
+                    return sock.sendMessage(from, { text: '❌ Usage: mode:<chat|coder|pro|friendly|savage|scraper>' }, { quoted: message });
                 }
 
                 userMemory.mode = mode;
@@ -260,7 +262,8 @@ FILE: relative/path/from/repo
             memory[sender] = userMemory;
             saveMemory(memory);
 
-            const shouldInstall = /\b(install|save|write|apply|overwrite|replace)\b/i.test(userText);
+            const explicitCreateIntent = /\b(create|generate|build|make)\b/i.test(userText) && /\b(command|plugin|bot cmd|bot command)\b/i.test(userText);
+            const shouldInstall = explicitCreateIntent && /\b(install|save|write|apply|overwrite|replace)\b/i.test(userText);
             const installedPath = shouldInstall ? saveGeneratedOutput(output) : null;
             if (installedPath) {
                 await commandManager.reloadAllCommands().catch(() => null);
