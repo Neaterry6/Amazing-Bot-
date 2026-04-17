@@ -31,12 +31,23 @@ export default {
                 await sock.sendMessage(from, { text: '⏳ Preparing download...' }, { quoted: replyMessage });
                 const dl = await axios.get(DL_API, { params: { url: pick.videoUrl }, timeout: 120000 });
                 const payload = dl?.data || {};
-                const mediaUrl = payload?.direct || payload?.media?.[0]?.url;
-                if (!mediaUrl) return sock.sendMessage(from, { text: '❌ Download link not available.' }, { quoted: replyMessage });
-                return sock.sendMessage(from, {
-                    video: { url: mediaUrl },
-                    caption: `🎬 ${payload.title || pick.title}`
-                }, { quoted: replyMessage });
+                const mediaUrls = [
+                    payload?.direct,
+                    ...(Array.isArray(payload?.media) ? payload.media.map((m) => m?.url).filter(Boolean) : []),
+                    ...(Array.isArray(payload?.videos) ? payload.videos.map((m) => m?.url || m).filter(Boolean) : []),
+                    ...(Array.isArray(payload?.result) ? payload.result.map((m) => m?.url || m).filter(Boolean) : [])
+                ].filter(Boolean);
+                if (!mediaUrls.length) return sock.sendMessage(from, { text: '❌ Download link not available.' }, { quoted: replyMessage });
+                const uniqueUrls = [...new Set(mediaUrls)].slice(0, 2);
+                for (let i = 0; i < uniqueUrls.length; i++) {
+                    await sock.sendMessage(from, {
+                        document: { url: uniqueUrls[i] },
+                        mimetype: 'video/mp4',
+                        fileName: `${(payload.title || pick.title || 'bilibili').replace(/[\\/:*?"<>|]/g, '').slice(0, 80)}_${i + 1}.mp4`,
+                        caption: i === 0 ? `🎬 ${payload.title || pick.title}` : undefined
+                    }, { quoted: replyMessage });
+                }
+                return null;
             }
         };
     }

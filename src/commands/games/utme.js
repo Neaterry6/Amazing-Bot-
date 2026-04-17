@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const userScores = new Map();
 const userStreaks = new Map();
+const userButtonMode = new Map();
 
 async function getAIExplanation(question, correctAnswer, userAnswer, subject, isCorrect, options) {
     if (isCorrect) {
@@ -95,6 +96,16 @@ export default {
 
     async execute({ sock, message, args, from, sender, prefix }) {
         try {
+            const modeArg = (args[0] || '').toLowerCase();
+            if (modeArg === 'button' || modeArg === 'buttons') {
+                const state = (args[1] || '').toLowerCase();
+                if (!['on', 'off'].includes(state)) {
+                    return await sock.sendMessage(from, { text: `❌ Usage: ${prefix}utme button <on|off>` }, { quoted: message });
+                }
+                userButtonMode.set(sender, state === 'on');
+                return await sock.sendMessage(from, { text: `✅ UTME button mode ${state.toUpperCase()}` }, { quoted: message });
+            }
+
             if (args.length === 0) {
                 return this.showSubjects({ sock, message, from, prefix, sender });
             }
@@ -193,6 +204,7 @@ export default {
         questionText += `⏭️ Type NEXT for next question\n`;
         questionText += `🛑 Type STOP to end quiz`;
 
+        const buttonMode = userButtonMode.get(sender) === true;
         let sentMsg;
 
         if (questionData.image) {
@@ -206,10 +218,26 @@ export default {
                     text: questionText
                 }, { quoted: message });
             }
+        } else if (buttonMode) {
+            try {
+                sentMsg = await sock.sendMessage(from, {
+                    text: questionText,
+                    footer: 'Tap an option',
+                    buttons: [
+                        { buttonId: 'UTME_A', buttonText: { displayText: 'A' }, type: 1 },
+                        { buttonId: 'UTME_B', buttonText: { displayText: 'B' }, type: 1 },
+                        { buttonId: 'UTME_C', buttonText: { displayText: 'C' }, type: 1 },
+                        { buttonId: 'UTME_D', buttonText: { displayText: 'D' }, type: 1 },
+                        { buttonId: 'UTME_NEXT', buttonText: { displayText: 'NEXT' }, type: 1 },
+                        { buttonId: 'UTME_STOP', buttonText: { displayText: 'STOP' }, type: 1 }
+                    ],
+                    headerType: 1
+                }, { quoted: message });
+            } catch {
+                sentMsg = await sock.sendMessage(from, { text: questionText }, { quoted: message });
+            }
         } else {
-            sentMsg = await sock.sendMessage(from, {
-                text: questionText
-            }, { quoted: message });
+            sentMsg = await sock.sendMessage(from, { text: questionText }, { quoted: message });
         }
 
         if (sentMsg && sentMsg.key) {
@@ -226,7 +254,8 @@ export default {
                     return;
                 }
 
-                const input = replyText.toUpperCase().trim();
+                const btnReply = replyMessage.message?.buttonsResponseMessage?.selectedButtonId || '';
+                const input = (btnReply.replace('UTME_', '') || replyText).toUpperCase().trim();
 
                 if (input === 'NEXT' || input === 'N') {
                     delete global.replyHandlers[sentMsg.key.id];
@@ -407,6 +436,7 @@ export default {
 
         subjectsText += `💡 *Commands:*\n`;
         subjectsText += `📝 Start: ${prefix}utme mathematics\n`;
+        subjectsText += `🎛️ Buttons: ${prefix}utme button <on|off>\n`;
         if (hasStats) {
             subjectsText += `📊 Stats: ${prefix}utme score\n`;
         }
