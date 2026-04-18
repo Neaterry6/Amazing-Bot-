@@ -7,36 +7,27 @@ function getQuotedText(message) {
 }
 
 const VOICES = {
-    en: 'en',
-    ng: 'en-ng',
-    us: 'en-us',
-    uk: 'en-uk',
-    au: 'en-au',
-    hi: 'hi',
-    yo: 'yo',
-    ig: 'ig'
+    woman1: { voice: 'woman1', language: 'English' },
+    woman2: { voice: 'woman2', language: 'English' },
+    woman3: { voice: 'woman3', language: 'English' },
+    man1: { voice: 'man1', language: 'English' },
+    man2: { voice: 'man2', language: 'English' },
+    man3: { voice: 'man3', language: 'English' }
 };
 
 async function fetchAudio(text, voice) {
-    const streamElementsVoice = {
-        ng: 'Brian',
-        us: 'Joanna',
-        uk: 'Amy',
-        au: 'Russell',
-        en: 'Joanna'
-    }[voice] || 'Joanna';
-
-    const seUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(streamElementsVoice)}&text=${encodeURIComponent(text)}`;
+    const mapped = VOICES[voice] || VOICES.woman1;
     try {
-        const se = await axios.get(seUrl, {
-            responseType: 'arraybuffer',
-            timeout: 90000,
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+        const { data } = await axios.get('https://omegatech-api.dixonomega.tech/api/ai/text2speech-v3', {
+            params: { text, voice: mapped.voice, language: mapped.language },
+            timeout: 90000
         });
-        return Buffer.from(se.data);
+        const audioUrl = data?.audio;
+        if (!audioUrl) throw new Error('No audio URL returned');
+        const res = await axios.get(audioUrl, { responseType: 'arraybuffer', timeout: 90000 });
+        return Buffer.from(res.data);
     } catch {
-        const tl = VOICES[voice] || 'en-ng';
-        const gUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${encodeURIComponent(tl)}&q=${encodeURIComponent(text.slice(0, 500))}`;
+        const gUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(text.slice(0, 500))}`;
         const g = await axios.get(gUrl, {
             responseType: 'arraybuffer',
             timeout: 90000,
@@ -55,7 +46,7 @@ export default {
     cooldown: 5,
 
     async execute({ sock, message, from, args }) {
-        let voice = 'ng';
+        let voice = 'woman1';
         let input = args.join(' ').trim();
 
         const first = (args[0] || '').toLowerCase();

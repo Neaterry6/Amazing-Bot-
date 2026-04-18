@@ -52,7 +52,8 @@ const DEFAULT_SETTINGS = {
     voiceMode: false,
     provider: 'qwen',
     model: '',
-    scraperMode: false
+    scraperMode: false,
+    commandTool: false
 };
 
 const PROVIDER_ALIASES = {
@@ -70,6 +71,7 @@ const PROVIDER_DEFAULT_MODELS = {
     gemini: GEMINI_MODEL,
     claude: CLAUDE_MODEL
 };
+let qwenModelCache = { at: 0, models: [] };
 
 function delay(ms = 1200) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -174,19 +176,40 @@ Never include <think>, <details>, or hidden reasoning in responses. Reply once w
         temperature: LOW_RESOURCE_MODE ? 0.4 : 0.6,
         max_tokens: LOW_RESOURCE_MODE ? 1200 : 2600
     };
-    if (settings?.scraperMode) payload.tools = [{ type: 'web_search' }];
+    const tools = [];
+    if (settings?.scraperMode) tools.push({ type: 'web_search' });
+    if (settings?.commandTool) tools.push({ type: 'code' });
+    if (tools.length) payload.tools = tools;
 
-    const { data } = await axios.post(
+    const postQwen = async (modelName) => axios.post(
         `${QWEN_BASE_URL}/chat/completions`,
-        payload,
+        { ...payload, model: modelName || payload.model },
         {
             timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
-            headers: {
-                Authorization: `Bearer ${QWEN_API_KEY}`,
-                'Content-Type': 'application/json'
-            }
+            headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
         }
     );
+
+    let data;
+    try {
+        ({ data } = await postQwen(payload.model));
+    } catch (error) {
+        const msg = error?.response?.data?.error?.message || error?.message || '';
+        if (!/model not found|unknown model|invalid model/i.test(msg)) throw error;
+        let models = qwenModelCache.models;
+        if (!models.length || (Date.now() - qwenModelCache.at > 5 * 60 * 1000)) {
+            const modelRes = await axios.get(`${QWEN_BASE_URL}/models`, {
+                timeout: 30000,
+                headers: { Authorization: `Bearer ${QWEN_API_KEY}` }
+            });
+            models = (modelRes?.data?.data || []).map((m) => m.id).filter(Boolean);
+            qwenModelCache = { at: Date.now(), models };
+        }
+        const fallback = [QWEN_MODEL, 'Qwen3.6-Plus', 'Qwen3.5-Plus', 'qwen-max-latest']
+            .find((m) => models.includes(m)) || models[0];
+        if (!fallback) throw error;
+        ({ data } = await postQwen(fallback));
+    }
     const raw = data?.choices?.[0]?.message?.content || '';
     const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
     if (!cleaned) throw new Error('Empty response from Qwen');
@@ -482,6 +505,19 @@ async function getDownloadUrl(url) {
     };
 }
 
+async function fetchWebsiteScreenshot(url, quality = 'hd') {
+    const width = quality === 'fhd' ? 1920 : 1366;
+    const primary = `https://image.thum.io/get/fullpage/noanimate/width/${width}/${encodeURIComponent(url)}`;
+    try {
+        const { data } = await axios.get(primary, { responseType: 'arraybuffer', timeout: 65000 });
+        return Buffer.from(data);
+    } catch {
+        const fallback = `https://kaiz-apis.gleeze.com/api/screenshot?url=${encodeURIComponent(url)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`;
+        const { data } = await axios.get(fallback, { responseType: 'arraybuffer', timeout: 65000 });
+        return Buffer.from(data);
+    }
+}
+
 function extractBodyText(message, args) {
     const fromArgs = args.join(' ').trim();
     if (fromArgs) return fromArgs;
@@ -576,6 +612,7 @@ function buildHelp(settings, historyLen, prefix) {
         `Model: ${settings.model || PROVIDER_DEFAULT_MODELS[settings.provider || 'qwen']}`,
         `Voice notes: ${settings.voiceMode ? 'ON' : 'OFF'}`,
         `Scraper mode: ${settings.scraperMode ? 'ON' : 'OFF'}`,
+        `Command tool: ${settings.commandTool ? 'ON' : 'OFF'}`,
         `Memory:      ${historyLen} messages`,
         ``,
         `${p}ai <question>`,
@@ -584,7 +621,7 @@ function buildHelp(settings, historyLen, prefix) {
         `${p}ai -reset`,
         `${p}ai vn on`,
         `${p}ai vn off`,
-        `${p}ai set <provider|personality|model|scraper> <value>`,
+        `${p}ai set <provider|personality|model|scraper|cmdtool> <value>`,
         `${p}ai set qwen | groq | gemini | cloudpro`,
         `${p}ai set coderpro | scraper`,
         `${p}ai -mode:<name>`,
@@ -663,7 +700,8 @@ export default {
                     `Model: ${settings.model || PROVIDER_DEFAULT_MODELS[settings.provider || 'qwen']}`,
                     `Memory:      ${history.length} messages`,
                     `Voice notes: ${settings.voiceMode ? 'ON' : 'OFF'}`,
-                    `Scraper mode: ${settings.scraperMode ? 'ON' : 'OFF'}`
+                    `Scraper mode: ${settings.scraperMode ? 'ON' : 'OFF'}`,
+                    `Command tool: ${settings.commandTool ? 'ON' : 'OFF'}`
                 ].join('\n')
             }, { quoted: message });
         }
@@ -719,6 +757,13 @@ export default {
                 await saveSettings(uid, settings);
                 return await sock.sendMessage(from, { text: `✅ Scraper mode ${settings.scraperMode ? 'enabled' : 'disabled'}.` }, { quoted: message });
             }
+
+            if (key === 'cmdtool' || key === 'commandtool' || key === 'tool') {
+                const v = value.toLowerCase();
+                settings.commandTool = ['on', 'true', '1', 'yes', 'mode'].includes(v) || value === '';
+                await saveSettings(uid, settings);
+                return await sock.sendMessage(from, { text: `✅ Command tool ${settings.commandTool ? 'enabled' : 'disabled'} for Qwen.` }, { quoted: message });
+            }
         }
 
         if (body.toLowerCase() === '-reset') {
@@ -746,6 +791,25 @@ export default {
                 }, { quoted: message });
             } catch (error) {
                 return await sock.sendMessage(from, { text: `❌ Download failed.\n${error.message}` }, { quoted: message });
+            }
+        }
+
+        if (/^(screen|screenshot|ss)\s+/i.test(body)) {
+            const rest = body.replace(/^(screen|screenshot|ss)\s+/i, '').trim();
+            const [urlCandidate, qualityCandidate] = rest.split(/\s+/);
+            const target = String(urlCandidate || '');
+            if (!/^https?:\/\//i.test(target)) {
+                return await sock.sendMessage(from, { text: '❌ Usage: ai screenshot <https://url> [hd|fhd]' }, { quoted: message });
+            }
+            const quality = ['hd', 'fhd'].includes(String(qualityCandidate || '').toLowerCase())
+                ? String(qualityCandidate).toLowerCase()
+                : 'hd';
+            await sock.sendMessage(from, { text: `📸 Capturing ${quality.toUpperCase()} screenshot...` }, { quoted: message });
+            try {
+                const shot = await fetchWebsiteScreenshot(target, quality);
+                return await sock.sendMessage(from, { image: shot, caption: `📸 ${target}` }, { quoted: message });
+            } catch (error) {
+                return await sock.sendMessage(from, { text: `❌ Screenshot failed: ${error.message}` }, { quoted: message });
             }
         }
 

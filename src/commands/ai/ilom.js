@@ -56,6 +56,11 @@ STRICT RULES:
 - Keep responses concise and production-safe.
 - Default behavior is normal chat assistant.
 - Only generate command files when user explicitly asks to create/build/generate a command.
+- You can generate any command architecture by default.
+- If user explicitly asks for "my structure", use this command shape:
+  export default { name, aliases, category, description, usage, cooldown, async execute({ sock, message, args, from, sender, prefix }) { ... } }.
+- Never force only one structure unless user requested it.
+- If user asks to use tools/function calls, design output for OpenAI-style tool calling and include safe guardrails against shell bypass tricks (like cat-based exfiltration).
 
 CURRENT MODE: ${mode}
 `;
@@ -117,6 +122,19 @@ async function generateIlomImage(prompt) {
     const url = data?.data?.[0]?.url || data?.url;
     if (!url) throw new Error('No image URL returned from Qwen');
     return url;
+}
+
+async function captureWebsite(url, quality = 'hd') {
+    const width = quality === 'fhd' ? 1920 : 1366;
+    const primary = `https://image.thum.io/get/fullpage/noanimate/width/${width}/${encodeURIComponent(url)}`;
+    try {
+        const { data } = await axios.get(primary, { responseType: 'arraybuffer', timeout: 65000 });
+        return Buffer.from(data);
+    } catch {
+        const fallback = `https://kaiz-apis.gleeze.com/api/screenshot?url=${encodeURIComponent(url)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`;
+        const { data } = await axios.get(fallback, { responseType: 'arraybuffer', timeout: 65000 });
+        return Buffer.from(data);
+    }
 }
 
 function getQuotedMessage(message) {
@@ -214,6 +232,20 @@ export default {
                 await sock.sendMessage(from, { text: '🎨 Generating image with Qwen...' }, { quoted: message });
                 const imageUrl = await generateIlomImage(prompt);
                 return sock.sendMessage(from, { image: { url: imageUrl }, caption: `✅ Ilom image generated\nPrompt: ${prompt}` }, { quoted: message });
+            }
+
+            if (/^(screen|screenshot|ss)\s+/i.test(userText)) {
+                const rest = userText.replace(/^(screen|screenshot|ss)\s+/i, '').trim();
+                const [urlCandidate, qualityCandidate] = rest.split(/\s+/);
+                if (!/^https?:\/\//i.test(String(urlCandidate || ''))) {
+                    return sock.sendMessage(from, { text: '❌ Usage: ilom screenshot <https://url> [hd|fhd]' }, { quoted: message });
+                }
+                const quality = ['hd', 'fhd'].includes(String(qualityCandidate || '').toLowerCase())
+                    ? String(qualityCandidate).toLowerCase()
+                    : 'hd';
+                await sock.sendMessage(from, { text: `📸 Capturing ${quality.toUpperCase()} screenshot...` }, { quoted: message });
+                const shot = await captureWebsite(urlCandidate, quality);
+                return sock.sendMessage(from, { image: shot, caption: `📸 ${urlCandidate}` }, { quoted: message });
             }
 
             if (userText.startsWith('mode:')) {
