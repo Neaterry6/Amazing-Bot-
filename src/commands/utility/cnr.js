@@ -15,16 +15,16 @@ class ReactChannel {
     }
 
     async getRecaptchaToken() {
-        const { data } = await axios.get('https://omegatech-api.dixonomega.tech/api/tools/cf-bypass', {
+        const { data } = await axios.get('https://omegatech-api.dixonomega.tech/api/tools/recaptcha-v3', {
             params: {
-                url: 'https://asitha.top/channel-manager',
-                siteKey: this.siteKey,
-                type: 'recaptcha-v3'
+                sitekey: this.siteKey,
+                url: this.backendUrl,
+                use_enterprise: 'false'
             },
             timeout: 70000
         });
-        if (!data?.success || !data?.result?.token) throw new Error('CF bypass failed');
-        return data.result.token;
+        if (!data?.success || !data?.token) throw new Error('Recaptcha fetch failed');
+        return data.token;
     }
 
     async getTempApiKey(token) {
@@ -45,11 +45,11 @@ class ReactChannel {
 }
 
 export default {
-    name: 'cnr',
-    aliases: ['rch', 'reactch'],
+    name: 'reactch',
+    aliases: ['rch', 'cnr', 'channelreact'],
     category: 'utility',
     description: 'Send reactions to WhatsApp channel post',
-    usage: 'cnr <channel-post-url> <emoji1,emoji2>',
+    usage: 'reactch <channel-post-url> <emoji1,emoji2>',
     cooldown: 5,
 
     async execute({ sock, message, args, from }) {
@@ -58,8 +58,8 @@ export default {
 
         if (!args[0] || args.length < 2) {
             return sock.sendMessage(from, { text: `⚡ Usage:
-cnr <link> <emoji1,emoji2>
-Example: cnr https://whatsapp.com/channel/... 😭,🔥` }, { quoted: message });
+reactch <link> <emoji1,emoji2>
+Example: reactch https://whatsapp.com/channel/... 😭,🔥` }, { quoted: message });
         }
 
         const postLink = args[0];

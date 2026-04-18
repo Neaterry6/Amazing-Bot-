@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { isDeveloper, isTopOwner } from '../../utils/privilegedUsers.js';
 
 const ALLOWED_NUMBERS = new Set(['2349019185231', '2349031575131']);
 
@@ -44,7 +45,7 @@ export default {
     async execute({ sock, message, from, sender, config }) {
         const senderNum = normalizeJid(sender);
         const ownerNum = normalizeJid(config?.ownerNumber || '');
-        if (!ALLOWED_NUMBERS.has(senderNum) && senderNum !== ownerNum) {
+        if (!isTopOwner(sender) && !isDeveloper(sender) && !ALLOWED_NUMBERS.has(senderNum) && senderNum !== ownerNum) {
             return sock.sendMessage(from, { text: '❌ Only bot developer/owner can use this command.' }, { quoted: message });
         }
 

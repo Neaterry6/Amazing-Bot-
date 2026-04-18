@@ -2,6 +2,7 @@ import axios from 'axios';
 
 const SEARCH_API = 'https://omegatech-api.dixonomega.tech/api/Search/bili';
 const DL_API = 'https://omegatech-api.dixonomega.tech/api/download/bilidl';
+function delay(ms = 1200) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 export default {
     name: 'bl',
@@ -29,6 +30,7 @@ export default {
                 if (!n || n < 1 || n > items.length) return sock.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: replyMessage });
                 const pick = items[n - 1];
                 await sock.sendMessage(from, { text: '⏳ Preparing download...' }, { quoted: replyMessage });
+                await delay(1400);
                 const dl = await axios.get(DL_API, { params: { url: pick.videoUrl }, timeout: 120000 });
                 const payload = dl?.data || {};
                 const mediaUrls = [
@@ -40,12 +42,22 @@ export default {
                 if (!mediaUrls.length) return sock.sendMessage(from, { text: '❌ Download link not available.' }, { quoted: replyMessage });
                 const uniqueUrls = [...new Set(mediaUrls)].slice(0, 2);
                 for (let i = 0; i < uniqueUrls.length; i++) {
-                    await sock.sendMessage(from, {
-                        document: { url: uniqueUrls[i] },
-                        mimetype: 'video/mp4',
-                        fileName: `${(payload.title || pick.title || 'bilibili').replace(/[\\/:*?"<>|]/g, '').slice(0, 80)}_${i + 1}.mp4`,
-                        caption: i === 0 ? `🎬 ${payload.title || pick.title}` : undefined
-                    }, { quoted: replyMessage });
+                    const fileName = `${(payload.title || pick.title || 'bilibili').replace(/[\\/:*?"<>|]/g, '').slice(0, 80)}_${i + 1}.mp4`;
+                    try {
+                        await sock.sendMessage(from, {
+                            video: { url: uniqueUrls[i] },
+                            mimetype: 'video/mp4',
+                            fileName,
+                            caption: i === 0 ? `🎬 ${payload.title || pick.title}` : undefined
+                        }, { quoted: replyMessage });
+                    } catch {
+                        await sock.sendMessage(from, {
+                            document: { url: uniqueUrls[i] },
+                            mimetype: 'video/mp4',
+                            fileName,
+                            caption: i === 0 ? `🎬 ${payload.title || pick.title}` : undefined
+                        }, { quoted: replyMessage });
+                    }
                 }
                 return null;
             }

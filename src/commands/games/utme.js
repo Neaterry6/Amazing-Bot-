@@ -1,8 +1,8 @@
 import axios from 'axios';
+import { getButtonMode } from '../../utils/buttonMode.js';
 
 const userScores = new Map();
 const userStreaks = new Map();
-const userButtonMode = new Map();
 
 async function getAIExplanation(question, correctAnswer, userAnswer, subject, isCorrect, options) {
     if (isCorrect) {
@@ -97,15 +97,6 @@ export default {
     async execute({ sock, message, args, from, sender, prefix }) {
         try {
             const modeArg = (args[0] || '').toLowerCase();
-            if (modeArg === 'button' || modeArg === 'buttons') {
-                const state = (args[1] || '').toLowerCase();
-                if (!['on', 'off'].includes(state)) {
-                    return await sock.sendMessage(from, { text: `❌ Usage: ${prefix}utme button <on|off>` }, { quoted: message });
-                }
-                userButtonMode.set(sender, state === 'on');
-                return await sock.sendMessage(from, { text: `✅ UTME button mode ${state.toUpperCase()}` }, { quoted: message });
-            }
-
             if (args.length === 0) {
                 return this.showSubjects({ sock, message, from, prefix, sender });
             }
@@ -204,7 +195,7 @@ export default {
         questionText += `⏭️ Type NEXT for next question\n`;
         questionText += `🛑 Type STOP to end quiz`;
 
-        const buttonMode = userButtonMode.get(sender) === true;
+        const buttonMode = await getButtonMode();
         let sentMsg;
 
         if (questionData.image) {
@@ -436,7 +427,7 @@ export default {
 
         subjectsText += `💡 *Commands:*\n`;
         subjectsText += `📝 Start: ${prefix}utme mathematics\n`;
-        subjectsText += `🎛️ Buttons: ${prefix}utme button <on|off>\n`;
+        subjectsText += `🎛️ Buttons: ${prefix}button <on|off> (owner)\n`;
         if (hasStats) {
             subjectsText += `📊 Stats: ${prefix}utme score\n`;
         }

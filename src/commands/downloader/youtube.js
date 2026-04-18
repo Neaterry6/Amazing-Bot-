@@ -1,6 +1,7 @@
 import yts from 'yt-search';
 import axios from 'axios';
 import { fetchAllInOneDownload, fetchAllInOneFallback, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
+function delay(ms = 1200) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 async function getDownloadForType(videoUrl, type) {
     let payload;
@@ -86,39 +87,59 @@ export default {
                 command: 'ytb',
                 handler: async (replyText, replyMessage) => {
                     try {
+                        const replySender = replyMessage.key.participant || replyMessage.key.remoteJid;
+                        if (replySender !== sender) return;
                         const choice = parseInt(replyText.trim(), 10);
                         if (Number.isNaN(choice) || choice < 1 || choice > videos.length) {
                             return await sock.sendMessage(from, { text: '❌ Invalid choice. Send 1-5.' }, { quoted: replyMessage });
                         }
 
                         const selected = videos[choice - 1];
+                        await delay(1200);
                         const { link, meta } = await getDownloadForType(selected.url, type);
                         const title = meta.title || selected.title;
                         const artist = meta.artist || selected.author.name;
 
                         if (type === 'audio') {
-                            await sock.sendMessage(from, {
-                                audio: { url: link },
-                                mimetype: 'audio/mpeg',
-                                fileName: `${title}.mp3`,
-                                ptt: false,
-                                contextInfo: {
-                                    externalAdReply: {
-                                        title,
-                                        body: artist,
-                                        thumbnailUrl: meta.thumbnail || selected.thumbnail,
-                                        mediaType: 1,
-                                        renderLargerThumbnail: true
+                            try {
+                                await sock.sendMessage(from, {
+                                    audio: { url: link },
+                                    mimetype: 'audio/mpeg',
+                                    fileName: `${title}.mp3`,
+                                    ptt: false,
+                                    contextInfo: {
+                                        externalAdReply: {
+                                            title,
+                                            body: artist,
+                                            thumbnailUrl: meta.thumbnail || selected.thumbnail,
+                                            mediaType: 1,
+                                            renderLargerThumbnail: true
+                                        }
                                     }
-                                }
-                            }, { quoted: replyMessage });
+                                }, { quoted: replyMessage });
+                            } catch {
+                                await sock.sendMessage(from, {
+                                    document: { url: link },
+                                    mimetype: 'audio/mpeg',
+                                    fileName: `${title}.mp3`
+                                }, { quoted: replyMessage });
+                            }
                         } else {
-                            await sock.sendMessage(from, {
-                                video: { url: link },
-                                mimetype: 'video/mp4',
-                                fileName: `${title}.mp4`,
-                                caption: `📺 *${title}*\n👤 ${artist}`
-                            }, { quoted: replyMessage });
+                            try {
+                                await sock.sendMessage(from, {
+                                    video: { url: link },
+                                    mimetype: 'video/mp4',
+                                    fileName: `${title}.mp4`,
+                                    caption: `📺 *${title}*\n👤 ${artist}`
+                                }, { quoted: replyMessage });
+                            } catch {
+                                await sock.sendMessage(from, {
+                                    document: { url: link },
+                                    mimetype: 'video/mp4',
+                                    fileName: `${title}.mp4`,
+                                    caption: `📺 *${title}*\n👤 ${artist}`
+                                }, { quoted: replyMessage });
+                            }
                         }
                     } catch (e) {
                         await sock.sendMessage(from, { text: `❌ Failed to process selection: ${e.message}` }, { quoted: replyMessage });

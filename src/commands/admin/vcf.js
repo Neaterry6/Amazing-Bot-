@@ -54,7 +54,7 @@ export default {
                     try { waName = await sock.getName(jid); } catch {}
                 }
                 cards.push(buildContactCard({
-                    fullName: waName || `GC Member ${idx}`,
+                    fullName: waName || `+${number}`,
                     number,
                     whatsappId: jid,
                     index: idx

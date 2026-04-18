@@ -3,6 +3,9 @@ import { downloadMediaMessage } from '@whiskeysockets/baileys';
 import { uploadToImgBB } from '../../utils/imgbb.js';
 
 function delay(ms = 1800) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+function getImageUrl(data = {}) {
+    return data?.image || data?.url || data?.result?.image || data?.result?.url || data?.data?.image || '';
+}
 
 export default {
     name: 'nano',
@@ -35,8 +38,8 @@ export default {
             timeout: 120000
         });
 
-        const taskId = data?.task_id;
-        const image = data?.image || data?.result?.image;
+        const taskId = data?.task_id || data?.key || data?.id;
+        const image = getImageUrl(data);
         if (image) {
             return sock.sendMessage(from, { image: { url: image }, caption: `✅ Nano result\nPrompt: ${prompt}` }, { quoted: message });
         }

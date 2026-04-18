@@ -8,7 +8,9 @@ async function resolveTargetJid(sock, from, message, args) {
     const ctx = message.message?.extendedTextMessage?.contextInfo || {};
     const mention = ctx.mentionedJid?.[0];
     const participant = ctx.participant;
-    const input = mention || participant || args[0] || '';
+    const quotedParticipant = ctx?.quotedParticipant
+        || (ctx?.participant && ctx?.stanzaId ? ctx.participant : '');
+    const input = mention || quotedParticipant || participant || args[0] || '';
     if (!input) return '';
 
     let raw = String(input);

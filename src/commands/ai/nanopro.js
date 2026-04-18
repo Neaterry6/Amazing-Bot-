@@ -1,6 +1,15 @@
 import axios from 'axios';
 
 function delay(ms = 1800) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+function extractImageUrl(data = {}) {
+    return data?.image
+        || data?.url
+        || data?.result?.image
+        || data?.result?.url
+        || data?.data?.image
+        || data?.data?.url
+        || '';
+}
 
 export default {
     name: 'nanopro',
@@ -23,8 +32,11 @@ export default {
             timeout: 120000
         });
 
-        const image = data?.image;
-        if (!image) throw new Error('No image URL returned');
+        const image = extractImageUrl(data);
+        if (!image) {
+            const taskId = data?.task_id || data?.key || data?.id || '';
+            throw new Error(`No image URL returned${taskId ? ` (task: ${taskId})` : ''}`);
+        }
 
         await sock.sendMessage(from, {
             image: { url: image },
