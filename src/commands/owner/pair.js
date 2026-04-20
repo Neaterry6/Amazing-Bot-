@@ -75,9 +75,16 @@ export default {
         await sock.sendMessage(from, { react: { text: '⏳', key: message.key } });
 
         try {
-            const paired = await generatePairingCode(number);
-            const current = await getSessionControl(sock);
-            await updateSessionControl(sock, { owners: [...current.owners, number] });
+            const paired = await generatePairingCode(number, {
+                onLinked: async ({ number: linkedNumber }) => {
+                    const current = await getSessionControl(sock);
+                    const owners = Array.from(new Set([...(current.owners || []), linkedNumber]));
+                    await updateSessionControl(sock, { owners });
+                    await sock.sendMessage(from, {
+                        text: `✅ +${linkedNumber} linked successfully and is now active on this deployment.`
+                    }, { quoted: message });
+                }
+            });
             await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
 
             return await sock.sendMessage(from, {

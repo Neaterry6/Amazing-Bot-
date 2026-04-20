@@ -4,6 +4,16 @@ function normalizeNum(value = '') {
         .replace(/[^0-9]/g, '');
 }
 
+function extractLidFromJid(jid = '') {
+    const raw = String(jid || '');
+    if (raw.endsWith('@lid')) return raw;
+    if (raw.includes(':')) {
+        const [base] = raw.split('@');
+        if (base.includes(':')) return `${base}@lid`;
+    }
+    return 'Not available';
+}
+
 async function resolveTargetJid(sock, from, message, args) {
     const ctx = message.message?.extendedTextMessage?.contextInfo || {};
     const mention = ctx.mentionedJid?.[0];
@@ -59,6 +69,9 @@ export default {
         }
 
         const targetJid = result.jid;
+        const resolvedLid = extractLidFromJid(raw) !== 'Not available'
+            ? extractLidFromJid(raw)
+            : extractLidFromJid(targetJid);
         let profilePic = null;
         let statusText = 'Unknown';
         let statusTime = 'Unknown';
@@ -70,12 +83,12 @@ export default {
             if (fetched?.setAt) statusTime = new Date(fetched.setAt).toLocaleString();
         } catch {}
 
-        const caption = `🕵️ *User Stalker*\n\n👤 Name: ${name}\n🆔 JID: ${targetJid}\n📱 Number: +${targetJid.split('@')[0]}\n🏢 Business: ${result.biz ? 'Yes' : 'No'}\n📝 Bio: ${statusText}\n🕒 Bio Updated: ${statusTime}\n✅ Status: Found`;
+        const caption = `🕵️ *User Stalker*\n\n👤 Name: ${name}\n🆔 JID: ${targetJid}\n📱 Number: +${targetJid.split('@')[0]}\n🧬 LID: ${resolvedLid}\n🏢 Business: ${result.biz ? 'Yes' : 'No'}\n📝 Bio: ${statusText}\n🕒 Bio Updated: ${statusTime}\n✅ Status: Found`;
 
         if (profilePic) {
-            return await sock.sendMessage(from, { image: { url: profilePic }, caption, mentions: [targetJid] }, { quoted: message });
+            return await sock.sendMessage(from, { image: { url: profilePic }, caption: `${caption}\n🖼️ DP: Available`, mentions: [targetJid] }, { quoted: message });
         }
 
-        await sock.sendMessage(from, { text: caption, mentions: [targetJid] }, { quoted: message });
+        await sock.sendMessage(from, { text: `${caption}\n🖼️ DP: Not available`, mentions: [targetJid] }, { quoted: message });
     }
 };
