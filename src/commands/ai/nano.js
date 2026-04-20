@@ -3,9 +3,6 @@ import { downloadMediaMessage } from '@whiskeysockets/baileys';
 import { uploadToImgBB } from '../../utils/imgbb.js';
 
 function delay(ms = 1800) { return new Promise((resolve) => setTimeout(resolve, ms)); }
-function getImageUrl(data = {}) {
-    return data?.image || data?.url || data?.result?.image || data?.result?.url || data?.data?.image || '';
-}
 
 export default {
     name: 'nano',
@@ -26,26 +23,47 @@ export default {
             return sock.sendMessage(from, { text: '❌ Reply to an image with: .nano <prompt>' }, { quoted: message });
         }
 
-        await sock.sendMessage(from, { text: '🛠️ Uploading image and creating Nano task...' }, { quoted: message });
-        await delay(2200);
+        await sock.sendMessage(from, { text: '🛠️ Uploading image and processing edit...' }, { quoted: message });
 
         const target = quotedImage ? { message: { imageMessage: quotedImage } } : message;
         const buffer = await downloadMediaMessage(target, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
         const publicUrl = await uploadToImgBB(buffer);
 
-        const { data } = await axios.get('https://omegatech-api.dixonomega.tech/api/ai/nano-banana2', {
+        const { data: init } = await axios.get('https://omegatech-api.dixonomega.tech/api/ai/nano-banana2', {
             params: { image: publicUrl, prompt },
             timeout: 120000
         });
 
-        const taskId = data?.task_id || data?.key || data?.id;
-        const image = getImageUrl(data);
-        if (image) {
-            return sock.sendMessage(from, { image: { url: image }, caption: `✅ Nano result\nPrompt: ${prompt}` }, { quoted: message });
+        const taskId = init?.task_id || init?.key || init?.id;
+        if (!taskId) {
+            throw new Error('No task_id received from nano-banana2 API.');
+        }
+
+        let resultUrl = '';
+        for (let i = 0; i < 24; i++) {
+            await delay(5000);
+            const { data: check } = await axios.get('https://omegatech-api.dixonomega.tech/api/ai/nano-banana2-result', {
+                params: { task_id: taskId },
+                timeout: 120000
+            });
+
+            if (check?.status === 'completed' && check?.image_url) {
+                resultUrl = check.image_url;
+                break;
+            }
+
+            if (check?.status === 'failed') {
+                throw new Error(check?.message || 'Nano generation failed on provider side.');
+            }
+        }
+
+        if (!resultUrl) {
+            throw new Error(`Nano edit timed out. Task ID: ${taskId}`);
         }
 
         return sock.sendMessage(from, {
-            text: `✅ Nano task submitted\nTask ID: ${taskId || 'N/A'}\nStatus: ${data?.status || 'processing'}\nMessage: ${data?.message || 'Use task id to check result from provider.'}`
+            image: { url: resultUrl },
+            caption: `✅ Nano edit success\n📝 Prompt: ${prompt}`
         }, { quoted: message });
     }
 };
