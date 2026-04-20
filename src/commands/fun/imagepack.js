@@ -1,25 +1,11 @@
 import axios from 'axios';
 
 const COMMANDS = [
-    'moe', 'aipic', 'hentai', 'chinagirl', 'bluearchive', 'boypic', 'carimage', 'random-girl', 'hijab-girl',
-    'indonesia-girl', 'japan-girl', 'korean-girl', 'loli', 'malaysia-girl', 'profile-pictures', 'thailand-girl',
-    'rwaifu', 'panda', 'bird', 'koala', 'animekill', 'animelick', 'animebite', 'animeglomp', 'animehappy',
-    'animedance', 'animecringe', 'animehighfive', 'animepoke', 'animewink', 'animesmile', 'animesmug', 'animewlp', 'animeavatar'
+    'moe', 'aipic', 'hentai', 'bluearchive', 'boypic', 'carimage', 'random-girl', 'loli',
+    'rwaifu', 'panda', 'bird', 'koala', 'animewlp', 'animeavatar'
 ];
 
 const WAIFU_ACTION_MAP = {
-    animekill: 'kill',
-    animelick: 'lick',
-    animebite: 'bite',
-    animeglomp: 'glomp',
-    animehappy: 'happy',
-    animedance: 'dance',
-    animecringe: 'cringe',
-    animehighfive: 'highfive',
-    animepoke: 'poke',
-    animewink: 'wink',
-    animesmile: 'smile',
-    animesmug: 'smug',
     animewlp: 'waifu',
     animeavatar: 'waifu'
 };
@@ -44,8 +30,14 @@ async function resolveImage(cmd) {
         return data?.image || data?.link;
     }
 
-    const endpoint = WAIFU_ACTION_MAP[cmd] || 'waifu';
-    const { data } = await axios.get(`https://api.waifu.pics/sfw/${endpoint}`, { timeout: 15000 });
+    const endpoint = WAIFU_ACTION_MAP[cmd];
+    if (endpoint) {
+        const { data } = await axios.get(`https://apis.prexzyvilla.site/anime/${endpoint}`, { timeout: 20000 });
+        const payload = data?.result || data?.data || data;
+        return payload?.url || payload?.gif || payload?.video || payload?.image;
+    }
+
+    const { data } = await axios.get('https://api.waifu.pics/sfw/waifu', { timeout: 15000 });
     return data?.url;
 }
 
@@ -70,10 +62,17 @@ export default {
                 return await sock.sendMessage(from, { text: '❌ Failed to fetch image URL.' }, { quoted: message });
             }
 
-            await sock.sendMessage(from, {
-                image: { url: imageUrl },
-                caption: `✨ ${cmd}`
-            }, { quoted: message });
+            if (/\.mp4(\?|$)/i.test(imageUrl) || cmd === 'tiktokgirl') {
+                await sock.sendMessage(from, {
+                    video: { url: imageUrl },
+                    caption: `✨ ${cmd}`
+                }, { quoted: message });
+            } else {
+                await sock.sendMessage(from, {
+                    image: { url: imageUrl },
+                    caption: `✨ ${cmd}`
+                }, { quoted: message });
+            }
         } catch (error) {
             await sock.sendMessage(from, { text: `❌ Failed: ${error.message}` }, { quoted: message });
         }

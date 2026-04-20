@@ -88,7 +88,24 @@ async function getVideoData(url) {
             quality: data.high ? 'High' : 'Low'
         };
     } catch (error) {
-        throw new Error(`Failed to get video data: ${error.message}`);
+        try {
+            const backup = await ky.get('https://apis.prexzyvilla.site/download/aio', {
+                searchParams: { url },
+                timeout: 30000,
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+            }).json();
+            const data = backup?.result || backup?.data || backup;
+            const downloadUrl = data?.high || data?.low || data?.url || data?.download || data?.video;
+            if (!downloadUrl) throw new Error('No download URL found');
+            return {
+                title: data?.title || 'Video',
+                thumbnail: data?.thumbnail || '',
+                downloadUrl,
+                quality: data?.high ? 'High' : 'Auto'
+            };
+        } catch (backupError) {
+            throw new Error(`Failed to get video data: ${backupError.message || error.message}`);
+        }
     }
 }
 

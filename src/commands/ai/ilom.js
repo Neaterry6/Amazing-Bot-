@@ -78,31 +78,29 @@ function getRepoSnapshot() {
 }
 
 async function askIlomApi(prompt, question) {
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for ilomcreate');
+    const composed = `${prompt}\n\n${String(question || 'Continue').slice(0, 4000)}`;
+    try {
+        const { data } = await axios.get('https://apis.prexzyvilla.site/ai/gpt-5', {
+            params: { text: composed },
+            timeout: LOW_RESOURCE_MODE ? 70000 : 120000
+        });
+        const out = data?.result || data?.response || data?.data || data?.message;
+        if (out) return stripTrailingDetailsBlock(String(out).trim());
+    } catch {}
 
-    const { data } = await axios.post(
-        `${QWEN_BASE_URL}/chat/completions`,
-        {
-            model: QWEN_MODEL,
-            messages: [
-                { role: 'system', content: prompt },
-                { role: 'user', content: String(question || 'Continue').slice(0, 4000) }
-            ],
-            temperature: LOW_RESOURCE_MODE ? 0.2 : 0.4,
-            max_tokens: LOW_RESOURCE_MODE ? 950 : 1800
-        },
-        {
-            timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
-            headers: {
-                Authorization: `Bearer ${QWEN_API_KEY}`,
-                'Content-Type': 'application/json'
-            }
-        }
-    );
-
+    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for ilomcreate fallback');
+    const { data } = await axios.post(`${QWEN_BASE_URL}/chat/completions`, {
+        model: QWEN_MODEL,
+        messages: [{ role: 'system', content: prompt }, { role: 'user', content: String(question || 'Continue').slice(0, 4000) }],
+        temperature: LOW_RESOURCE_MODE ? 0.2 : 0.4,
+        max_tokens: LOW_RESOURCE_MODE ? 950 : 1800
+    }, {
+        timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+    });
     const raw = data?.choices?.[0]?.message?.content || '';
     const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
-    if (!cleaned) throw new Error('Qwen returned empty response');
+    if (!cleaned) throw new Error('AI returned empty response');
     return cleaned;
 }
 
@@ -240,7 +238,13 @@ export default {
 
             if (!userText) {
                 return sock.sendMessage(from, {
-                    text: '❌ Provide a prompt or reply to continue.'
+                    text: '❌ Provide a prompt or reply to continue.\nTip: use "ilom help" for command list.'
+                }, { quoted: message });
+            }
+
+            if (/^help$/i.test(userText)) {
+                return sock.sendMessage(from, {
+                    text: '🤖 Ilom Help\n• ilom <prompt>\n• ilom img <prompt>\n• ilom video <prompt>\n• ilom screenshot <url> [hd|fhd]\n• ilom clear'
                 }, { quoted: message });
             }
 
