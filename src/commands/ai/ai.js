@@ -617,11 +617,12 @@ function buildChainHandler(sock, from, uid, sender) {
             const aiText = await getAIResponse(uid, settings, history);
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
-            const mentions = replyMessage.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-            const sent = await sendLongText(sock, from, aiText, replyMessage, mentions);
+            let sent = null;
             if (settings.voiceMode) {
-                await delay(1300);
                 await sendVoiceReply(sock, from, aiText, replyMessage);
+            } else {
+                const mentions = replyMessage.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                sent = await sendLongText(sock, from, aiText, replyMessage, mentions);
             }
             if (sent?.key?.id) registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
         } catch (err) {
@@ -1003,13 +1004,14 @@ Prompt: ${prompt || 'default'}` }, { quoted: message });
             if (!aiText) throw new Error('Empty response received');
             history.push({ role: 'assistant', content: aiText });
             await saveHistory(uid, history);
-            const mentions = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
-            const sent = await sendLongText(sock, from, aiText, message, mentions);
+            let sent = null;
             if (settings.voiceMode || /start responding with vn/i.test(body)) {
                 settings.voiceMode = true;
                 await saveSettings(uid, settings);
-                await delay(1300);
                 await sendVoiceReply(sock, from, aiText, message);
+            } else {
+                const mentions = message.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                sent = await sendLongText(sock, from, aiText, message, mentions);
             }
             if (sent?.key?.id) registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
         } catch (err) {

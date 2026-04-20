@@ -23,6 +23,21 @@ async function streamToBuffer(stream) {
     return buffer;
 }
 
+function inferInputExt(fileType, mediaObject = {}, isVideo = false) {
+    const byType = fileType?.ext?.toLowerCase();
+    if (byType) return byType;
+
+    const mime = String(mediaObject?.mimetype || '').toLowerCase();
+    if (mime.includes('ogg')) return 'ogg';
+    if (mime.includes('mpeg') || mime.includes('mp3')) return 'mp3';
+    if (mime.includes('mp4')) return isVideo ? 'mp4' : 'm4a';
+    if (mime.includes('webm')) return 'webm';
+    if (mime.includes('wav')) return 'wav';
+    if (mime.includes('aac')) return 'aac';
+    if (isVideo) return 'mp4';
+    return 'ogg';
+}
+
 async function convertToMp3(inputBuffer, fileTypeExt, isVideo = false) {
     return new Promise((resolve, reject) => {
         const inputPath = path.join(TEMP_DIR, `input.${fileTypeExt}`);
@@ -118,16 +133,17 @@ export default {
             const stream = await downloadContentFromMessage(mediaObject, mediaType);
             const mediaBuffer = await streamToBuffer(stream);
             const fileType = await fileTypeFromBuffer(mediaBuffer);
-            const supportedExts = ['ogg', 'mp3', 'm4a', 'wav', 'mp4', 'webm'];
+            const ext = inferInputExt(fileType, mediaObject, isVideo);
+            const supportedExts = ['ogg', 'mp3', 'm4a', 'wav', 'mp4', 'webm', 'aac'];
 
-            if (!fileType || !supportedExts.includes(fileType.ext)) {
+            if (!supportedExts.includes(ext)) {
                 await sock.sendMessage(from, {
                     text: `❌ *Error*\nUnsupported format. Try OGG/MP3 for audio or MP4 for video.`
                 }, { quoted: message });
                 return;
             }
 
-            const mp3Buffer = await convertToMp3(mediaBuffer, fileType.ext, isVideo);
+            const mp3Buffer = await convertToMp3(mediaBuffer, ext, isVideo);
 
             await sock.sendMessage(from, {
                 audio: mp3Buffer,
