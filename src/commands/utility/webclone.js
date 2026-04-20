@@ -54,7 +54,7 @@ export default {
   name: 'webclone',
   aliases: ['cloneweb', 'siteclone'],
   category: 'utility',
-  description: 'Clone website to downloadable ZIP (via Malvryx).',
+  description: 'Clone website to downloadable ZIP (via ilom).',
   usage: 'webclone <url>',
   cooldown: 8,
   args: true,
@@ -70,13 +70,13 @@ export default {
     try {
       const url = (args || []).join(' ').trim();
       if (!url) {
-        await sendText(`*${S('WEBCLONE')}*\n─────────────────────\n🔹 *${S('Usage')}* : \`.webclone <url>\`\n─────────────────────\n> ${S('Created by Dev Malvryx')}`);
+        await sendText(`*${S('WEBCLONE')}*\n─────────────────────\n🔹 *${S('Usage')}* : \`.webclone <url>\`\n─────────────────────\n> ${S('Created by ilom')}`);
         return;
       }
 
-      const apiKey = process.env.MALVRYX_API_KEY || null;
+      const apiKey = process.env.ILOM_API_KEY || null;
       if (!apiKey) {
-        await sendText(`*${S('WEBCLONE CONFIG ERROR')}*\n─────────────────────\n🔹 *${S('Missing')}* : \`MALVRYX_API_KEY\`\n🔹 *${S('Status')}* : _${S('Not set in vars/env')}_\n─────────────────────\n> ${S('Created by Dev Malvryx')}`);
+        await sendText(`*${S('WEBCLONE CONFIG ERROR')}*\n─────────────────────\n🔹 *${S('Missing')}* : \`ILOM_API_KEY\`\n🔹 *${S('Status')}* : _${S('Not set in vars/env')}_\n─────────────────────\n> ${S('Created by ilom')}`);
         return;
       }
 
@@ -91,7 +91,7 @@ export default {
 
       const pollUrl = `${API_BASE}${pollPath}`;
 
-      await sendText(`*${S('WEBCLONE')}*\n─────────────────────\n🔹 *${S('Status')}* : _${S('Cloning started')}_\n🔹 *${S('URL')}* : _${url}_\n🔹 *${S('Task ID')}* : \`${taskId}\`\n─────────────────────\n> ${S('Created by Dev Malvryx')}`);
+      await sendText(`*${S('WEBCLONE')}*\n─────────────────────\n🔹 *${S('Status')}* : _${S('Cloning started')}_\n🔹 *${S('URL')}* : _${url}_\n🔹 *${S('Task ID')}* : \`${taskId}\`\n─────────────────────\n> ${S('Created by ilom')}`);
 
       let result = null;
       const maxPolls = 60;
@@ -130,7 +130,7 @@ export default {
         (result.assets ? `🔹 *${S('Assets')}* : css:${result.assets.css || 0} js:${result.assets.js || 0} img:${result.assets.images || 0}\n` : '') +
         (result.method ? `🔹 *${S('Method')}* : \`${result.method}\`\n` : '') +
         '─────────────────────\n' +
-        `> ${S('Created by Dev Malvryx')}`;
+        `> ${S('Created by ilom')}`;
 
       await sendText(details);
 
@@ -142,7 +142,7 @@ export default {
         contextInfo: msgCtx(styled),
       }, { quoted: message });
     } catch (e) {
-      await sendText(`*❌ ${S('WEBCLONE ERROR')}*\n─────────────────────\n\`\`\`${e.message}\`\`\`\n─────────────────────\n> ${S('Created by Dev Malvryx')}`);
+      await sendText(`*❌ ${S('WEBCLONE ERROR')}*\n─────────────────────\n\`\`\`${e.message}\`\`\`\n─────────────────────\n> ${S('Created by ilom')}`);
     } finally {
       if (tmpZip && fs.existsSync(tmpZip)) {
         try { fs.unlinkSync(tmpZip); } catch {}

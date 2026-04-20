@@ -8,6 +8,11 @@ const DEFAULT_TARGETS = [
     'logs',
     path.join('data', 'tmp')
 ];
+const PROTECTED_PATHS = [
+    path.join('data', 'sessions'),
+    path.join('data', 'auth_info_baileys'),
+    path.join('data', 'creds.json')
+].map((p) => path.join(process.cwd(), p));
 
 async function clearDir(abs) {
     if (!(await fs.pathExists(abs))) return { removed: 0, size: 0 };
@@ -17,6 +22,8 @@ async function clearDir(abs) {
 
     for (const entry of entries) {
         const target = path.join(abs, entry);
+        const protectedHit = PROTECTED_PATHS.some((p) => target.startsWith(path.normalize(p)));
+        if (protectedHit) continue;
         const stat = await fs.stat(target).catch(() => null);
         if (!stat) continue;
         size += stat.size || 0;

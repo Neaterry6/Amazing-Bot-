@@ -16,8 +16,9 @@ const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const QWEN_BASE_URL = process.env.QWEN_BASE_URL || 'https://qwen.aikit.club/v1';
 const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || '';
 const QWEN_MODEL = process.env.QWEN_MODEL || 'Qwen3.6-Plus';
-const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen3.5-Plus';
-const QWEN_VIDEO_MODEL = process.env.QWEN_VIDEO_MODEL || 'Qwen3.5-Plus';
+const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen-Image';
+const QWEN_VIDEO_MODEL = process.env.QWEN_VIDEO_MODEL || 'Qwen-Video';
+const QWEN_TTS_MODEL = process.env.QWEN_TTS_MODEL || 'Qwen-TTS';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
@@ -358,17 +359,35 @@ async function getAIResponse(uid, settings, history) {
 async function sendVoiceReply(sock, from, text, quoted) {
     const cleanText = String(text || '').trim().slice(0, LOW_RESOURCE_MODE ? 320 : 600);
     if (!cleanText) return;
-    const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=Joanna&text=${encodeURIComponent(cleanText)}`;
-    const audioRes = await axios.get(ttsUrl, {
-        responseType: 'arraybuffer',
-        timeout: 120000,
-        headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    await sock.sendMessage(from, {
-        audio: Buffer.from(audioRes.data),
-        mimetype: 'audio/mpeg',
-        ptt: true
-    }, { quoted });
+    let voiceBuffer = null;
+
+    if (QWEN_API_KEY) {
+        try {
+            const { data } = await axios.post(`${QWEN_BASE_URL}/audio/speech`, {
+                model: QWEN_TTS_MODEL,
+                input: cleanText,
+                voice: 'alloy',
+                format: 'mp3'
+            }, {
+                responseType: 'arraybuffer',
+                timeout: 120000,
+                headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+            });
+            voiceBuffer = Buffer.from(data);
+        } catch {}
+    }
+
+    if (!voiceBuffer) {
+        const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=Joanna&text=${encodeURIComponent(cleanText)}`;
+        const audioRes = await axios.get(ttsUrl, {
+            responseType: 'arraybuffer',
+            timeout: 120000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        voiceBuffer = Buffer.from(audioRes.data);
+    }
+
+    await sock.sendMessage(from, { audio: voiceBuffer, mimetype: 'audio/mpeg', ptt: true }, { quoted });
 }
 
 const ASSEMBLY_API_KEY = process.env.ASSEMBLY_API_KEY || '22b87c4a57e04c73914de4b75edd05c1';
@@ -507,15 +526,9 @@ async function getDownloadUrl(url) {
 
 async function fetchWebsiteScreenshot(url, quality = 'hd') {
     const width = quality === 'fhd' ? 1920 : 1366;
-    const primary = `https://image.thum.io/get/fullpage/noanimate/width/${width}/${encodeURIComponent(url)}`;
-    try {
-        const { data } = await axios.get(primary, { responseType: 'arraybuffer', timeout: 65000 });
-        return Buffer.from(data);
-    } catch {
-        const fallback = `https://kaiz-apis.gleeze.com/api/screenshot?url=${encodeURIComponent(url)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`;
-        const { data } = await axios.get(fallback, { responseType: 'arraybuffer', timeout: 65000 });
-        return Buffer.from(data);
-    }
+    const apiUrl = `https://api.screenshotone.com/take?access_key=KN3bMn5VoWZIWw&url=${encodeURIComponent(url)}&format=jpg&full_page=true&block_ads=true&block_cookie_banners=true&block_trackers=true&viewport_width=${width}&image_quality=80&response_type=by_format`;
+    const { data } = await axios.get(apiUrl, { responseType: 'arraybuffer', timeout: 65000 });
+    return Buffer.from(data);
 }
 
 function extractBodyText(message, args) {
@@ -594,7 +607,7 @@ function buildChainHandler(sock, from, uid, sender) {
                 await delay(1300);
                 await sendVoiceReply(sock, from, aiText, replyMessage);
             }
-            registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
+            if (sent?.key?.id) registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
         } catch (err) {
             const errText = `❌ Error: ${err.message || 'Could not get response'}`;
             await sock.sendMessage(from, { text: errText }, { quoted: replyMessage });
@@ -837,7 +850,7 @@ export default {
             try {
                 const response = await askClaudeAI(uid, prompt);
                 const sent = await sendLongText(sock, from, response, message);
-                registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
+                if (sent?.key?.id) registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
                 return;
             } catch (error) {
                 return await sock.sendMessage(from, { text: `❌ Claude error: ${error.message}` }, { quoted: message });
@@ -928,7 +941,7 @@ Prompt: ${prompt || 'default'}` }, { quoted: message });
                 await delay(1300);
                 await sendVoiceReply(sock, from, aiText, message);
             }
-            registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
+            if (sent?.key?.id) registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
         } catch (err) {
             const errText = `❌ AI Error: ${err.message || 'Unknown error'}\n\nTry again shortly.`;
             await sock.sendMessage(from, { text: errText }, { quoted: message });
