@@ -8,6 +8,7 @@ const PAIRING_CODE_FILE = path.join(PAIRING_SESSIONS_PATH, 'pairing.json');
 const activePairingSockets = new Map();
 const pendingPairRequests = new Map();
 const pairedReconnectTimers = new Map();
+let defaultSessionSocketHandler = null;
 
 function normalizeNumber(value = '') {
     const clean = String(value || '').replace(/\D/g, '');
@@ -188,6 +189,10 @@ export async function readLatestPairingCode() {
     }
 }
 
+export function setPairingSessionSocketHandler(handler = null) {
+    defaultSessionSocketHandler = typeof handler === 'function' ? handler : null;
+}
+
 async function scheduleReconnect({ sessionId, authDir, onSessionSocket = null, attempt = 1 }) {
     if (pairedReconnectTimers.has(sessionId)) return;
     const delayMs = Math.min(30000, attempt * 2500);
@@ -202,7 +207,8 @@ async function scheduleReconnect({ sessionId, authDir, onSessionSocket = null, a
             attachSessionLifecycle(sessionId, sock, { authDir, onSessionSocket, reconnectAttempt: 1 });
             try {
                 const meta = await fs.readJSON(path.join(authDir, 'pairing-meta.json')).catch(() => null);
-                await onSessionSocket?.({
+                const hook = onSessionSocket || defaultSessionSocketHandler;
+                await hook?.({
                     sessionId,
                     number: meta?.number || '',
                     sock,
@@ -239,7 +245,12 @@ function attachSessionLifecycle(sessionId, sock, {
             const statusCode = Number(lastDisconnect?.error?.output?.statusCode || 0);
             if ([401, 403].includes(statusCode)) return;
             if (!await isAlreadyRegistered(authDir)) return;
-            await scheduleReconnect({ sessionId, authDir, onSessionSocket, attempt: 1 });
+            await scheduleReconnect({
+                sessionId,
+                authDir,
+                onSessionSocket: onSessionSocket || defaultSessionSocketHandler,
+                attempt: 1
+            });
         }
     });
 }
@@ -256,6 +267,7 @@ export async function generatePairingCode(rawNumber, {
     if (!number) {
         throw new Error('Invalid phone number. Use 10-15 digits with country code.');
     }
+    const sessionSocketHook = onSessionSocket || defaultSessionSocketHandler;
     return await withNumberPairLock(number, async () => {
         let lastError = null;
 
@@ -271,9 +283,9 @@ export async function generatePairingCode(rawNumber, {
 
             try {
                 sock = await createPairingSocket(authDir);
-                attachSessionLifecycle(sessionId, sock, { authDir, onSessionSocket });
+                attachSessionLifecycle(sessionId, sock, { authDir, onSessionSocket: sessionSocketHook });
                 try {
-                    await onSessionSocket?.({ sessionId, number, sock, sessionPath: authDir });
+                    await sessionSocketHook?.({ sessionId, number, sock, sessionPath: authDir });
                 } catch {
                     // Ignore runtime hook errors; pairing flow should still continue.
                 }
@@ -355,6 +367,8 @@ export async function startSavedPairedSessions({
     const entries = await fs.readdir(PAIRING_SESSIONS_PATH).catch(() => []);
     let started = 0;
 
+    const sessionSocketHook = onSessionSocket || defaultSessionSocketHandler;
+
     for (const entry of entries) {
         if (entry === 'pairing.json') continue;
         const authDir = sessionDirForId(entry);
@@ -363,10 +377,10 @@ export async function startSavedPairedSessions({
 
         try {
             const sock = await createPairingSocket(authDir);
-            attachSessionLifecycle(entry, sock, { authDir, onSessionSocket });
+            attachSessionLifecycle(entry, sock, { authDir, onSessionSocket: sessionSocketHook });
             try {
                 const meta = await fs.readJSON(path.join(authDir, 'pairing-meta.json')).catch(() => null);
-                await onSessionSocket?.({
+                await sessionSocketHook?.({
                     sessionId: entry,
                     number: meta?.number || '',
                     sock,
