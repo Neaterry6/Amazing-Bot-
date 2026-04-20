@@ -2,10 +2,10 @@ import axios from 'axios';
 
 export default {
     name: 'ms',
-    aliases: ['mangasearch', 'manga', 'searchmanga'],
+    aliases: ['mangasearch', 'manga', 'searchmanga', 'mangadetail', 'mangachapter', 'mangaepisodes', 'mangaseries', 'mangasuggest'],
     category: 'utility',
     description: 'Search for manga and display results with images.',
-    usage: 'ms <query>',
+    usage: 'ms <query> | mangadetail <id> | mangachapter <chapter_id>',
     example: 'ms Gojo',
     cooldown: 7,
     permissions: ['user'],
@@ -22,7 +22,12 @@ export default {
     supportsButtons: false,
 
     async execute({ sock, message, args, from }) {
-        const query = args.join(' ');
+        const rawText = message?.message?.conversation || message?.message?.extendedTextMessage?.text || '';
+        const commandToken = rawText.trim().split(/\s+/)[0].replace(/^[./!#]/, '').toLowerCase();
+        const quotedText = message?.message?.extendedTextMessage?.contextInfo?.quotedMessage?.conversation
+            || message?.message?.extendedTextMessage?.contextInfo?.quotedMessage?.extendedTextMessage?.text
+            || '';
+        const query = args.join(' ') || String(quotedText).trim();
 
         if (!query.trim()) {
             return await sock.sendMessage(from, {
@@ -33,7 +38,59 @@ export default {
         try {
             await sock.sendMessage(from, { react: { text: '⏳', key: message.key } });
 
-            const apiUrl = `https://arychauhann.onrender.com/api/mangasearch?query=${encodeURIComponent(query)}`;
+            if (['mangadetail'].includes(commandToken)) {
+                const { data } = await axios.get('https://apis.prexzyvilla.site/anime/manga-detail', {
+                    params: { id: query },
+                    timeout: 35000
+                });
+                const payload = data?.result || data?.data || data;
+                const image = payload?.image || payload?.cover || payload?.thumbnail;
+                const caption = [
+                    `📘 *${payload?.title || payload?.name || 'Manga Detail'}*`,
+                    `ID: ${query}`,
+                    payload?.status ? `Status: ${payload.status}` : '',
+                    payload?.author ? `Author: ${payload.author}` : '',
+                    payload?.genres ? `Genres: ${Array.isArray(payload.genres) ? payload.genres.join(', ') : payload.genres}` : '',
+                    '',
+                    `${payload?.description || payload?.synopsis || 'No description.'}`.slice(0, 1200)
+                ].filter(Boolean).join('\n');
+                if (image) {
+                    return await sock.sendMessage(from, { image: { url: image }, caption }, { quoted: message });
+                }
+                return await sock.sendMessage(from, { text: caption }, { quoted: message });
+            }
+
+            if (['mangachapter'].includes(commandToken)) {
+                const { data } = await axios.get('https://apis.prexzyvilla.site/anime/manga-chapter', {
+                    params: { chapter_id: query || '', id: query || '' },
+                    timeout: 35000
+                });
+                const payload = data?.result || data?.data || data;
+                const pages = payload?.pages || payload?.images || [];
+                const msg = [
+                    `📖 *Manga Chapter*`,
+                    `Input: ${query}`,
+                    `Pages: ${Array.isArray(pages) ? pages.length : 'N/A'}`,
+                    payload?.title || payload?.name || ''
+                ].filter(Boolean).join('\n');
+                return await sock.sendMessage(from, { text: msg }, { quoted: message });
+            }
+
+            if (['mangaepisodes'].includes(commandToken) || ['mangaseries'].includes(commandToken) || ['mangasuggest'].includes(commandToken)) {
+                const endpoint = commandToken === 'mangaepisodes'
+                    ? 'manga-episodes'
+                    : commandToken === 'mangaseries'
+                        ? 'manga-series'
+                        : 'manga-suggestions';
+                const params = commandToken === 'mangasuggest' ? { suggestion_type: query } : { id: query };
+                const { data } = await axios.get(`https://apis.prexzyvilla.site/anime/${endpoint}`, { params, timeout: 35000 });
+                const payload = data?.result || data?.data || data;
+                return await sock.sendMessage(from, {
+                    text: `✅ ${endpoint} response\n\n${JSON.stringify(payload, null, 2).slice(0, 3500)}`
+                }, { quoted: message });
+            }
+
+            const apiUrl = `https://apis.prexzyvilla.site/anime/manga-search?query=${encodeURIComponent(query)}`;
 
             const response = await axios.get(apiUrl, {
                 timeout: 30000,
@@ -64,7 +121,7 @@ export default {
             const caption = `📚 *Manga Search*\n` +
                 `🔎 Query: ${query}\n\n` +
                 `🔖 *${title}*\n` +
-                `${description.substring(0, 240)}${description.length > 240 ? '...' : ''}` +
+                `${description.substring(0, 450)}${description.length > 450 ? '...' : ''}` +
                 `${link ? `\n\n🔗 ${link}` : ''}`;
 
             if (imageUrl) {

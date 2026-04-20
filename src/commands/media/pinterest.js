@@ -10,7 +10,7 @@ export default {
     name: 'pinterest',
     aliases: ['pin'],
     category: 'media',
-    description: 'Scrape Pinterest images by keyword',
+    description: 'Search Pinterest images by keyword',
     usage: 'pinterest <keyword> [count]',
     cooldown: 6,
     minArgs: 1,
@@ -28,20 +28,12 @@ export default {
         await sock.sendMessage(from, { text: `🔎 Searching Pinterest for "${keyword}" (${count} image${count > 1 ? 's' : ''})...` }, { quoted: message });
 
         try {
-            const { data } = await axios.get(`https://www.pinterest.com/search/pins/?q=${encodeURIComponent(keyword)}`, {
-                timeout: 45000,
-                headers: {
-                    'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36',
-                    accept: 'text/html'
-                }
+            const { data } = await axios.get('https://apis.prexzyvilla.site/search/pinterest', {
+                params: { q: keyword },
+                timeout: 45000
             });
-            const html = String(data || '');
-            const urls = [
-                ...html.matchAll(/"url":"(https:\\\/\\\/i\.pinimg\.com\\\/[^"]+)"/g),
-                ...html.matchAll(/https:\/\/i\.pinimg\.com\/[^\s"'\\]+/g)
-            ].map((m) => String(m[1] || m[0] || '').replace(/\\\//g, '/'));
-            const clean = [...new Set(urls)]
-                .filter((url) => /^https?:\/\//.test(url) && /pinimg\.com/i.test(url))
+            const list = data?.result || data?.data || data?.results || [];
+            const clean = [...new Set((Array.isArray(list) ? list : []).map((item) => item?.url || item?.image || item?.link).filter(Boolean))]
                 .slice(0, count);
 
             if (!clean.length) {

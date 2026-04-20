@@ -26,25 +26,24 @@ function isSafeShell(cmd) {
 }
 
 async function qwenChat(prompt) {
+    try {
+        const { data } = await axios.get('https://apis.prexzyvilla.site/ai/gpt-5', {
+            params: { text: prompt },
+            timeout: 120000
+        });
+        const answer = data?.result || data?.response || data?.data?.response || data?.message;
+        if (answer) return String(answer).trim();
+    } catch {}
+
     if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY');
     const { data } = await axios.post(`${QWEN_BASE_URL}/chat/completions`, {
         model: QWEN_MODEL,
-        messages: [
-            {
-                role: 'system',
-                content: 'You are Terry, the Amazing-Bot maintenance agent. Give concise, practical fixes and exact file paths.'
-            },
-            { role: 'user', content: prompt }
-        ],
+        messages: [{ role: 'system', content: 'You are Terry, the Amazing-Bot maintenance agent. Give concise, practical fixes and exact file paths.' }, { role: 'user', content: prompt }],
         temperature: 0.3,
         max_tokens: 1400
-    }, {
-        timeout: 120000,
-        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
-    });
-
+    }, { timeout: 120000, headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' } });
     const text = data?.choices?.[0]?.message?.content?.trim();
-    if (!text) throw new Error('Empty response from Qwen');
+    if (!text) throw new Error('Empty response from AI');
     return text;
 }
 
@@ -81,7 +80,12 @@ export default {
             const input = args.join(' ').trim();
             if (!input) {
                 return sock.sendMessage(from, {
-                    text: '🤖 Terry\n\nUsage:\n• terry <question>\n• terry img <prompt>\n• terry logs [n]\n• terry sh <safe-command> (owner)'
+                    text: '🤖 Terry\n\nUsage:\n• terry <question>\n• terry help\n• terry img <prompt>\n• terry logs [n]\n• terry bugs <code>\n• terry sh <safe-command> (owner)'
+                }, { quoted: message });
+            }
+            if (/^help$/i.test(input)) {
+                return sock.sendMessage(from, {
+                    text: '🤖 Terry Help\n\n• terry <question> -> GPT-5 root AI chat\n• terry img <prompt> -> image generation\n• terry logs [n] -> diagnostics\n• terry bugs <code> -> bug detector API\n• terry sh <safe-command> -> owner safe shell'
                 }, { quoted: message });
             }
 
@@ -98,6 +102,16 @@ export default {
                 const n = Number(input.split(/\s+/)[1] || '120');
                 const out = await tailLogs(n);
                 return sock.sendMessage(from, { text: `📜 Last logs\n\n${out.slice(-3900)}` }, { quoted: message });
+            }
+            if (/^bugs\s+/i.test(input)) {
+                const code = input.replace(/^bugs\s+/i, '').trim();
+                if (!code) return sock.sendMessage(from, { text: '❌ Usage: terry bugs <code>' }, { quoted: message });
+                const { data } = await axios.get('https://apis.prexzyvilla.site/ai/detectbugs', {
+                    params: { code },
+                    timeout: 120000
+                });
+                const result = data?.result || data?.response || data?.data || data;
+                return sock.sendMessage(from, { text: `🐞 Bug Analysis\n\n${typeof result === 'string' ? result : JSON.stringify(result, null, 2).slice(0, 3500)}` }, { quoted: message });
             }
 
             if (/^sh\s+/i.test(input)) {

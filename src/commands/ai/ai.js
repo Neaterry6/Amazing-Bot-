@@ -25,6 +25,7 @@ const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelangua
 const CLAUDE_API_BASE_URL = process.env.CLAUDE_API_BASE_URL || 'https://omegatech-api.dixonomega.tech/api/ai';
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'Claude-pro';
 const CLAUDE_SESSION_FILE = path.join(DATA_DIR, 'claude_sessions.json');
+const PREXZY_BASE_URL = process.env.PREXZY_BASE_URL || 'https://apis.prexzyvilla.site';
 
 const PERSONALITIES = {
     normal:    'You are a helpful, friendly AI assistant. Be concise and clear.',
@@ -51,13 +52,15 @@ const QWEN_HELP_MODELS = [
 const DEFAULT_SETTINGS = {
     personality: 'ilom',
     voiceMode: false,
-    provider: 'qwen',
+    provider: 'prexzy',
     model: '',
     scraperMode: false,
     commandTool: false
 };
 
 const PROVIDER_ALIASES = {
+    prexzy: 'prexzy',
+    gpt5: 'prexzy',
     qwen: 'qwen',
     groq: 'groq',
     grog: 'groq',
@@ -67,6 +70,7 @@ const PROVIDER_ALIASES = {
 };
 
 const PROVIDER_DEFAULT_MODELS = {
+    prexzy: 'gpt-5',
     qwen: QWEN_MODEL,
     groq: GROQ_MODEL,
     gemini: GEMINI_MODEL,
@@ -339,9 +343,21 @@ async function askClaudeAI(uid, prompt) {
     return text;
 }
 
+async function askPrexzyAI(prompt, mode = 'gpt-5') {
+    const endpoint = mode === 'copilot-think' ? 'copilot-think' : mode === 'copilot' ? 'copilot' : 'gpt-5';
+    const { data } = await axios.get(`${PREXZY_BASE_URL}/ai/${endpoint}`, {
+        params: { text: prompt },
+        timeout: 120000
+    });
+    const text = data?.result || data?.response || data?.data?.response || data?.message;
+    if (!text) throw new Error(`Empty response from ${endpoint}`);
+    return String(text).trim();
+}
+
 async function getAIResponse(uid, settings, history) {
     try {
         const provider = PROVIDER_ALIASES[String(settings?.provider || 'qwen').toLowerCase()] || 'qwen';
+        if (provider === 'prexzy') return await askPrexzyAI(history.filter((h) => h.role !== 'system').map((h) => `${h.role}: ${h.content}`).join('\n').slice(-3500), 'gpt-5');
         if (provider === 'qwen') return await askQwenAI(settings.personality, history, settings);
         if (provider === 'groq') return await askGroqAI(settings.personality, history, settings);
         if (provider === 'gemini') return await askGeminiText(settings.personality, history, settings);
@@ -510,7 +526,7 @@ async function getWeather(location) {
 }
 
 async function getDownloadUrl(url) {
-    const { data } = await axios.get('https://dev-priyanshi.onrender.com/api/alldl', {
+    const { data } = await axios.get(`${PREXZY_BASE_URL}/download/aio`, {
         params: { url },
         timeout: 45000,
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
@@ -651,17 +667,23 @@ function buildAiList() {
     return [
         '🧠 Available AI Providers',
         '',
+        `• Prexzy GPT-5 (root): ${PREXZY_BASE_URL}/ai/gpt-5`,
+        `• Prexzy Copilot: ${PREXZY_BASE_URL}/ai/copilot`,
+        `• Prexzy Copilot Think: ${PREXZY_BASE_URL}/ai/copilot-think`,
         `• Qwen Chat: ${QWEN_MODEL} (${QWEN_BASE_URL}) [token auth]`,
         `• Groq Chat: ${GROQ_MODEL} (${GROQ_BASE_URL})`,
         `• Qwen Image: ${QWEN_IMAGE_MODEL} (${QWEN_BASE_URL}/images/generations)`,
         `• Qwen Video: ${QWEN_VIDEO_MODEL} (${QWEN_BASE_URL}/videos/generations)`,
+        `• AI Writer Image: ${PREXZY_BASE_URL}/ai/aiwriter-image`,
+        `• Advanced Writer: ${PREXZY_BASE_URL}/ai/advanced`,
+        `• Emoji Encrypt/Decrypt: ${PREXZY_BASE_URL}/tools/emoji-encrypt + /tools/emoji-decrypt`,
         `• Gemini Vision: ${GEMINI_MODEL} (${GEMINI_BASE_URL})`,
         `• Claude Chat: ${CLAUDE_MODEL} (${CLAUDE_API_BASE_URL})`,
         '',
         `Qwen models:`,
         ...QWEN_HELP_MODELS.map((model) => `- ${model}`),
         '',
-        'Tip: use "ai claude <prompt>" for Claude session chat.'
+        'Tip: use "ai copilot <prompt>" or "ai think <prompt>" for prexzy models.'
     ].join('\n');
 }
 
@@ -743,7 +765,7 @@ export default {
 
             if (key === 'provider') {
                 const provider = resolveProviderToken(value);
-                if (!provider) return await sock.sendMessage(from, { text: '❌ Providers: qwen, groq, gemini, cloudpro' }, { quoted: message });
+                if (!provider) return await sock.sendMessage(from, { text: '❌ Providers: prexzy, qwen, groq, gemini, cloudpro' }, { quoted: message });
                 settings.provider = provider;
                 settings.model = PROVIDER_DEFAULT_MODELS[provider] || settings.model;
                 await saveSettings(uid, settings);
@@ -855,6 +877,54 @@ export default {
             } catch (error) {
                 return await sock.sendMessage(from, { text: `❌ Claude error: ${error.message}` }, { quoted: message });
             }
+        }
+
+        if (/^(copilot|think)\s+/i.test(body)) {
+            const useThink = /^think\s+/i.test(body);
+            const prompt = body.replace(/^(copilot|think)\s+/i, '').trim();
+            if (!prompt) return await sock.sendMessage(from, { text: `❌ Usage: ai ${useThink ? 'think' : 'copilot'} <prompt>` }, { quoted: message });
+            const out = await askPrexzyAI(prompt, useThink ? 'copilot-think' : 'copilot');
+            const sent = await sendLongText(sock, from, out, message);
+            if (sent?.key?.id) registerReplyHandler(sent.key.id, buildChainHandler(sock, from, uid, sender));
+            return;
+        }
+
+        if (/^chatbot\s+/i.test(body)) {
+            const input = body.replace(/^chatbot\s+/i, '').trim();
+            const [text, ...searchTokens] = input.split('|').map((v) => v.trim());
+            const search = searchTokens.join(' ');
+            const { data } = await axios.get(`${PREXZY_BASE_URL}/ai/chatbot`, {
+                params: { text, search },
+                timeout: 120000
+            });
+            const result = data?.result || data?.response || data?.data || data;
+            return await sendLongText(sock, from, `🤖 Chatbot\n\n${typeof result === 'string' ? result : JSON.stringify(result, null, 2).slice(0, 3400)}`, message);
+        }
+
+        if (/^advanced\s+/i.test(body)) {
+            const input = body.replace(/^advanced\s+/i, '').trim();
+            const { data } = await axios.get(`${PREXZY_BASE_URL}/ai/advanced`, {
+                params: { text: input, mode: 'Any genre', length: 'Short', creative: 'Medium' },
+                timeout: 120000
+            });
+            const result = data?.result || data?.response || data?.data || data;
+            return await sendLongText(sock, from, `🧠 Advanced Writer\n\n${typeof result === 'string' ? result : JSON.stringify(result, null, 2).slice(0, 3400)}`, message);
+        }
+
+        if (/^emoji(enc|encrypt)\s+/i.test(body)) {
+            const rest = body.replace(/^emoji(enc|encrypt)\s+/i, '').trim();
+            const [input, pass] = rest.split('|').map((v) => v.trim());
+            const { data } = await axios.get(`${PREXZY_BASE_URL}/tools/emoji-encrypt`, { params: { input, pass }, timeout: 45000 });
+            const out = data?.result || data?.data || data;
+            return await sock.sendMessage(from, { text: `🔐 Emoji Encrypted\n${typeof out === 'string' ? out : JSON.stringify(out)}` }, { quoted: message });
+        }
+
+        if (/^emoji(dec|decrypt)\s+/i.test(body)) {
+            const rest = body.replace(/^emoji(dec|decrypt)\s+/i, '').trim();
+            const [input, pass] = rest.split('|').map((v) => v.trim());
+            const { data } = await axios.get(`${PREXZY_BASE_URL}/tools/emoji-decrypt`, { params: { input, pass }, timeout: 45000 });
+            const out = data?.result || data?.data || data;
+            return await sock.sendMessage(from, { text: `🔓 Emoji Decrypted\n${typeof out === 'string' ? out : JSON.stringify(out)}` }, { quoted: message });
         }
 
 

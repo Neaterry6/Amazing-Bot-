@@ -19,6 +19,15 @@ function saveDb(v) { fs.writeFileSync(DB_PATH, JSON.stringify(v, null, 2)); }
 
 async function ask(text) {
     try {
+        const { data } = await axios.get('https://apis.prexzyvilla.site/ai/gpt-5', {
+            params: { text: `${SYSTEM}\n\n${text}` },
+            timeout: 90000
+        });
+        const reply = data?.result || data?.response || data?.data || data?.message;
+        if (reply) return String(reply).trim();
+    } catch {}
+
+    try {
         const { data } = await axios.post(`${GROQ_BASE_URL}/chat/completions`, {
             model: GROQ_MODEL,
             messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: text }],
@@ -29,11 +38,11 @@ async function ask(text) {
         if (reply) return reply;
     } catch {}
 
-    const { data } = await axios.get(`${CLAUDE_API_BASE_URL}/${encodeURIComponent(CLAUDE_MODEL)}`, {
+    const fallback = await axios.get(`${CLAUDE_API_BASE_URL}/${encodeURIComponent(CLAUDE_MODEL)}`, {
         params: { prompt: `${SYSTEM}\n\n${text}` },
         timeout: 90000
     });
-    return data?.response?.trim();
+    return fallback?.data?.response?.trim();
 }
 
 async function tts(text) {
@@ -81,6 +90,12 @@ export default {
         if ((db.global.all || db.global.private) && !global.chatHandlers?.['*']) registerRaph(sock, '*');
         const action = (args[0] || '').toLowerCase();
         const target = (args[1] || '').toLowerCase();
+
+        if (action === 'help') {
+            return sock.sendMessage(from, {
+                text: '✨ RAPH HELP\n• raph on/off\n• raph on/off /all\n• raph on/off /private\n• raph on/off /voice'
+            }, { quoted: message });
+        }
 
         if (!['on', 'off'].includes(action)) {
             return sock.sendMessage(from, {

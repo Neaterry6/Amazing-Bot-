@@ -29,6 +29,14 @@ async function fetchViaMalvryx(url) {
     return status.data;
 }
 
+async function fetchViaPrexzy(url) {
+    const { data } = await axios.get('https://apis.prexzyvilla.site/download/aio', {
+        params: { url },
+        timeout: 40000
+    });
+    return data;
+}
+
 export default {
     name: 'fbdl',
     aliases: ['fb', 'fbdownload', 'igdl', 'tkdl', 'ttdl', 'tiktokdl', 'instagramdl'],
@@ -50,7 +58,11 @@ export default {
             try {
                 payload = await fetchViaMalvryx(url);
             } catch {
-                payload = await fetchAllInOneDownload(url);
+                try {
+                    payload = await fetchAllInOneDownload(url);
+                } catch {
+                    payload = await fetchViaPrexzy(url);
+                }
             }
 
             const media = pickBestMedia(payload, 'video') || pickBestMedia(payload, 'audio');
