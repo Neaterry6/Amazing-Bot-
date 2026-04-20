@@ -30,7 +30,7 @@ import { startWebServer } from './src/utils/webServer.js';
 import qrService from './src/services/qrService.js';
 import Settings from './src/models/Settings.js';
 import { startTelegramPairBot } from './src/services/telegramPairBot.js';
-import { startSavedPairedSessions } from './src/services/pairingService.js';
+import { setPairingSessionSocketHandler, startSavedPairedSessions } from './src/services/pairingService.js';
 
 global._config = config;
 
@@ -974,6 +974,7 @@ async function initializeBot() {
         stepDone('🌐', 'Web Server', `Port ${config.server?.port || process.env.PORT || 5000}`);
 
         stepLoading('🔗', 'Paired Sessions');
+        setPairingSessionSocketHandler(attachPairedSessionRuntime);
         const restoredCount = await startSavedPairedSessions({
             onSessionSocket: attachPairedSessionRuntime
         });
