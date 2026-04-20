@@ -1,6 +1,7 @@
 import fs from 'fs-extra';
 import path from 'path';
 import { getSessionControl, normalizePhone, toPhoneJid, updateSessionControl } from '../../utils/sessionControl.js';
+import { resolveJidFromMentionOrReply } from '../../utils/jidResolver.js';
 
 function appendUniqueNumberLine(lines, key, phoneNumber) {
     const index = lines.findIndex((line) => line.startsWith(`${key}=`));
@@ -31,45 +32,14 @@ export default {
 
     async execute({ sock, message, from }) {
         try {
-            const contextInfo = message.message?.extendedTextMessage?.contextInfo;
-            const mentioned = contextInfo?.mentionedJid;
-            const quotedUser = contextInfo?.participant;
-            const remoteJid = message.key?.remoteJid || '';
-
-            let targetJid = null;
-            if (mentioned && mentioned.length > 0) targetJid = mentioned[0];
-            else if (quotedUser) targetJid = quotedUser;
-            else {
+            const targetJid = await resolveJidFromMentionOrReply({ sock, message, from });
+            if (!targetJid) {
                 return await sock.sendMessage(from, {
                     text: '❌ *Invalid Usage*\n\nPlease mention or reply to a user to add as sudo/owner.\n\n*Usage:* .addsudo @user'
                 }, { quoted: message });
             }
 
-            let fullJid = targetJid.includes('@') ? targetJid : `${targetJid}@s.whatsapp.net`;
-
-            const resolveFromMentions = async () => {
-                if (!mentioned?.length || !from.endsWith('@g.us')) return '';
-                try {
-                    const metadata = await sock.groupMetadata(remoteJid || from);
-                    const participants = metadata?.participants || [];
-                    for (const participant of participants) {
-                        const jid = String(participant?.id || '');
-                        if (!jid) continue;
-                        const jidBase = jid.split('@')[0].split(':')[0];
-                        const matched = mentioned.some((m) => {
-                            const mBase = String(m || '').split('@')[0].split(':')[0];
-                            return m === jid || (mBase && jidBase && mBase === jidBase);
-                        });
-                        if (matched && jid.endsWith('@s.whatsapp.net')) return jid;
-                    }
-                } catch {}
-                return '';
-            };
-
-            if (fullJid.endsWith('@lid')) {
-                const resolvedMentionJid = await resolveFromMentions();
-                if (resolvedMentionJid) fullJid = resolvedMentionJid;
-            }
+            const fullJid = targetJid.includes('@') ? targetJid : `${targetJid}@s.whatsapp.net`;
 
             const phoneNumber = normalizePhone(fullJid);
             if (!phoneNumber || phoneNumber.length < 10) {

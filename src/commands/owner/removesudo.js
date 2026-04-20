@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import config from '../../config.js';
 import { getSessionControl, normalizePhone, toPhoneJid, updateSessionControl } from '../../utils/sessionControl.js';
+import { resolveJidFromMentionOrReply } from '../../utils/jidResolver.js';
 
 export default {
     name: 'removesudo',
@@ -15,22 +16,19 @@ export default {
     
     async execute({ sock, message, from, sender }) {
         try {
-            const mentioned = message.message?.extendedTextMessage?.contextInfo?.mentionedJid;
-            const quotedUser = message.message?.extendedTextMessage?.contextInfo?.participant;
-            
-            let targetJid = null;
-            
-            if (mentioned && mentioned.length > 0) {
-                targetJid = mentioned[0];
-            } else if (quotedUser) {
-                targetJid = quotedUser;
-            } else {
+            const targetJid = await resolveJidFromMentionOrReply({ sock, message, from });
+            if (!targetJid) {
                 return await sock.sendMessage(from, {
                     text: '❌ *Invalid Usage*\n\nPlease mention or reply to a user to remove from sudo admins.\n\n*Usage:* .removesudo @user'
                 }, { quoted: message });
             }
-            
+
             const phoneNumber = normalizePhone(targetJid);
+            if (!phoneNumber || phoneNumber.length < 7) {
+                return await sock.sendMessage(from, {
+                    text: '❌ *Unable to Resolve User*\n\nCould not resolve this LID user to a phone-based WhatsApp JID. Try mentioning the user inside a group where the bot can read participants.'
+                }, { quoted: message });
+            }
             const normalizedJid = toPhoneJid(phoneNumber);
             const sessionControl = await getSessionControl(sock);
             
