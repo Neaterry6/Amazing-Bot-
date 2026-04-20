@@ -6,12 +6,11 @@ import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 dotenv.config();
 
-const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
-const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
-const GROQ_MODEL = process.env.GROQ_ILOM_MODEL || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 const QWEN_BASE_URL = process.env.QWEN_BASE_URL || 'https://qwen.aikit.club/v1';
 const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || '';
-const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen3.5-Plus';
+const QWEN_MODEL = process.env.QWEN_ILOM_MODEL || process.env.QWEN_MODEL || 'Qwen3.6-Plus';
+const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen-Image';
+const QWEN_VIDEO_MODEL = process.env.QWEN_VIDEO_MODEL || 'Qwen-Video';
 
 const MEMORY_PATH = './data/ilom_memory.json';
 const REPO_ROOT = process.cwd();
@@ -56,10 +55,8 @@ STRICT RULES:
 - Keep responses concise and production-safe.
 - Default behavior is normal chat assistant.
 - Only generate command files when user explicitly asks to create/build/generate a command.
-- You can generate any command architecture by default.
-- If user explicitly asks for "my structure", use this command shape:
+- Use this command shape by default whenever generating a command:
   export default { name, aliases, category, description, usage, cooldown, async execute({ sock, message, args, from, sender, prefix }) { ... } }.
-- Never force only one structure unless user requested it.
 - If user asks to use tools/function calls, design output for OpenAI-style tool calling and include safe guardrails against shell bypass tricks (like cat-based exfiltration).
 
 CURRENT MODE: ${mode}
@@ -81,12 +78,12 @@ function getRepoSnapshot() {
 }
 
 async function askIlomApi(prompt, question) {
-    if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY for ilomcreate');
+    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for ilomcreate');
 
     const { data } = await axios.post(
-        `${GROQ_BASE_URL}/chat/completions`,
+        `${QWEN_BASE_URL}/chat/completions`,
         {
-            model: GROQ_MODEL,
+            model: QWEN_MODEL,
             messages: [
                 { role: 'system', content: prompt },
                 { role: 'user', content: String(question || 'Continue').slice(0, 4000) }
@@ -97,7 +94,7 @@ async function askIlomApi(prompt, question) {
         {
             timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
             headers: {
-                Authorization: `Bearer ${GROQ_API_KEY}`,
+                Authorization: `Bearer ${QWEN_API_KEY}`,
                 'Content-Type': 'application/json'
             }
         }
@@ -105,7 +102,7 @@ async function askIlomApi(prompt, question) {
 
     const raw = data?.choices?.[0]?.message?.content || '';
     const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
-    if (!cleaned) throw new Error('Groq returned empty response');
+    if (!cleaned) throw new Error('Qwen returned empty response');
     return cleaned;
 }
 
@@ -126,15 +123,39 @@ async function generateIlomImage(prompt) {
 
 async function captureWebsite(url, quality = 'hd') {
     const width = quality === 'fhd' ? 1920 : 1366;
-    const primary = `https://image.thum.io/get/fullpage/noanimate/width/${width}/${encodeURIComponent(url)}`;
-    try {
-        const { data } = await axios.get(primary, { responseType: 'arraybuffer', timeout: 65000 });
-        return Buffer.from(data);
-    } catch {
-        const fallback = `https://kaiz-apis.gleeze.com/api/screenshot?url=${encodeURIComponent(url)}&apikey=a0ebe80e-bf1a-4dbf-8d36-6935b1bfa5ea`;
-        const { data } = await axios.get(fallback, { responseType: 'arraybuffer', timeout: 65000 });
-        return Buffer.from(data);
-    }
+    const apiUrl = `https://api.screenshotone.com/take?access_key=KN3bMn5VoWZIWw&url=${encodeURIComponent(url)}&format=jpg&full_page=true&block_ads=true&block_cookie_banners=true&block_trackers=true&viewport_width=${width}&image_quality=80&response_type=by_format`;
+    const { data } = await axios.get(apiUrl, { responseType: 'arraybuffer', timeout: 65000 });
+    return Buffer.from(data);
+}
+
+async function generateIlomVideo(prompt) {
+    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for video generation');
+    const { data } = await axios.post(`${QWEN_BASE_URL}/videos/generations`, {
+        model: QWEN_VIDEO_MODEL,
+        prompt
+    }, {
+        timeout: 180000,
+        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+    });
+    return data?.data?.[0]?.url || data?.url || data?.video || null;
+}
+
+async function analyzeImageWithQwen(buffer, prompt) {
+    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for image analysis');
+    const { data } = await axios.post(`${QWEN_BASE_URL}/chat/completions`, {
+        model: QWEN_MODEL,
+        messages: [{
+            role: 'user',
+            content: [
+                { type: 'text', text: prompt || 'Describe this image in detail.' },
+                { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${Buffer.from(buffer).toString('base64')}` } }
+            ]
+        }]
+    }, {
+        timeout: 120000,
+        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+    });
+    return String(data?.choices?.[0]?.message?.content || '').trim();
 }
 
 function getQuotedMessage(message) {
@@ -233,6 +254,22 @@ export default {
                 const imageUrl = await generateIlomImage(prompt);
                 return sock.sendMessage(from, { image: { url: imageUrl }, caption: `✅ Ilom image generated\nPrompt: ${prompt}` }, { quoted: message });
             }
+            if (/^(vid|video)\s+/i.test(userText)) {
+                const prompt = userText.replace(/^(vid|video)\s+/i, '').trim();
+                if (!prompt) return sock.sendMessage(from, { text: '❌ Usage: ilom video <prompt>' }, { quoted: message });
+                await sock.sendMessage(from, { text: '🎬 Generating video with Qwen...' }, { quoted: message });
+                const videoUrl = await generateIlomVideo(prompt);
+                if (!videoUrl) return sock.sendMessage(from, { text: '✅ Video request accepted but no downloadable URL was returned yet.' }, { quoted: message });
+                return sock.sendMessage(from, { video: { url: videoUrl }, caption: `✅ Ilom video generated\nPrompt: ${prompt}` }, { quoted: message });
+            }
+            if (/^(models|list models)$/i.test(userText)) {
+                const { data } = await axios.get(`${QWEN_BASE_URL}/models`, {
+                    timeout: 30000,
+                    headers: { Authorization: `Bearer ${QWEN_API_KEY}` }
+                });
+                const models = (data?.data || []).map((m) => m.id).filter(Boolean).slice(0, 40);
+                return sock.sendMessage(from, { text: `🧠 Qwen models (${models.length})\n\n${models.join('\n')}` || 'No models found.' }, { quoted: message });
+            }
 
             if (/^(screen|screenshot|ss)\s+/i.test(userText)) {
                 const rest = userText.replace(/^(screen|screenshot|ss)\s+/i, '').trim();
@@ -267,6 +304,18 @@ export default {
             if (quoted?.documentMessage) {
                 const buffer = await downloadMediaMessage({ message: quoted }, 'buffer', {}, sock);
                 fileCode = buffer.toString('utf8').slice(0, LOW_RESOURCE_MODE ? 5000 : 10000);
+            }
+            if (quoted?.imageMessage) {
+                const imageBuffer = await downloadMediaMessage({ message: quoted }, 'buffer', {}, sock);
+                const prompt = userText && !/^(analyze|describe)$/i.test(userText) ? userText : 'Describe this image clearly.';
+                const vision = await analyzeImageWithQwen(imageBuffer, prompt);
+                const sentVision = await sock.sendMessage(from, { text: vision || 'No image insight returned.' }, { quoted: message });
+                if (sentVision?.key?.id) {
+                    registerReplyHandler(sentVision.key.id, async (replyText, replyMessage) => {
+                        await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
+                    });
+                }
+                return;
             }
 
             const historyText = userMemory.history
@@ -305,9 +354,11 @@ COMMAND TEMPLATE REQUIREMENT:
                     text: `📄 *Generated command output*\nMode: Native code view\nLines: ${generatedCode.split('\n').length}\nSize: ${Buffer.byteLength(generatedCode, 'utf8')} bytes`
                 }, { quoted: message });
                 await sendNativeCodeBlock(sock, from, generatedCode, 'generated-command.js');
-                registerReplyHandler(sentInfo.key.id, async (replyText, replyMessage) => {
-                    await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
-                });
+                if (sentInfo?.key?.id) {
+                    registerReplyHandler(sentInfo.key.id, async (replyText, replyMessage) => {
+                        await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
+                    });
+                }
                 return;
             }
 
@@ -323,16 +374,20 @@ COMMAND TEMPLATE REQUIREMENT:
                     fileName,
                     mimetype: 'text/plain'
                 }, { quoted: message });
-                registerReplyHandler(sent.key.id, async (replyText, replyMessage) => {
-                    await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
-                });
+                if (sent?.key?.id) {
+                    registerReplyHandler(sent.key.id, async (replyText, replyMessage) => {
+                        await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
+                    });
+                }
                 return;
             }
 
             const sent = await sock.sendMessage(from, { text: output }, { quoted: message });
-            registerReplyHandler(sent.key.id, async (replyText, replyMessage) => {
-                await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
-            });
+            if (sent?.key?.id) {
+                registerReplyHandler(sent.key.id, async (replyText, replyMessage) => {
+                    await this.execute({ sock, message: replyMessage, args: [replyText], from, sender });
+                });
+            }
         } catch (err) {
             await sock.sendMessage(from, {
                 text: `❌ AI Error: ${err.message}\n\nTry again shortly.`

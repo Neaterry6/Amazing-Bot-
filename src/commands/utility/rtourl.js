@@ -11,7 +11,7 @@ const NEWSLETTER_JID = '120363421055682094@newsletter';
 const NEWSLETTER_NAME = "DEVIL'S UPDATE CHANNEL";
 const NEWSLETTER_MSG_ID = 281;
 
-const UPLOAD_URL = 'https://tmp.malvryx.dev/upload';
+const UPLOAD_URL = 'https://tmp.ilom.dev/upload';
 const ALLOWED_EXPIRY = new Set(['1h', '6h', '24h', '7d', '30d']);
 
 function loadFont(fontId = FONT_ID) {
@@ -177,7 +177,7 @@ export default {
                     + `🔹 *${S('Output')}*    : _Returns cdnUrl_\n`
                     + `─────────────────────\n`
                     + errLine
-                    + `> ${S('Created by Dev Malvryx')}`
+                    + `> ${S('Created by ilom')}`
                 );
             }
 
@@ -192,7 +192,7 @@ export default {
                 + `🔹 *${S('Expiry')}* : _${flags.expiry || 'N/A'}_\n`
                 + `🔹 *${S('Burn')}*   : _${flags.burnAfterRead ? 'true' : 'false'}_\n`
                 + `─────────────────────\n`
-                + `> ${S('Created by Dev Malvryx')}`
+                + `> ${S('Created by ilom')}`
             );
 
             const targetMessage = { message: { [`${mediaInfo.mediaType}Message`]: mediaInfo.mediaObj } };
@@ -210,7 +210,7 @@ export default {
             if (flags.burnAfterRead) form.append('burnAfterRead', 'true');
             if (flags.password) form.append('password', flags.password);
 
-            const apiKey = process.env.MALVRYX_TMP_KEY || process.env.GEMINI_API_KEY || '';
+            const apiKey = process.env.ILOM_TMP_KEY || process.env.GEMINI_API_KEY || '';
             const res = await axios.post(UPLOAD_URL, form, {
                 headers: {
                     ...form.getHeaders(),
@@ -234,7 +234,7 @@ export default {
                     + `🔹 *${S('Status')}* : _Upload failed_\n`
                     + `🔹 *${S('Reason')}* : _${reason}_\n`
                     + `─────────────────────\n`
-                    + `> ${S('Created by Dev Malvryx')}`
+                    + `> ${S('Created by ilom')}`
                 );
             }
 
@@ -257,7 +257,7 @@ export default {
                 + `─────────────────────\n`
                 + `🔗 ${link}\n`
                 + `─────────────────────\n`
-                + `> ${S('Created by Dev Malvryx')}`
+                + `> ${S('Created by ilom')}`
             );
         } catch (error) {
             return await sendWrappedText(
@@ -268,7 +268,7 @@ export default {
                 + `─────────────────────\n`
                 + `\`\`\`${error.message}\`\`\`\n`
                 + `─────────────────────\n`
-                + '> Created by Dev Malvryx'
+                + '> Created by ilom'
             );
         }
     }

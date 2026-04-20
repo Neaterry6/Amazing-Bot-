@@ -5,8 +5,8 @@ export default {
     name: 'button',
     aliases: ['buttonmode', 'btnmode'],
     category: 'owner',
-    description: 'Enable or disable global interactive button features',
-    usage: 'button <on|off|status>',
+    description: 'Manage global interactive button reply mode',
+    usage: 'button <on|off|toggle|status|help>',
     cooldown: 2,
     ownerOnly: true,
     minArgs: 0,
@@ -17,9 +17,24 @@ export default {
         }
 
         const action = String(args[0] || 'status').toLowerCase();
-        if (!['on', 'off', 'status'].includes(action)) {
+        if (!['on', 'off', 'toggle', 'status', 'help'].includes(action)) {
             return sock.sendMessage(from, {
-                text: `❌ Usage: ${prefix}button <on|off|status>`
+                text: `❌ Usage: ${prefix}button <on|off|toggle|status|help>`
+            }, { quoted: message });
+        }
+
+        if (action === 'help') {
+            return sock.sendMessage(from, {
+                text: [
+                    '🔘 *Button Mode Guide*',
+                    '',
+                    `• ${prefix}button on   → enable button/list replies`,
+                    `• ${prefix}button off  → disable interactive replies`,
+                    `• ${prefix}button toggle → switch current state`,
+                    `• ${prefix}button status → view current state`,
+                    '',
+                    'When ON, commands that support buttons/lists send tappable options instead of plain text.'
+                ].join('\n')
             }, { quoted: message });
         }
 
@@ -30,7 +45,9 @@ export default {
             }, { quoted: message });
         }
 
-        const enabled = await setButtonMode(action === 'on');
+        const current = await getButtonMode();
+        const next = action === 'toggle' ? !current : action === 'on';
+        const enabled = await setButtonMode(next);
         return sock.sendMessage(from, {
             text: `✅ Button mode turned *${enabled ? 'ON' : 'OFF'}* successfully.`
         }, { quoted: message });
