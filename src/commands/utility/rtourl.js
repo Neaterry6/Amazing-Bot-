@@ -7,10 +7,6 @@ import { downloadMediaMessage } from '@whiskeysockets/baileys';
 const FONTS_FILE = path.resolve(process.cwd(), 'fonts/fontmap.json');
 const FONT_ID = 'small_caps';
 
-const NEWSLETTER_JID = '120363421055682094@newsletter';
-const NEWSLETTER_NAME = "DEVIL'S UPDATE CHANNEL";
-const NEWSLETTER_MSG_ID = 281;
-
 const UPLOAD_URL = 'https://tmp.ilom.dev/upload';
 const ALLOWED_EXPIRY = new Set(['1h', '6h', '24h', '7d', '30d']);
 
@@ -33,25 +29,11 @@ function sf(text, fontMap) {
         .join('');
 }
 
-function makeContextInfo() {
-    return {
-        forwardingScore: 999,
-        isForwarded: true,
-        forwardedNewsletterMessageInfo: {
-            newsletterJid: NEWSLETTER_JID,
-            serverMessageId: NEWSLETTER_MSG_ID,
-            newsletterName: NEWSLETTER_NAME
-        }
-    };
-}
-
 async function sendWrappedText(sock, message, from, text) {
     return await sock.sendMessage(from, {
-        text,
-        contextInfo: makeContextInfo()
+        text
     }, {
-        quoted: message,
-        contextInfo: makeContextInfo()
+        quoted: message
     });
 }
 
@@ -177,7 +159,7 @@ export default {
                     + `🔹 *${S('Output')}*    : _Returns cdnUrl_\n`
                     + `─────────────────────\n`
                     + errLine
-                    + `> ${S('Created by ilom')}`
+                    + ''
                 );
             }
 
@@ -192,7 +174,7 @@ export default {
                 + `🔹 *${S('Expiry')}* : _${flags.expiry || 'N/A'}_\n`
                 + `🔹 *${S('Burn')}*   : _${flags.burnAfterRead ? 'true' : 'false'}_\n`
                 + `─────────────────────\n`
-                + `> ${S('Created by ilom')}`
+                + ''
             );
 
             const targetMessage = { message: { [`${mediaInfo.mediaType}Message`]: mediaInfo.mediaObj } };
@@ -234,7 +216,7 @@ export default {
                     + `🔹 *${S('Status')}* : _Upload failed_\n`
                     + `🔹 *${S('Reason')}* : _${reason}_\n`
                     + `─────────────────────\n`
-                    + `> ${S('Created by ilom')}`
+                    + ''
                 );
             }
 
@@ -257,7 +239,7 @@ export default {
                 + `─────────────────────\n`
                 + `🔗 ${link}\n`
                 + `─────────────────────\n`
-                + `> ${S('Created by ilom')}`
+                + ''
             );
         } catch (error) {
             return await sendWrappedText(
@@ -268,7 +250,7 @@ export default {
                 + `─────────────────────\n`
                 + `\`\`\`${error.message}\`\`\`\n`
                 + `─────────────────────\n`
-                + '> Created by ilom'
+                + ''
             );
         }
     }
