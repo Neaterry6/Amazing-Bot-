@@ -1,153 +1,173 @@
-import yts from 'yt-search';
 import axios from 'axios';
-import { fetchAllInOneDownload, fetchAllInOneFallback, parseAllInOneMeta, pickBestMedia } from '../../utils/allInOneDownloader.js';
-function delay(ms = 1200) { return new Promise((resolve) => setTimeout(resolve, ms)); }
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import yts from 'yt-search';
 
-async function getDownloadForType(videoUrl, type) {
-    let payload;
-    try {
-        payload = await fetchAllInOneDownload(videoUrl);
-    } catch (error) {
-        if (error?.response?.status === 403 || /rapid/i.test(error?.message || '')) {
-            payload = await fetchAllInOneFallback(videoUrl);
-        } else {
-            throw error;
-        }
+const YOUTUBE_URL_RE = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i;
+
+function senderJid(message) {
+  return message?.key?.participant || message?.key?.remoteJid || '';
+}
+
+async function downloadAndSend(url, type, sock, chatId, quotedMessage) {
+  let tmpFilePath = '';
+  try {
+    await sock.sendMessage(chatId, {
+      text: `📥 Initializing ${type} download...\nPlease wait.`
+    }, { quoted: quotedMessage });
+
+    const format = type === 'audio' ? 'mp3' : '480';
+    const apiUrl = `https://p.savenow.to/ajax/download.php?copyright=0&format=${format}&url=${encodeURIComponent(url)}&api=dfaxaxcb6d76f2f6a9894gjkege8a4ab232222`;
+
+    const response = await axios.get(apiUrl, { timeout: 30000 });
+    const resData = response.data || {};
+
+    if (!resData.success || !resData.progress_url) {
+      throw new Error('API failed to provide a progress URL.');
     }
-    let link = pickBestMedia(payload, type === 'audio' ? 'audio' : 'video');
-    if (!link && type === 'audio') link = pickBestMedia(payload, 'video');
-    if (!link && type === 'video') link = pickBestMedia(payload, 'audio');
-    if (!link) {
-        const format = type === 'audio' ? 'mp3' : 'mp4';
-        const { data } = await axios.get('https://api.ootaizumi.web.id/downloader/youtube', {
-            params: { url: videoUrl, format },
-            timeout: 45000
-        });
-        link = data?.result?.download || '';
-        payload = { ...(payload || {}), ...(data?.result || {}), title: data?.result?.title || payload?.title };
+
+    const title = resData.info?.title || resData.title || 'download';
+    let downloadUrl = null;
+
+    for (let i = 0; i < 15; i++) {
+      const progressRes = await axios.get(resData.progress_url, { timeout: 20000 });
+      const progressData = progressRes.data || {};
+
+      if (progressData.download_url) {
+        downloadUrl = progressData.download_url;
+        break;
+      }
+      if (progressData.url) {
+        downloadUrl = progressData.url;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-    if (!link) throw new Error('No downloadable media link returned by API');
-    const meta = parseAllInOneMeta(payload);
-    return { link, meta };
+
+    if (!downloadUrl) {
+      throw new Error('Timed out waiting for the download link to generate.');
+    }
+
+    const ext = type === 'audio' ? 'mp3' : 'mp4';
+    const safeTitle = title.replace(/[<>:"/\\|?*\x00-\x1F]/g, '').slice(0, 40) || `youtube_${Date.now()}`;
+    tmpFilePath = path.join(os.tmpdir(), `${Date.now()}.${ext}`);
+
+    const writer = fs.createWriteStream(tmpFilePath);
+    const stream = await axios({ url: downloadUrl, method: 'GET', responseType: 'stream', timeout: 120000 });
+    stream.data.pipe(writer);
+
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
+
+    if (type === 'audio') {
+      await sock.sendMessage(chatId, {
+        audio: { url: tmpFilePath },
+        mimetype: 'audio/mpeg',
+        fileName: `${safeTitle}.mp3`,
+        ptt: false
+      }, { quoted: quotedMessage });
+      return;
+    }
+
+    await sock.sendMessage(chatId, {
+      video: { url: tmpFilePath },
+      mimetype: 'video/mp4',
+      fileName: `${safeTitle}.mp4`,
+      caption: `📺 _${title}_`
+    }, { quoted: quotedMessage });
+  } finally {
+    if (tmpFilePath && fs.existsSync(tmpFilePath)) fs.unlink(tmpFilePath, () => {});
+  }
 }
 
 export default {
-    name: 'ytb',
-    aliases: ['youtube', 'y', 'yt', 'ytsearch'],
-    category: 'downloader',
-    description: 'Search and download YouTube audio/video',
-    usage: 'ytb <audio|video|-a|-v> <search query>',
-    example: 'ytb audio baby girl joeboy\nytb -v shape of you',
-    cooldown: 20,
-    permissions: ['user'],
-    args: true,
-    minArgs: 2,
+  name: 'ytb',
+  aliases: ['youtube', 'y', 'yt'],
+  category: 'downloader',
+  description: 'Download YouTube audio/video by search or URL',
+  usage: 'ytb -a|-v <query or url>',
+  cooldown: 10,
+  permissions: ['user'],
 
-    async execute({ sock, message, args, from, sender }) {
-        try {
-
-            let type = null;
-            if (['audio', '-a'].includes(args[0].toLowerCase())) {
-                type = 'audio';
-                args.shift();
-            } else if (['video', '-v'].includes(args[0].toLowerCase())) {
-                type = 'video';
-                args.shift();
-            } else {
-                return await sock.sendMessage(from, {
-                    text: '❌ Use: .ytb <audio|video> <query>'
-                }, { quoted: message });
-            }
-
-            const query = args.join(' ').trim();
-            if (!query) {
-                return await sock.sendMessage(from, { text: '❌ Please provide a search query.' }, { quoted: message });
-            }
-
-            const results = await yts(query);
-            const videos = (results?.videos || []).slice(0, 5);
-            if (!videos.length) {
-                return await sock.sendMessage(from, { text: `❌ No results found for "${query}"` }, { quoted: message });
-            }
-
-            const listText = [
-                `🎵 *YouTube ${type === 'audio' ? 'Audio' : 'Video'} Search*`,
-                '',
-                `📝 Query: ${query}`,
-                '━━━━━━━━━━━━━━━━━━',
-                ...videos.map((video, i) => `${i + 1}. *${video.title}*\n   ⏱️ ${video.timestamp} | 👤 ${video.author.name}`),
-                '',
-                'Reply with a number (1-5) to download.'
-            ].join('\n');
-
-            const sentMsg = await sock.sendMessage(from, { text: listText }, { quoted: message });
-
-            if (!global.replyHandlers) global.replyHandlers = {};
-            global.replyHandlers[sentMsg.key.id] = {
-                command: 'ytb',
-                handler: async (replyText, replyMessage) => {
-                    try {
-                        const replySender = replyMessage.key.participant || replyMessage.key.remoteJid;
-                        if (replySender !== sender) return;
-                        const choice = parseInt(replyText.trim(), 10);
-                        if (Number.isNaN(choice) || choice < 1 || choice > videos.length) {
-                            return await sock.sendMessage(from, { text: '❌ Invalid choice. Send 1-5.' }, { quoted: replyMessage });
-                        }
-
-                        const selected = videos[choice - 1];
-                        await delay(1200);
-                        const { link, meta } = await getDownloadForType(selected.url, type);
-                        const title = meta.title || selected.title;
-                        const artist = meta.artist || selected.author.name;
-
-                        if (type === 'audio') {
-                            try {
-                                await sock.sendMessage(from, {
-                                    audio: { url: link },
-                                    mimetype: 'audio/mpeg',
-                                    fileName: `${title}.mp3`,
-                                    ptt: false,
-                                    contextInfo: {
-                                        externalAdReply: {
-                                            title,
-                                            body: artist,
-                                            thumbnailUrl: meta.thumbnail || selected.thumbnail,
-                                            mediaType: 1,
-                                            renderLargerThumbnail: true
-                                        }
-                                    }
-                                }, { quoted: replyMessage });
-                            } catch {
-                                await sock.sendMessage(from, {
-                                    document: { url: link },
-                                    mimetype: 'audio/mpeg',
-                                    fileName: `${title}.mp3`
-                                }, { quoted: replyMessage });
-                            }
-                        } else {
-                            try {
-                                await sock.sendMessage(from, {
-                                    video: { url: link },
-                                    mimetype: 'video/mp4',
-                                    fileName: `${title}.mp4`,
-                                    caption: `📺 *${title}*\n👤 ${artist}`
-                                }, { quoted: replyMessage });
-                            } catch {
-                                await sock.sendMessage(from, {
-                                    document: { url: link },
-                                    mimetype: 'video/mp4',
-                                    fileName: `${title}.mp4`,
-                                    caption: `📺 *${title}*\n👤 ${artist}`
-                                }, { quoted: replyMessage });
-                            }
-                        }
-                    } catch (e) {
-                        await sock.sendMessage(from, { text: `❌ Failed to process selection: ${e.message}` }, { quoted: replyMessage });
-                    }
-                }
-            };
-        } catch (error) {
-            await sock.sendMessage(from, { text: `❌ ytb failed: ${error.message}` }, { quoted: message });
-        }
+  async execute({ sock, message, args, from, sender }) {
+    if (!args.length) {
+      return sock.sendMessage(from, {
+        text: 'Please specify type and query.\nUsage:\nytb -a <song name/url>\nytb -v <video name/url>'
+      }, { quoted: message });
     }
+
+    let type = 'video';
+    if (['audio', '-a'].includes(args[0].toLowerCase())) {
+      type = 'audio';
+      args.shift();
+    } else if (['video', '-v'].includes(args[0].toLowerCase())) {
+      type = 'video';
+      args.shift();
+    } else if (!String(args[0] || '').startsWith('http')) {
+      return sock.sendMessage(from, {
+        text: '⚠️ Please use -a for audio or -v for video first.'
+      }, { quoted: message });
+    }
+
+    const query = args.join(' ').trim();
+    if (!query) {
+      return sock.sendMessage(from, { text: 'Please provide a URL or search term.' }, { quoted: message });
+    }
+
+    if (YOUTUBE_URL_RE.test(query)) {
+      try {
+        await downloadAndSend(query, type, sock, from, message);
+      } catch (error) {
+        await sock.sendMessage(from, { text: `❌ Error: ${error.message}` }, { quoted: message });
+      }
+      return;
+    }
+
+    try {
+      await sock.sendMessage(from, { text: `🔍 Searching YouTube for: *${query}*...` }, { quoted: message });
+      const search = await yts(query);
+      const videos = (search?.videos || []).slice(0, 5);
+
+      if (!videos.length) {
+        return sock.sendMessage(from, { text: `No results found for "${query}".` }, { quoted: message });
+      }
+
+      let listMsg = `🎵 *YouTube ${type === 'audio' ? 'Audio' : 'Video'} Results*\n\n`;
+      videos.forEach((v, i) => {
+        listMsg += `*${i + 1}.* ${v.title}\n`;
+        listMsg += `   ⏱️ ${v.timestamp} | 📺 ${v.author?.name || 'Unknown'}\n`;
+      });
+      listMsg += '\n_Reply with 1-5 to download._';
+
+      const sentMsg = await sock.sendMessage(from, { text: listMsg }, { quoted: message });
+
+      if (!global.replyHandlers) global.replyHandlers = {};
+      global.replyHandlers[sentMsg.key.id] = {
+        command: 'ytb',
+        handler: async (replyText, replyMessage) => {
+          const replySender = senderJid(replyMessage);
+          if (replySender !== sender) return;
+
+          const choice = parseInt(String(replyText || '').trim(), 10);
+          if (Number.isNaN(choice) || choice < 1 || choice > videos.length) {
+            return sock.sendMessage(from, { text: '❌ Invalid choice.' }, { quoted: replyMessage });
+          }
+
+          const selected = videos[choice - 1];
+          try {
+            await downloadAndSend(selected.url, type, sock, from, replyMessage);
+          } catch (error) {
+            await sock.sendMessage(from, { text: `❌ Error: ${error.message}` }, { quoted: replyMessage });
+          } finally {
+            delete global.replyHandlers?.[sentMsg.key.id];
+          }
+        }
+      };
+    } catch {
+      await sock.sendMessage(from, { text: '❌ Search failed.' }, { quoted: message });
+    }
+  }
 };

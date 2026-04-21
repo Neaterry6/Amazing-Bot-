@@ -1,200 +1,125 @@
-import { createCanvas } from '@napi-rs/canvas';
+import axios from 'axios';
+import { getUser } from '../../utils/economyStorage.js';
 
-const WIDTH = 1000;
-const HEIGHT = 600;
+const allowedTypes = ['Visa', 'MasterCard', 'American Express', 'JCB'];
+const userLimits = {};
 
-const FIRST_NAMES = ['Philip', 'Amara', 'John', 'Noah', 'Ava', 'Liam', 'Sophia', 'Maya'];
-const LAST_NAMES = ['Auer', 'Stone', 'Smith', 'Lopez', 'Carter', 'Reed', 'Khan', 'Davis'];
-const BANK = 'ILOM BANK';
-
-function randomFrom(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
+function canonicalType(input) {
+    if (!input) return null;
+    const norm = input.replace(/[\s\-_.]/g, '').toLowerCase();
+    for (const type of allowedTypes) {
+        if (type.replace(/[\s\-_.]/g, '').toLowerCase() === norm) return type;
+        if (norm === 'amex' && type === 'American Express') return type;
+    }
+    return null;
 }
 
-function randomName() {
-    return `${randomFrom(FIRST_NAMES)} ${randomFrom(LAST_NAMES)}`;
+function getLimitByRank(rank) {
+    switch ((rank || '').toUpperCase()) {
+        case 'PREMIUM': return 20;
+        case 'OWNER':
+        case 'ADMIN': return 3;
+        default: return 90;
+    }
 }
 
-function randomExpiry() {
-    const month = String(Math.floor(Math.random() * 12) + 1).padStart(2, '0');
-    const year = String((new Date().getFullYear() + 2 + Math.floor(Math.random() * 4)).toString().slice(-2));
-    return `${month}/${year}`;
+function box(text) {
+    return `*╔════〔 𝐜𝐜𝐠𝐞𝐧 〕═══╗*\n${text}\n╚════════════════════╝`;
 }
 
-function randomCvv() {
-    return String(Math.floor(100 + Math.random() * 900));
-}
-
-function testCardNumber() {
-    const testBins = ['424242424242', '555555555555', '400000000000'];
-    const body = randomFrom(testBins) + String(Math.floor(1000 + Math.random() * 9000));
-    return body.slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
-}
-
-function rr(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.arcTo(x + w, y, x + w, y + r, r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-    ctx.lineTo(x + r, y + h);
-    ctx.arcTo(x, y + h, x, y + h - r, r);
-    ctx.lineTo(x, y + r);
-    ctx.arcTo(x, y, x + r, y, r);
-    ctx.closePath();
-}
-
-function drawFront(details) {
-    const canvas = createCanvas(WIDTH, HEIGHT);
-    const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = '#06080d';
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-    const cx = 120;
-    const cy = 120;
-    const cw = 760;
-    const ch = 420;
-
-    const grad = ctx.createLinearGradient(cx, cy, cx + cw, cy + ch);
-    grad.addColorStop(0, '#12171f');
-    grad.addColorStop(0.5, '#0a0d12');
-    grad.addColorStop(1, '#020305');
-
-    rr(ctx, cx, cy, cw, ch, 35);
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    ctx.fillStyle = 'rgba(255,255,255,0.08)';
-    rr(ctx, cx + cw * 0.6, cy, cw * 0.4, ch, 35);
-    ctx.fill();
-
-    ctx.fillStyle = '#fff';
-    ctx.font = '900 28px Arial';
-    ctx.fillText(BANK, cx + 50, cy + 65);
-
-    rr(ctx, cx + 50, cy + 120, 92, 62, 10);
-    const chip = ctx.createLinearGradient(cx + 50, cy + 120, cx + 142, cy + 182);
-    chip.addColorStop(0, '#e0e0e0');
-    chip.addColorStop(1, '#9e9e9e');
-    ctx.fillStyle = chip;
-    ctx.fill();
-
-    ctx.font = '500 42px monospace';
-    ctx.fillStyle = '#e0e0e0';
-    ctx.fillText(details.number, cx + 50, cy + 280);
-
-    ctx.font = '600 24px Arial';
-    ctx.fillStyle = '#aaaaaa';
-    ctx.fillText(details.name.toUpperCase(), cx + 50, cy + 350);
-
-    ctx.font = '700 12px Arial';
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillText('VALID THRU', cx + 380, cy + 340);
-    ctx.font = '600 22px Arial';
-    ctx.fillStyle = '#fff';
-    ctx.fillText(details.expiry, cx + 380, cy + 365);
-
-    const lx = cx + cw - 120;
-    const ly = cy + ch - 80;
-    ctx.globalAlpha = 0.9;
-    ctx.beginPath(); ctx.arc(lx, ly, 35, 0, Math.PI * 2); ctx.fillStyle = '#EB001B'; ctx.fill();
-    ctx.beginPath(); ctx.arc(lx + 40, ly, 35, 0, Math.PI * 2); ctx.fillStyle = '#F79E1B'; ctx.fill();
-    ctx.globalAlpha = 1;
-
-    return canvas.toBuffer('image/png');
-}
-
-function drawBack(details) {
-    const canvas = createCanvas(WIDTH, HEIGHT);
-    const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = '#0b0f17';
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-    const cx = 120;
-    const cy = 120;
-    const cw = 760;
-    const ch = 420;
-
-    const grad = ctx.createLinearGradient(cx, cy, cx + cw, cy + ch);
-    grad.addColorStop(0, '#1a2330');
-    grad.addColorStop(1, '#0e141d');
-    rr(ctx, cx, cy, cw, ch, 32);
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    ctx.fillStyle = '#111';
-    rr(ctx, cx + 4, cy + 48, cw - 8, 68, 4);
-    ctx.fill();
-
-    ctx.fillStyle = '#e8e8e8';
-    rr(ctx, cx + 42, cy + 158, cw - 205, 58, 6);
-    ctx.fill();
-
-    ctx.fillStyle = '#fff';
-    ctx.strokeStyle = '#111';
-    ctx.lineWidth = 2;
-    rr(ctx, cx + cw - 138, cy + 158, 105, 58, 6);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.font = '700 23px monospace';
-    ctx.fillStyle = '#111';
-    ctx.fillText(details.cvv, cx + cw - 118, cy + 192);
-
-    ctx.font = '500 18px monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.fillText(details.number, cx + 42, cy + 270);
-
-    return canvas.toBuffer('image/png');
+function sendOptions() {
+    return {};
 }
 
 export default {
     name: 'ccgen',
-    aliases: ['cardgen', 'fakecard'],
+    aliases: ['cardgen'],
     category: 'utility',
-    description: 'Generate a test card front/back canvas with details (for design/demo use)',
-    usage: 'ccgen',
-    cooldown: 5,
+    description: 'Fake card generator .ccgen <type> <amount>',
+    usage: 'ccgen <type> <amount>',
+    cooldown: 2,
 
-    async execute({ sock, message, from }) {
+    async execute({ sock, message, from, args, sender, isOwner, isSudo }) {
+        const [rawType, amt] = args;
+        const amount = Math.max(5, Math.min(parseInt(amt, 10) || 5, 20));
+        const type = canonicalType(rawType);
+
+        if (!rawType) {
+            return sock.sendMessage(from, {
+                text: box([
+                    '┃  *Usage*: .ccgen <type> <amount>',
+                    `┃  *Types*: ${allowedTypes.join(', ')}`
+                ].join('\n')),
+                ...sendOptions()
+            }, { quoted: message });
+        }
+
+        if (!type) {
+            return sock.sendMessage(from, {
+                text: box([
+                    `┃  *Error*: invalid card type "${rawType}"`,
+                    `┃  *Types*: ${allowedTypes.join(', ')}`
+                ].join('\n')),
+                ...sendOptions()
+            }, { quoted: message });
+        }
+
+        const chatId = sender || from || 'anon';
+        let userRank = 'FREE';
+
+        if (isOwner) userRank = 'OWNER';
+        else if (isSudo) userRank = 'ADMIN';
+        else {
+            const user = await getUser(sender).catch(() => null);
+            if (user?.isPremium) userRank = 'PREMIUM';
+        }
+
+        const now = Date.now();
+        const waitSec = getLimitByRank(userRank);
+        const until = userLimits[chatId] || 0;
+        if (now < until) {
+            const diff = Math.ceil((until - now) / 1000);
+            return sock.sendMessage(from, {
+                text: box([
+                    `┃  *Rate limited*: wait ${diff}s`,
+                    `┃  *Rank*: ${userRank}`
+                ].join('\n')),
+                ...sendOptions()
+            }, { quoted: message });
+        }
+
         try {
-            const details = {
-                name: randomName(),
-                number: testCardNumber(),
-                expiry: randomExpiry(),
-                cvv: randomCvv()
-            };
+            const apiUrl = `https://apis.davidcyril.name.ng/tools/ccgen?type=${encodeURIComponent(type)}&amount=${amount}`;
+            const { data } = await axios.get(apiUrl, { timeout: 10000 });
+            if (!data?.status || !Array.isArray(data.cards) || data.cards.length === 0) {
+                throw new Error('Could not generate cards');
+            }
 
-            const front = drawFront(details);
-            const back = drawBack(details);
+            userLimits[chatId] = Date.now() + (waitSec * 1000);
 
-            await sock.sendMessage(from, {
-                image: front,
-                caption: '💳 ILOM BANK — Front side (Demo/Test Card)'
+            const cardsText = data.cards.map((card) => [
+                `┃  *Name*: ${card.name}`,
+                `┃  *Number*: \`${card.number}\``,
+                `┃  *Expiry*: \`${card.expiry}\``,
+                `┃  *CVV*: \`${card.cvv}\``,
+                '┃'
+            ].join('\n')).join('\n');
+
+            return sock.sendMessage(from, {
+                text: box([
+                    `┃  *Card type*: ${data.card_type || type}`,
+                    `┃  *Total*: ${data.total || data.cards.length}`,
+                    cardsText
+                ].join('\n')),
+                ...sendOptions()
             }, { quoted: message });
-
-            await sock.sendMessage(from, {
-                image: back,
-                caption: '💳 ILOM BANK — Back side (Demo/Test Card)'
+        } catch (e) {
+            return sock.sendMessage(from, {
+                text: box([
+                    `┃  *Error*: ${e.response?.data?.message || e.message || 'unknown'}`
+                ].join('\n')),
+                ...sendOptions()
             }, { quoted: message });
-
-            const detailsText = [
-                '*ᴄᴀʀᴅ ᴅᴇᴛᴀɪʟs*',
-                '────────────────────',
-                `🔹 *ɴᴀᴍᴇ*: \`${details.name}\``,
-                `🔹 *ɴᴜᴍʙᴇʀ*: \`${details.number.replace(/\s/g, '')}\``,
-                `🔹 *ᴇxᴘɪʀʏ*: \`${details.expiry}\``,
-                `🔹 *ᴄᴠᴠ*: \`${details.cvv}\``,
-                '────────────────────',
-                '_For testing/design use only._'
-            ].join('\n');
-
-            await sock.sendMessage(from, { text: detailsText }, { quoted: message });
-        } catch (error) {
-            await sock.sendMessage(from, { text: `❌ ccgen failed: ${error.message}` }, { quoted: message });
         }
     }
 };

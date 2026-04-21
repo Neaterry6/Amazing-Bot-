@@ -1,6 +1,6 @@
 export default {
     name: 'jid',
-    aliases: ['lid', 'uid', 'idch'],
+    aliases: ['lid', 'uid'],
     category: 'utility',
     description: 'Get JID, LID/UID, pushname, mentions and profile status',
     usage: 'jid (reply/tag optional)',

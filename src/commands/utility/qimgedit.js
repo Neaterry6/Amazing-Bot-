@@ -6,9 +6,6 @@ import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 const FONTS_FILE = path.resolve(process.cwd(), 'fonts/fontmap.json');
 const FONT_ID = 'small_caps';
-const NEWSLETTER_JID = '120363421055682094@newsletter';
-const NEWSLETTER_NAME = "DEVIL'S UPDATE CHANNEL";
-const NEWSLETTER_MSG_ID = 281;
 const UPLOAD_URL = 'https://tmp.malvryx.dev/upload';
 
 function loadFont(fontId = FONT_ID) {
@@ -24,10 +21,7 @@ function loadFont(fontId = FONT_ID) {
 
 function sf(text, fontMap) {
   if (!fontMap) return String(text);
-  return String(text)
-    .split('')
-    .map((c) => fontMap[c] || fontMap[c.toUpperCase()] || c)
-    .join('');
+  return String(text).split('').map((c) => fontMap[c] || fontMap[c.toUpperCase()] || c).join('');
 }
 
 function shuffle(arr) {
@@ -44,18 +38,6 @@ function truncPrompt(txt, lim = 320) {
   return normalized.length > lim ? `${normalized.slice(0, lim - 3)}...` : normalized;
 }
 
-function contextInfo(styledBannerName) {
-  return {
-    forwardingScore: 999,
-    isForwarded: true,
-    forwardedNewsletterMessageInfo: {
-      newsletterJid: NEWSLETTER_JID,
-      serverMessageId: NEWSLETTER_MSG_ID,
-      newsletterName: styledBannerName,
-    },
-  };
-}
-
 function extractQuoted(message) {
   const ctx = message?.message?.extendedTextMessage?.contextInfo;
   return {
@@ -63,8 +45,8 @@ function extractQuoted(message) {
     quotedKey: {
       remoteJid: message.key?.remoteJid,
       id: ctx?.stanzaId,
-      participant: ctx?.participant,
-    },
+      participant: ctx?.participant
+    }
   };
 }
 
@@ -73,7 +55,7 @@ async function getImageSource(message) {
     return {
       imageMessage: message.message.imageMessage,
       key: message.key,
-      caption: message.message.imageMessage.caption || '',
+      caption: message.message.imageMessage.caption || ''
     };
   }
 
@@ -82,7 +64,7 @@ async function getImageSource(message) {
     return {
       imageMessage: quotedMessage.imageMessage,
       key: quotedKey,
-      caption: quotedMessage.imageMessage.caption || '',
+      caption: quotedMessage.imageMessage.caption || ''
     };
   }
 
@@ -90,47 +72,43 @@ async function getImageSource(message) {
 }
 
 export default {
-  name: 'qimgedit',
-  aliases: ['qwenimg', 'imgeditq'],
+  name: 'upload2',
+  aliases: ['qimgedit', 'qwenimg', 'imgeditq'],
   category: 'utility',
   description: 'Edit an image with Qwen by sending caption prompt or replying to an image.',
-  usage: 'qimgedit <prompt> (caption on image or reply to image)',
+  usage: 'upload2 <prompt> (caption on image or reply to image)',
   cooldown: 8,
 
   async execute({ sock, message, args, from }) {
     const fontMap = loadFont();
     const S = (t) => sf(t, fontMap);
-    const styled = S(NEWSLETTER_NAME);
-
-    const sendText = async (text) => {
-      await sock.sendMessage(from, { text, contextInfo: contextInfo(styled) }, { quoted: message });
-    };
+    const sendText = async (text) => sock.sendMessage(from, { text }, { quoted: message });
 
     try {
       const keyRaw = process.env.QIMGEDIT_KEYS || '';
       const keys = keyRaw.split(',').map((k) => k.trim()).filter((k) => k.length > 20);
       if (!keys.length) {
-        await sendText(`*${S('QIMGEDIT')}*\n─────────────────────\n🔹 *${S('Key')}* : _No Qwen API keys set (QIMGEDIT_KEYS)_\n─────────────────────\n> ${S('Created by Dev Malvryx')}`);
+        await sendText(`*${S('QIMGEDIT')}*\n─────────────────────\n🔹 *${S('Key')}* : _No Qwen API keys set (QIMGEDIT_KEYS)_`);
         return;
       }
 
       const src = await getImageSource(message);
       if (!src) {
-        await sendText(`*${S('QIMGEDIT')}*\n─────────────────────\n🔹 *${S('Error')}* : _Send as image caption or reply to an image_\n─────────────────────\n> ${S('Created by Dev Malvryx')}`);
+        await sendText(`*${S('QIMGEDIT')}*\n─────────────────────\n🔹 *${S('Error')}* : _Send as image caption or reply to an image_`);
         return;
       }
 
       let prompt = (args || []).join(' ').trim();
       if (!prompt && src.caption) prompt = src.caption.trim();
       if (!prompt) {
-        await sendText(`*${S('QIMGEDIT')}*\n─────────────────────\n🔹 *${S('Error')}* : _Please provide a prompt_\n─────────────────────\n> ${S('Created by Dev Malvryx')}`);
+        await sendText(`*${S('QIMGEDIT')}*\n─────────────────────\n🔹 *${S('Error')}* : _Please provide a prompt_`);
         return;
       }
 
       const buffer = await downloadMediaMessage({ key: src.key, message: { imageMessage: src.imageMessage } }, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
       if (!buffer) throw new Error('Failed to download image.');
 
-      await sendText(`*${S('QIMGEDIT')}*\n─────────────────────\n🔹 *${S('Status')}* : _Uploading to CDN..._\n🔹 *${S('Prompt')}* : _${S(prompt)}_\n─────────────────────\n> ${S('Created by Dev Malvryx')}`);
+      await sendText(`*${S('QIMGEDIT')}*\n─────────────────────\n🔹 *${S('Status')}* : _Uploading to CDN..._\n🔹 *${S('Prompt')}* : _${S(prompt)}_`);
 
       const form = new FormData();
       form.append('file', buffer, { filename: 'image.jpg' });
@@ -140,12 +118,12 @@ export default {
         headers: {
           ...form.getHeaders(),
           ...(process.env.MALVRYX_TMP_KEY ? { 'X-API-Key': process.env.MALVRYX_TMP_KEY } : {}),
-          'User-Agent': 'Mozilla/5.0',
+          'User-Agent': 'Mozilla/5.0'
         },
         timeout: 60000,
         maxBodyLength: Infinity,
         maxContentLength: Infinity,
-        validateStatus: () => true,
+        validateStatus: () => true
       });
 
       if (cdnRes.status < 200 || cdnRes.status >= 300 || !cdnRes.data?.success) {
@@ -166,7 +144,7 @@ export default {
           const apiRes = await axios.post('https://qwen.aikit.club/v1/images/edits', { image: imgUrl, prompt }, {
             headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
             timeout: 180000,
-            validateStatus: () => true,
+            validateStatus: () => true
           });
 
           if ((apiRes.status === 401 || apiRes.status === 429) && apiRes.data?.message) {
@@ -205,13 +183,10 @@ export default {
           '─────────────────────\n' +
           `🔹 *${S('Prompt')}* : _${revisedPrompt}_\n` +
           `🔹 *${S('Upload')}* : \`${((cdnT1 - cdnT0) / 1000).toFixed(2)}s\`\n` +
-          `🔹 *${S('AI Edit')}* : \`${((qwenT1 - qwenT0) / 1000).toFixed(2)}s\`\n` +
-          '─────────────────────\n' +
-          `> ${S('Created by Dev Malvryx')}`,
-        contextInfo: contextInfo(styled),
+          `🔹 *${S('AI Edit')}* : \`${((qwenT1 - qwenT0) / 1000).toFixed(2)}s\``
       }, { quoted: message });
     } catch (e) {
-      await sendText(`*❌ ${S('QIMGEDIT error')}*\n─────────────────────\n\`\`\`${e.message}\`\`\`\n─────────────────────\n> ${S('Created by Dev Malvryx')}`);
+      await sendText(`*❌ ${S('QIMGEDIT error')}*\n\`\`\`${e.message}\`\`\``);
     }
-  },
+  }
 };
