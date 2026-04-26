@@ -14,6 +14,7 @@ export default {
             console.error('animebully error:', error);
             await sock.sendMessage(from, { text: '❌ Failed to fetch anime GIF. Try again later.' }, { quoted: message });
         }
+
         return null;
     }
 };

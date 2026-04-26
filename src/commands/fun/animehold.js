@@ -1,17 +1,17 @@
 import { runAnimeAction } from '../../utils/animeAction.js';
 
 export default {
-    name: 'animewave',
+    name: 'animehold',
     category: 'fun',
-    description: 'Send an anime wave reaction GIF',
-    usage: 'animewave',
+    description: 'Send an anime hold reaction GIF',
+    usage: 'animehold',
     cooldown: 4,
 
     async execute({ sock, message, from }) {
         try {
-            await runAnimeAction({ sock, message, from, action: 'wave' });
+            await runAnimeAction({ sock, message, from, action: 'hold' });
         } catch (error) {
-            console.error('animewave error:', error);
+            console.error('animehold error:', error);
             await sock.sendMessage(from, { text: '❌ Failed to fetch anime GIF. Try again later.' }, { quoted: message });
         }
 

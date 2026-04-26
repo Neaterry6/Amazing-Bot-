@@ -291,9 +291,15 @@ async function qwenImageGeneration(prompt) {
         timeout: 180000,
         headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
     });
-    const imageUrl = data?.data?.[0]?.url || data?.data?.[0]?.b64_json || data?.url;
-    if (!imageUrl) throw new Error('No generated image returned by Qwen API');
-    return imageUrl;
+
+    const first = data?.data?.[0] || data;
+    const imageUrl = first?.url || first?.image_url || data?.url;
+    if (imageUrl) return { url: imageUrl };
+
+    const b64 = first?.b64_json || first?.b64 || data?.b64_json;
+    if (b64) return { buffer: Buffer.from(String(b64), 'base64') };
+
+    throw new Error('No generated image returned by Qwen API');
 }
 
 async function qwenVideoGeneration(prompt) {
@@ -935,9 +941,12 @@ export default {
             await sock.sendMessage(from, { text: '🎨 Generating image with Qwen... please wait.' }, { quoted: message });
             await delay(1800);
             try {
-                const imageUrl = await qwenImageGeneration(prompt);
-                return await sock.sendMessage(from, { image: { url: imageUrl }, caption: `🖼️ Qwen Image
-Prompt: ${prompt}` }, { quoted: message });
+                const imagePayload = await qwenImageGeneration(prompt);
+                return await sock.sendMessage(from, {
+                    image: imagePayload.buffer || { url: imagePayload.url },
+                    caption: `🖼️ Qwen Image
+Prompt: ${prompt}`
+                }, { quoted: message });
             } catch (error) {
                 return await sock.sendMessage(from, { text: `❌ Image generation failed: ${error.message}` }, { quoted: message });
             }
