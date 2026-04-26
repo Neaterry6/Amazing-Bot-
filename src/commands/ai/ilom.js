@@ -6,11 +6,13 @@ import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 dotenv.config();
 
-const QWEN_BASE_URL = process.env.QWEN_BASE_URL || 'https://qwen.aikit.club/v1';
-const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || '';
-const QWEN_MODEL = process.env.QWEN_ILOM_MODEL || process.env.QWEN_MODEL || 'Qwen3.6-Plus';
-const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen-Image';
-const QWEN_VIDEO_MODEL = process.env.QWEN_VIDEO_MODEL || 'Qwen-Video';
+const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.GROG_API_KEY || '';
+const GROQ_MODEL = process.env.GROQ_ILOM_MODEL || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+const GEMINI_TEXT_MODEL = process.env.GEMINI_ILOM_MODEL || 'gemini-2.0-flash';
+const GEMINI_VISION_MODEL = process.env.GEMINI_ILOM_VISION_MODEL || GEMINI_TEXT_MODEL;
 
 const MEMORY_PATH = './data/ilom_memory.json';
 const REPO_ROOT = process.cwd();
@@ -77,46 +79,70 @@ function getRepoSnapshot() {
     return lines.join('\n');
 }
 
-async function askIlomApi(prompt, question) {
-    const composed = `${prompt}\n\n${String(question || 'Continue').slice(0, 4000)}`;
-    try {
-        const { data } = await axios.get('https://apis.prexzyvilla.site/ai/gpt-5', {
-            params: { text: composed },
-            timeout: LOW_RESOURCE_MODE ? 70000 : 120000
-        });
-        const out = data?.result || data?.response || data?.data || data?.message;
-        if (out) return stripTrailingDetailsBlock(String(out).trim());
-    } catch {}
-
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for ilomcreate fallback');
-    const { data } = await axios.post(`${QWEN_BASE_URL}/chat/completions`, {
-        model: QWEN_MODEL,
-        messages: [{ role: 'system', content: prompt }, { role: 'user', content: String(question || 'Continue').slice(0, 4000) }],
+async function askGroqChat(systemPrompt, userPrompt) {
+    if (!GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY');
+    const { data } = await axios.post(`${GROQ_BASE_URL}/chat/completions`, {
+        model: GROQ_MODEL,
+        messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+        ],
         temperature: LOW_RESOURCE_MODE ? 0.2 : 0.4,
         max_tokens: LOW_RESOURCE_MODE ? 950 : 1800
     }, {
         timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
-        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+        headers: { Authorization: `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }
     });
+
     const raw = data?.choices?.[0]?.message?.content || '';
     const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
-    if (!cleaned) throw new Error('AI returned empty response');
+    if (!cleaned) throw new Error('Groq returned empty response');
     return cleaned;
 }
 
-async function generateIlomImage(prompt) {
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for image generation');
-    const { data } = await axios.post(`${QWEN_BASE_URL}/images/generations`, {
-        model: QWEN_IMAGE_MODEL,
-        prompt,
-        size: '1024x1024'
+async function askGeminiText(systemPrompt, userPrompt) {
+    if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const { data } = await axios.post(endpoint, {
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: {
+            temperature: LOW_RESOURCE_MODE ? 0.2 : 0.4,
+            maxOutputTokens: LOW_RESOURCE_MODE ? 1000 : 1800
+        }
     }, {
-        timeout: 180000,
-        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+        timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+        headers: { 'Content-Type': 'application/json' }
     });
-    const url = data?.data?.[0]?.url || data?.url;
-    if (!url) throw new Error('No image URL returned from Qwen');
-    return url;
+
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p?.text || '').join(' ').trim();
+    if (!text) throw new Error('Gemini returned empty response');
+    return stripTrailingDetailsBlock(String(text));
+}
+
+async function askIlomApi(prompt, question) {
+    const normalizedQuestion = String(question || 'Continue').slice(0, 4000);
+    const composed = `${prompt}\n\n${normalizedQuestion}`;
+
+    try {
+        return await askGroqChat(prompt, normalizedQuestion);
+    } catch {}
+
+    try {
+        return await askGeminiText(prompt, normalizedQuestion);
+    } catch {}
+
+    const { data } = await axios.get('https://apis.prexzyvilla.site/ai/gpt-5', {
+        params: { text: composed },
+        timeout: LOW_RESOURCE_MODE ? 70000 : 120000
+    });
+    const out = data?.result || data?.response || data?.data || data?.message;
+    if (!out) throw new Error('All AI providers failed for ilomcreate');
+    return stripTrailingDetailsBlock(String(out).trim());
+}
+
+async function generateIlomImage() {
+    throw new Error('Image generation is disabled in ilomcreate. Use dedicated image commands instead.');
 }
 
 async function captureWebsite(url, quality = 'hd') {
@@ -126,34 +152,34 @@ async function captureWebsite(url, quality = 'hd') {
     return Buffer.from(data);
 }
 
-async function generateIlomVideo(prompt) {
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for video generation');
-    const { data } = await axios.post(`${QWEN_BASE_URL}/videos/generations`, {
-        model: QWEN_VIDEO_MODEL,
-        prompt
-    }, {
-        timeout: 180000,
-        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
-    });
-    return data?.data?.[0]?.url || data?.url || data?.video || null;
+async function generateIlomVideo() {
+    throw new Error('Video generation is disabled in ilomcreate. Use dedicated video commands instead.');
 }
 
 async function analyzeImageWithQwen(buffer, prompt) {
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY for image analysis');
-    const { data } = await axios.post(`${QWEN_BASE_URL}/chat/completions`, {
-        model: QWEN_MODEL,
-        messages: [{
+    if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY for image analysis');
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_VISION_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const { data } = await axios.post(endpoint, {
+        contents: [{
             role: 'user',
-            content: [
-                { type: 'text', text: prompt || 'Describe this image in detail.' },
-                { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${Buffer.from(buffer).toString('base64')}` } }
+            parts: [
+                { text: prompt || 'Describe this image in detail.' },
+                {
+                    inlineData: {
+                        mimeType: 'image/jpeg',
+                        data: Buffer.from(buffer).toString('base64')
+                    }
+                }
             ]
         }]
     }, {
         timeout: 120000,
-        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' }
     });
-    return String(data?.choices?.[0]?.message?.content || '').trim();
+
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p?.text || '').join(' ').trim();
+    if (!text) throw new Error('Gemini did not return image analysis text');
+    return text;
 }
 
 function getQuotedMessage(message) {
@@ -254,25 +280,20 @@ export default {
                 if (!prompt) {
                     return sock.sendMessage(from, { text: '❌ Usage: ilom img <prompt>' }, { quoted: message });
                 }
-                await sock.sendMessage(from, { text: '🎨 Generating image with Qwen...' }, { quoted: message });
+                await sock.sendMessage(from, { text: '🎨 Image generation is not supported in ilomcreate right now.' }, { quoted: message });
                 const imageUrl = await generateIlomImage(prompt);
                 return sock.sendMessage(from, { image: { url: imageUrl }, caption: `✅ Ilom image generated\nPrompt: ${prompt}` }, { quoted: message });
             }
             if (/^(vid|video)\s+/i.test(userText)) {
                 const prompt = userText.replace(/^(vid|video)\s+/i, '').trim();
                 if (!prompt) return sock.sendMessage(from, { text: '❌ Usage: ilom video <prompt>' }, { quoted: message });
-                await sock.sendMessage(from, { text: '🎬 Generating video with Qwen...' }, { quoted: message });
+                await sock.sendMessage(from, { text: '🎬 Video generation is not supported in ilomcreate right now.' }, { quoted: message });
                 const videoUrl = await generateIlomVideo(prompt);
                 if (!videoUrl) return sock.sendMessage(from, { text: '✅ Video request accepted but no downloadable URL was returned yet.' }, { quoted: message });
                 return sock.sendMessage(from, { video: { url: videoUrl }, caption: `✅ Ilom video generated\nPrompt: ${prompt}` }, { quoted: message });
             }
             if (/^(models|list models)$/i.test(userText)) {
-                const { data } = await axios.get(`${QWEN_BASE_URL}/models`, {
-                    timeout: 30000,
-                    headers: { Authorization: `Bearer ${QWEN_API_KEY}` }
-                });
-                const models = (data?.data || []).map((m) => m.id).filter(Boolean).slice(0, 40);
-                return sock.sendMessage(from, { text: `🧠 Qwen models (${models.length})\n\n${models.join('\n')}` || 'No models found.' }, { quoted: message });
+                return sock.sendMessage(from, { text: `🧠 ilomcreate providers\n• Groq model: ${GROQ_MODEL}\n• Gemini model: ${GEMINI_TEXT_MODEL}\n• Gemini vision: ${GEMINI_VISION_MODEL}` }, { quoted: message });
             }
 
             if (/^(screen|screenshot|ss)\s+/i.test(userText)) {

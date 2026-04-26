@@ -848,19 +848,19 @@ async function establishWhatsAppConnection() {
                     const statusCode = lastDisconnect?.error?.output?.statusCode;
                     logger.warn(`Connection closed. Code: ${statusCode}`);
 
-                    const requiresFreshPairing = [
-                        DisconnectReason.badSession,
-                        DisconnectReason.loggedOut
-                    ].includes(statusCode);
+                    const sessionWasLoggedOut = statusCode === DisconnectReason.loggedOut;
+                    const badSessionDetected = statusCode === DisconnectReason.badSession;
 
-                    if (requiresFreshPairing) {
-                        logger.warn('Session reported invalid (401). Clearing old auth and requesting a fresh pair.');
+                    if (sessionWasLoggedOut) {
+                        logger.warn('Session was explicitly logged out by WhatsApp. Clearing local auth and requesting new pair.');
                         generatedSessionSaved = false;
                         await clearLocalAuthFiles();
                         if (getSessionIdentifier()) {
                             await removeEnvValue('SESSION_ID').catch(() => {});
                             logger.warn('Removed stale SESSION_ID from .env so a new pair can be created.');
                         }
+                    } else if (badSessionDetected) {
+                        logger.warn('Bad session reported. Keeping current auth/session files and attempting reconnect to avoid unnecessary logout loops.');
                     }
 
                     try {
