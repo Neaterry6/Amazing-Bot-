@@ -222,6 +222,18 @@ async function clearLocalAuthFiles() {
     await fs.emptyDir(keysPath).catch(() => {});
 }
 
+async function hasUsableLocalAuthSession() {
+    const credsPath = path.join(SESSION_PATH, 'creds.json');
+    if (!await fs.pathExists(credsPath)) return false;
+
+    try {
+        const creds = await fs.readJSON(credsPath);
+        return Boolean(creds?.registered && creds?.me?.id);
+    } catch {
+        return false;
+    }
+}
+
 async function displayBanner() {
     console.clear();
     const gradient = (await import('gradient-string')).default;
@@ -338,6 +350,13 @@ async function processSessionCredentials() {
     const keysPath = path.join(SESSION_PATH, 'keys');
 
     const sessionId = getSessionIdentifier();
+    const localSessionAvailable = await hasUsableLocalAuthSession();
+
+    if (localSessionAvailable) {
+        logger.info('Usable local auth session detected. Skipping SESSION_ID import to preserve paired console session.');
+        return true;
+    }
+
     if (!sessionId) {
         logger.info('No SESSION_ID - will generate QR code');
         return false;
@@ -575,6 +594,11 @@ async function processSessionCredentials() {
         logger.info('Session credentials processed');
         return true;
     } catch (error) {
+        if (await hasUsableLocalAuthSession()) {
+            logger.warn(`Session processing failed (${error.message}) but local auth is still valid; continuing with local session.`);
+            return true;
+        }
+
         logger.warn(`Session processing failed: ${error.message} - will use QR`);
         await fs.remove(path.join(SESSION_PATH, 'creds.json')).catch(() => {});
         await removeEnvValue('SESSION_ID').catch(() => {});
