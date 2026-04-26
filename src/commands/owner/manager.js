@@ -1,3 +1,4 @@
+import path from 'path';
 import { generatePairingCode } from '../../services/pairingService.js';
 import { getSessionControl, normalizePhone, updateSessionControl } from '../../utils/sessionControl.js';
 
@@ -62,18 +63,20 @@ async function sendMenu(sock, from, message, sessionId) {
                 await sock.sendMessage(from, { text: `⏳ Requesting pairing code for +${number}...` }, { quoted: msg2 });
                 try {
                     const paired = await generatePairingCode(number, {
-                        onLinked: async ({ number: linkedNumber }) => {
+                        onLinked: async ({ number: linkedNumber, sessionPath, sessionId: linkedSessionRaw }) => {
                             const current = await getSessionControl(sock);
                             const owners = Array.from(new Set([...(current.owners || []), linkedNumber]));
                             await updateSessionControl(sock, { owners });
+                            const linkedSessionId = path.basename(sessionPath || '') || linkedSessionRaw || 'unknown';
                             await sock.sendMessage(from, {
-                                text: `✅ +${linkedNumber} linked successfully. Account is now connected and running.`
+                                text: `✅ +${linkedNumber} linked successfully.\n🆔 Session ID: ${linkedSessionId}\n🚀 Bot deployment hook triggered for this session.`
                             }, { quoted: msg2 });
                         }
                     });
 
+                    const createdSessionId = path.basename(paired.sessionPath || '') || 'unknown';
                     await sock.sendMessage(from, {
-                        text: `✅ *Pairing Code:* ${paired.code}\n\nUse WhatsApp → Linked Devices → Link with phone number.`
+                        text: `✅ *Pairing Code:* ${paired.code}\n🆔 *Session ID:* ${createdSessionId}\n\nUse WhatsApp → Linked Devices → Link with phone number.`
                     }, { quoted: msg2 });
                 } catch (e) {
                     await sock.sendMessage(from, { text: `❌ Pairing failed: ${e.message}` }, { quoted: msg2 });

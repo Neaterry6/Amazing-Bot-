@@ -1,221 +1,184 @@
-import { createCanvas } from '@napi-rs/canvas';
+import TicTacToe from '../../utils/tictactoe.js';
 
-const sessions = new Map();
-const TTL = 10 * 60 * 1000;
-
-function markOf(jid, session) {
-    if (jid === session.playerX) return 'X';
-    if (jid === session.playerO) return 'O';
-    return '';
-}
-
-function renderBoardImage(session, title = 'Tic Tac Toe') {
-    const canvas = createCanvas(900, 900);
-    const ctx = canvas.getContext('2d');
-    const grad = ctx.createLinearGradient(0, 0, 900, 900);
-    grad.addColorStop(0, '#0f172a');
-    grad.addColorStop(1, '#1d4ed8');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 900, 900);
-
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = 'bold 58px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(title, 450, 90);
-
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 12;
-    ctx.strokeRect(150, 150, 600, 600);
-    for (let i = 1; i < 3; i += 1) {
-        const p = 150 + (i * 200);
-        ctx.beginPath();
-        ctx.moveTo(p, 150);
-        ctx.lineTo(p, 750);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(150, p);
-        ctx.lineTo(750, p);
-        ctx.stroke();
-    }
-
-    ctx.font = 'bold 72px sans-serif';
-    for (let i = 0; i < 9; i += 1) {
-        const col = i % 3;
-        const row = Math.floor(i / 3);
-        const x = 250 + (col * 200);
-        const y = 280 + (row * 200);
-        const v = session.board[i];
-        if (v === 'X') ctx.fillStyle = '#22d3ee';
-        else if (v === 'O') ctx.fillStyle = '#fbbf24';
-        else ctx.fillStyle = 'rgba(255,255,255,0.75)';
-        ctx.fillText(v || String(i + 1), x, y);
-    }
-
-    return canvas.toBuffer('image/png');
-}
-
-function winner(board) {
-    const lines = [
-        [0, 1, 2], [3, 4, 5], [6, 7, 8],
-        [0, 3, 6], [1, 4, 7], [2, 5, 8],
-        [0, 4, 8], [2, 4, 6]
-    ];
-    for (const [a, b, c] of lines) {
-        if (board[a] && board[a] === board[b] && board[b] === board[c]) return board[a];
-    }
-    return '';
-}
+const games = {};
 
 function mention(jid) {
     return `@${String(jid || '').split('@')[0]}`;
 }
 
-function clearSession(from) {
-    const s = sessions.get(from);
-    if (s?.timer) clearTimeout(s.timer);
-    sessions.delete(from);
+function senderJid(message) {
+    return message?.key?.participant || message?.key?.remoteJid || '';
 }
 
-function armExpiry(from) {
-    const s = sessions.get(from);
-    if (!s) return;
-    if (s.timer) clearTimeout(s.timer);
-    s.timer = setTimeout(() => clearSession(from), TTL);
+function setChatHandler(chatId, handler) {
+    if (!global.chatHandlers) global.chatHandlers = {};
+    global.chatHandlers[chatId] = { command: 'tictactoe', handler };
 }
 
-async function sendBoard(sock, from, quoted, session, text, buttons = []) {
-    const buffer = renderBoardImage(session);
-    if (buttons.length) {
-        return sock.sendMessage(from, {
-            image: buffer,
-            caption: text,
-            footer: 'TicTacToe',
-            buttons,
-            headerType: 4,
-            mentions: [session.playerX, session.playerO]
-        }, { quoted });
+function clearChatHandler(chatId) {
+    if (global.chatHandlers?.[chatId]) delete global.chatHandlers[chatId];
+}
+
+function renderBoard(game) {
+    const arr = game.render().map((v) => ({
+        X: '❎',
+        O: '⭕',
+        1: '1️⃣',
+        2: '2️⃣',
+        3: '3️⃣',
+        4: '4️⃣',
+        5: '5️⃣',
+        6: '6️⃣',
+        7: '7️⃣',
+        8: '8️⃣',
+        9: '9️⃣'
+    }[v]));
+    return `${arr.slice(0, 3).join('')}\n${arr.slice(3, 6).join('')}\n${arr.slice(6).join('')}`;
+}
+
+function cleanupRoom(roomId) {
+    const room = games[roomId];
+    if (!room) return;
+    clearChatHandler(room.x);
+    delete games[roomId];
+}
+
+async function handleMove(sock, msg, from) {
+    const sender = senderJid(msg);
+    const text = String(msg.message?.conversation || msg.message?.extendedTextMessage?.text || '').trim();
+    const room = Object.values(games).find((r) =>
+        r.id.startsWith('tictactoe') && [r.game.playerX, r.game.playerO].includes(sender) && r.state === 'PLAYING' && r.x === from
+    );
+
+    if (!room) return false;
+
+    const isSurrender = /^(surrender|give up)$/i.test(text);
+    if (!isSurrender && !/^[1-9]$/.test(text)) return false;
+
+    if (sender !== room.game.currentTurn && !isSurrender) {
+        await sock.sendMessage(from, { text: '❌ Not your turn!' }, { quoted: msg });
+        return true;
     }
-    return sock.sendMessage(from, { image: buffer, caption: text, mentions: [session.playerX, session.playerO] }, { quoted });
+
+    const ok = isSurrender ? true : room.game.turn(sender === room.game.playerO, Number.parseInt(text, 10) - 1);
+    if (!ok) {
+        await sock.sendMessage(from, { text: '❌ Invalid move! Position already taken.' }, { quoted: msg });
+        return true;
+    }
+
+    let winner = room.game.winner;
+    const isTie = room.game.turns === 9 && !winner;
+
+    if (isSurrender) {
+        winner = sender === room.game.playerX ? room.game.playerO : room.game.playerX;
+        await sock.sendMessage(from, {
+            text: `🏳️ ${mention(sender)} surrendered! ${mention(winner)} wins!`,
+            mentions: [sender, winner]
+        }, { quoted: msg });
+        cleanupRoom(room.id);
+        return true;
+    }
+
+    const status = winner
+        ? `🎉 ${mention(winner)} wins the game!`
+        : isTie
+            ? '🤝 Game ended in a draw!'
+            : `🎲 Turn: ${mention(room.game.currentTurn)}`;
+
+    const board = [
+        '🎮 *TicTacToe*',
+        '',
+        status,
+        '',
+        renderBoard(room.game),
+        '',
+        `▢ Player ❎: ${mention(room.game.playerX)}`,
+        `▢ Player ⭕: ${mention(room.game.playerO)}`,
+        !winner && !isTie ? '\n• Type a number (1-9)\n• Type *surrender* to quit' : ''
+    ].join('\n');
+
+    const mentions = [room.game.playerX, room.game.playerO, winner || room.game.currentTurn].filter(Boolean);
+
+    await sock.sendMessage(from, { text: board, mentions }, { quoted: msg });
+
+    if (winner || isTie) cleanupRoom(room.id);
+    return true;
 }
 
 export default {
+    games,
     name: 'tictactoe',
-    aliases: ['ttt'],
+    aliases: ['ttt', 'xo'],
     category: 'games',
-    description: 'Play multiplayer Tic Tac Toe with canvas board',
-    usage: 'tictactoe <@user|number|stop>',
-    cooldown: 2,
+    description: 'Play TicTacToe with another player - type .ttt to start or join',
+    usage: 'ttt [room name]',
     groupOnly: true,
-    minArgs: 0,
+    cooldown: 3,
 
-    async execute({ sock, message, args, from, sender, prefix }) {
-        const cmd = String(args[0] || '').toLowerCase();
-        if (cmd === 'stop') {
-            if (!sessions.has(from)) {
-                return sock.sendMessage(from, { text: '❌ No active tic tac toe game.' }, { quoted: message });
-            }
-            clearSession(from);
-            return sock.sendMessage(from, { text: '🛑 Tic Tac Toe stopped.' }, { quoted: message });
+    async execute({ sock, message, args, from, sender }) {
+        const text = args.join(' ').trim();
+
+        const existingRoom = Object.values(games).find((room) =>
+            room.id.startsWith('tictactoe') && [room.game.playerX, room.game.playerO].includes(sender)
+        );
+        if (existingRoom && existingRoom.state === 'PLAYING') {
+            await sock.sendMessage(from, { text: '❌ You are already in a game. Type *surrender*.' }, { quoted: message });
+            return;
         }
 
-        if (sessions.has(from)) {
-            return sock.sendMessage(from, { text: '❌ A Tic Tac Toe game is already active in this chat.' }, { quoted: message });
-        }
+        let room = Object.values(games).find((r) =>
+            r.state === 'WAITING' && r.id.startsWith('tictactoe') && r.x === from && (text ? r.name === text : !r.name)
+        );
 
-        const ctx = message.message?.extendedTextMessage?.contextInfo || {};
-        const challenger = sender;
-        const opponent = ctx.mentionedJid?.[0]
-            || (ctx.participant && ctx.participant !== sender ? ctx.participant : '');
-        if (!opponent || opponent === challenger) {
-            return sock.sendMessage(from, {
-                text: `❌ Mention or reply to the second player.\nExample: ${prefix}tictactoe @user`
+        if (room) {
+            room.o = from;
+            room.game.playerO = sender;
+            room.state = 'PLAYING';
+
+            const startText = [
+                '🎮 *TicTacToe Game Started!*',
+                '',
+                `Waiting for ${mention(room.game.currentTurn)} to play...`,
+                '',
+                renderBoard(room.game),
+                '',
+                `▢ Room ID: ${room.id}`,
+                '• Type a number (1-9) to play',
+                '• Type *surrender* to quit'
+            ].join('\n');
+
+            await sock.sendMessage(from, {
+                text: startText,
+                mentions: [room.game.currentTurn, room.game.playerX, room.game.playerO]
             }, { quoted: message });
+
+            setChatHandler(from, async (incomingText, incomingMsg) => {
+                const prefixed = String(incomingText || '').trim().startsWith('.');
+                if (prefixed) return;
+                await handleMove(sock, incomingMsg, from);
+            });
+            return;
         }
 
-        const session = {
-            playerX: challenger,
-            playerO: opponent,
-            turn: 'X',
-            board: Array(9).fill(''),
-            timer: null
-        };
-        sessions.set(from, session);
-        armExpiry(from);
-
-        const intro = [
-            '🎮 *Tic Tac Toe Started*',
-            `${mention(challenger)} = ❌`,
-            `${mention(opponent)} = ⭕`,
-            '',
-            `Reply with a number *1-9* to place your move.`,
-            `First turn: ${mention(challenger)} (X)`
-        ].join('\n');
-        const sent = await sendBoard(sock, from, message, session, intro);
-
-        if (!global.replyHandlers) global.replyHandlers = {};
-        const register = (msgId) => {
-            global.replyHandlers[msgId] = {
-                command: 'tictactoe',
-                handler: async (replyText, replyMessage) => {
-                    const live = sessions.get(from);
-                    if (!live) return;
-                    armExpiry(from);
-
-                    const btn = replyMessage.message?.buttonsResponseMessage?.selectedButtonId || '';
-                    const moveText = (btn.replace(/^TTT_/, '') || replyText || '').trim().toUpperCase();
-                    const actor = replyMessage.key.participant || replyMessage.key.remoteJid;
-                    const actorMark = markOf(actor, live);
-                    if (!actorMark) return;
-
-                    if (moveText === 'STOP') {
-                        clearSession(from);
-                        return sock.sendMessage(from, { text: '🛑 Tic Tac Toe stopped.' }, { quoted: replyMessage });
-                    }
-                    if (moveText === 'CONTINUE') {
-                        const turnJid = live.turn === 'X' ? live.playerX : live.playerO;
-                        const continued = await sendBoard(sock, from, replyMessage, live, `▶️ Continue game.\nTurn: ${mention(turnJid)} (${live.turn})`);
-                        register(continued.key.id);
-                        return;
-                    }
-
-                    const pos = Number.parseInt(moveText, 10);
-                    if (Number.isNaN(pos) || pos < 1 || pos > 9) return;
-                    if (actorMark !== live.turn) return;
-                    if (live.board[pos - 1]) return;
-
-                    live.board[pos - 1] = actorMark;
-                    const won = winner(live.board);
-                    const filled = live.board.every(Boolean);
-
-                    if (won) {
-                        const winnerJid = won === 'X' ? live.playerX : live.playerO;
-                        const msg = await sendBoard(sock, from, replyMessage, live, `🏆 Winner: ${mention(winnerJid)} (${won})`);
-                        clearSession(from);
-                        delete global.replyHandlers[msg.key.id];
-                        return;
-                    }
-
-                    if (filled) {
-                        const msg = await sendBoard(
-                            sock, from, replyMessage, live,
-                            '🤝 Draw game.\nUse buttons below to continue or stop.',
-                            [
-                                { buttonId: 'TTT_CONTINUE', buttonText: { displayText: 'Continue' }, type: 1 },
-                                { buttonId: 'TTT_STOP', buttonText: { displayText: 'Stop' }, type: 1 }
-                            ]
-                        );
-                        register(msg.key.id);
-                        return;
-                    }
-
-                    live.turn = live.turn === 'X' ? 'O' : 'X';
-                    const turnJid = live.turn === 'X' ? live.playerX : live.playerO;
-                    const next = await sendBoard(sock, from, replyMessage, live, `✅ Move accepted.\nTurn: ${mention(turnJid)} (${live.turn})`);
-                    register(next.key.id);
-                }
-            };
+        room = {
+            id: `tictactoe-${Date.now()}`,
+            x: from,
+            o: '',
+            game: new TicTacToe(sender, null),
+            state: 'WAITING'
         };
 
-        register(sent.key.id);
+        if (text) room.name = text;
+        games[room.id] = room;
+
+        await sock.sendMessage(from, {
+            text: `⏳ *Waiting for opponent*\nType *.ttt ${text || ''}* to join!`
+        }, { quoted: message });
     }
 };
+
+export async function handleTicTacToeMove(sock, msg, extra = {}) {
+    const from = extra.from || msg?.key?.remoteJid;
+    if (!from) return false;
+    return handleMove(sock, msg, from);
+}
