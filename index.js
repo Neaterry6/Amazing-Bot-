@@ -46,6 +46,7 @@ let cachedPairingNumber = null;
 let telegramBotController = null;
 let generatedSessionSaved = false;
 let pairedSessionDeployTimer = null;
+let lastLoggedOutAt = 0;
 const pairedRuntimeSockets = new WeakSet();
 
 const SESSION_PATH = path.join(process.cwd(), 'cache', 'auth_info_baileys');
@@ -818,6 +819,7 @@ async function establishWhatsAppConnection() {
                     connectionTimeout = null;
                     reconnectAttempts = 0;
                     reconnectInProgress = false;
+                    lastLoggedOutAt = 0;
 
                     stepDone('📡', 'WhatsApp', chalk.greenBright('Connected!'));
                     console.log();
@@ -856,12 +858,19 @@ async function establishWhatsAppConnection() {
                     const badSessionDetected = statusCode === DisconnectReason.badSession;
 
                     if (sessionWasLoggedOut) {
-                        logger.warn('Session was explicitly logged out by WhatsApp. Clearing local auth and requesting new pair.');
-                        generatedSessionSaved = false;
-                        await clearLocalAuthFiles();
-                        if (getSessionIdentifier()) {
-                            await removeEnvValue('SESSION_ID').catch(() => {});
-                            logger.warn('Removed stale SESSION_ID from .env so a new pair can be created.');
+                        const now = Date.now();
+                        const repeatedLoggedOut = now - lastLoggedOutAt < 120000;
+                        lastLoggedOutAt = now;
+                        if (!repeatedLoggedOut) {
+                            logger.warn('Received logged-out status (401). Keeping auth files for one retry to prevent false logout loops.');
+                        } else {
+                            logger.warn('Logged-out status repeated. Clearing local auth and requesting new pair.');
+                            generatedSessionSaved = false;
+                            await clearLocalAuthFiles();
+                            if (getSessionIdentifier()) {
+                                await removeEnvValue('SESSION_ID').catch(() => {});
+                                logger.warn('Removed stale SESSION_ID from .env so a new pair can be created.');
+                            }
                         }
                     } else if (badSessionDetected) {
                         logger.warn('Bad session reported. Keeping current auth/session files and attempting reconnect to avoid unnecessary logout loops.');
