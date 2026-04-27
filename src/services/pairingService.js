@@ -5,6 +5,7 @@ import { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeCac
 
 const PAIRING_SESSIONS_PATH = path.join(process.cwd(), 'cache', 'paired_sessions');
 const PAIRING_CODE_FILE = path.join(PAIRING_SESSIONS_PATH, 'pairing.json');
+const PAIRED_SESSION_INDEX_FILE = path.join(PAIRING_SESSIONS_PATH, 'sessions.json');
 const activePairingSockets = new Map();
 const pendingPairRequests = new Map();
 const pairedReconnectTimers = new Map();
@@ -179,6 +180,57 @@ async function writeLatestPairingCode({ number, code, sessionPath }) {
     }, { spaces: 2 });
 }
 
+async function loadSessionIndex() {
+    try {
+        const payload = await fs.readJSON(PAIRED_SESSION_INDEX_FILE);
+        if (!payload || typeof payload !== 'object') return { sessions: [] };
+        if (!Array.isArray(payload.sessions)) payload.sessions = [];
+        return payload;
+    } catch {
+        return { sessions: [] };
+    }
+}
+
+export async function upsertPairedSessionRecord({
+    sessionId,
+    number = '',
+    sessionPath = '',
+    source = 'system',
+    status = 'created',
+    extra = {}
+} = {}) {
+    if (!sessionId) return null;
+    await fs.ensureDir(PAIRING_SESSIONS_PATH);
+    const now = new Date().toISOString();
+    const store = await loadSessionIndex();
+    const idx = store.sessions.findIndex((row) => row.sessionId === sessionId);
+    const next = {
+        sessionId,
+        number: String(number || '').replace(/\D/g, ''),
+        sessionPath: sessionPath || sessionDirForId(sessionId),
+        source: source || 'system',
+        status: status || 'created',
+        updatedAt: now,
+        ...(extra || {})
+    };
+
+    if (idx >= 0) {
+        store.sessions[idx] = {
+            ...store.sessions[idx],
+            ...next,
+            createdAt: store.sessions[idx].createdAt || now
+        };
+    } else {
+        store.sessions.push({
+            ...next,
+            createdAt: now
+        });
+    }
+
+    await fs.writeJSON(PAIRED_SESSION_INDEX_FILE, store, { spaces: 2 });
+    return store.sessions[idx >= 0 ? idx : store.sessions.length - 1];
+}
+
 export async function readLatestPairingCode() {
     try {
         const payload = await fs.readJSON(PAIRING_CODE_FILE);
@@ -277,6 +329,13 @@ export async function generatePairingCode(rawNumber, {
             await fs.ensureDir(authDir);
             await fs.ensureDir(path.join(authDir, 'keys'));
             await writeSessionMeta(authDir, number);
+            await upsertPairedSessionRecord({
+                sessionId,
+                number,
+                sessionPath: authDir,
+                source: 'pairing_service',
+                status: 'initializing'
+            });
 
             let sock = null;
             let timeoutHandle = null;
@@ -305,6 +364,14 @@ export async function generatePairingCode(rawNumber, {
 
                     sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
                         if (connection === 'open') {
+                            await upsertPairedSessionRecord({
+                                sessionId,
+                                number,
+                                sessionPath: authDir,
+                                source: 'pairing_service',
+                                status: 'linked_connected',
+                                extra: { linkedAt: new Date().toISOString() }
+                            }).catch(() => {});
                             try {
                                 await onLinked?.({ number, sessionPath: authDir, sessionId, sock });
                             } catch {
@@ -330,6 +397,14 @@ export async function generatePairingCode(rawNumber, {
                                 code,
                                 sessionPath: authDir
                             });
+                            await upsertPairedSessionRecord({
+                                sessionId,
+                                number,
+                                sessionPath: authDir,
+                                source: 'pairing_service',
+                                status: 'code_sent',
+                                extra: { codeSentAt: new Date().toISOString() }
+                            });
                             try {
                                 await onCodeSent?.({ number, code, sessionPath: authDir });
                             } catch {
@@ -347,6 +422,14 @@ export async function generatePairingCode(rawNumber, {
                 return { number, code, sessionPath: authDir };
             } catch (error) {
                 lastError = error;
+                await upsertPairedSessionRecord({
+                    sessionId,
+                    number,
+                    sessionPath: authDir,
+                    source: 'pairing_service',
+                    status: 'failed',
+                    extra: { error: String(error?.message || error) }
+                }).catch(() => {});
                 const isRetryable = isRetryablePairClose(error);
                 if (!isRetryable || attempt >= maxAttempts) throw error;
                 await fs.remove(authDir).catch(() => {});

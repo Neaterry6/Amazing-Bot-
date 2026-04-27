@@ -9,8 +9,20 @@ async function getProfilePic(sock, jid) {
     catch { return null; }
 }
 
+function renderWelcomeTemplate(template = '', participant = '', groupName = 'the group') {
+    const num = normNum(participant) || 'user';
+    const mention = `@${num}`;
+    return String(template || '')
+        .replace(/&getpp|\{pp\}/gi, '')
+        .replace(/@user|\{user\}|&mention|\bmentions user\b/gi, mention)
+        .replace(/@group|\{group\}|\(group name\)|&group/gi, groupName)
+        .replace(/\n{3,}/g, '\n\n')
+        .trim() || `👋 Welcome ${mention} to ${groupName}!`;
+}
+
 export default async function handleGroupJoin(sock, groupUpdate) {
-    const { id: groupId, participants } = groupUpdate;
+    const { id: groupId, participants, action } = groupUpdate;
+    if (action && action !== 'add') return;
     try {
         const meta = await sock.groupMetadata(groupId);
         const groupName = meta.subject || 'the group';
@@ -34,11 +46,8 @@ export default async function handleGroupJoin(sock, groupUpdate) {
             if (!config.events?.groupJoin || !welcomeEnabled) continue;
 
             try {
-                const num = normNum(participant);
                 const ppUrl = await getProfilePic(sock, participant);
-                const text = welcomeTemplate
-                    .replace(/@user/gi, `@${num}`)
-                    .replace(/@group/gi, groupName);
+                const text = renderWelcomeTemplate(welcomeTemplate, participant, groupName);
 
                 if (ppUrl) {
                     await sock.sendMessage(groupId, {
