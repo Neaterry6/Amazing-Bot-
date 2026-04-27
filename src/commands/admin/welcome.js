@@ -1,6 +1,9 @@
 import { updateGroup  } from '../../models/Group.js';
 
-
+async function getProfilePic(sock, jid) {
+    try { return await sock.profilePictureUrl(jid, 'image'); }
+    catch { return null; }
+}
 
 export default {
     name: 'welcome',
@@ -11,7 +14,7 @@ export default {
     cooldown: 5,
     permissions: ['admin'],
 
-    async execute({ sock, message, args, from, user, group, isGroup, isGroupAdmin }) {
+    async execute({ sock, message, args, from, group, isGroup, prefix }) {
         if (!isGroup) {
             return await sock.sendMessage(from, {
                 text: '❌ *Group Only*\n\nThis command can only be used in groups.'
@@ -21,7 +24,8 @@ export default {
         try {
             const action = args[0]?.toLowerCase();
             const currentStatus = group?.settings?.welcome?.enabled || false;
-            const currentMessage = group?.settings?.welcome?.message || 'Welcome to the group, @user! 👋';
+            const currentMessage = group?.settings?.welcome?.message
+                || '👋 Welcome @user to @group!\n\nKindly do intro:\n• Pics\n• Age\n• Location\n\n📌 Please read the group description.';
 
             if (!action) {
                 return await sock.sendMessage(from, {
@@ -51,7 +55,7 @@ export default {
                 const customMessage = args.slice(1).join(' ');
                 if (!customMessage) {
                     return await sock.sendMessage(from, {
-                        text: '❌ *No Message*\n\nPlease provide a custom welcome message.\n\n*Usage:* .welcome set Welcome @user to @group!'
+                        text: `❌ *No Message*\n\nPlease provide a custom welcome message.\n\n*Usage:* ${prefix}welcome set Welcome @user to @group!`
                     });
                 }
 
@@ -67,14 +71,27 @@ export default {
                 });
 
             } else if (action === 'test') {
+                const groupMeta = await sock.groupMetadata(from);
+                const sourceMentions = message?.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+                const targetJid = sourceMentions[0] || message.key.participant || message.participant;
+                const targetNum = String(targetJid || '').split('@')[0] || 'testuser';
                 const testMessage = currentMessage
-                    .replace('@user', `@${message.key.participant?.split('@')[0] || 'testuser'}`)
-                    .replace('@group', (await sock.groupMetadata(from)).subject);
+                    .replace(/@user/gi, `@${targetNum}`)
+                    .replace(/@group/gi, groupMeta.subject || 'the group');
 
-                await sock.sendMessage(from, {
-                    text: `🧪 *Welcome Message Test*\n\n${testMessage}`,
-                    mentions: [message.key.participant || from]
-                });
+                const ppUrl = targetJid ? await getProfilePic(sock, targetJid) : null;
+                if (ppUrl) {
+                    await sock.sendMessage(from, {
+                        image: { url: ppUrl },
+                        caption: `🧪 *Welcome Message Test*\n\n${testMessage}`,
+                        mentions: targetJid ? [targetJid] : []
+                    });
+                } else {
+                    await sock.sendMessage(from, {
+                        text: `🧪 *Welcome Message Test*\n\n${testMessage}`,
+                        mentions: targetJid ? [targetJid] : []
+                    });
+                }
 
             } else {
                 return await sock.sendMessage(from, {

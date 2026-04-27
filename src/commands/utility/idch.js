@@ -17,7 +17,7 @@ function safe(value, fallback = 'N/A') {
 
 export default {
   name: 'idch',
-  aliases: ['channelid', 'newsletterinfo'],
+  aliases: ['channelid', 'newsletterinfo', 'channelinfo', 'chinfo'],
   category: 'utility',
   description: 'Fetch newsletter/channel metadata by channel ID',
   usage: 'idch <channel_id_or_jid>',
@@ -42,17 +42,26 @@ export default {
       }
 
       const data = await sock.newsletterMetadata('jid', channelJid);
+      const dpUrl = data?.picture?.url || data?.picture?.directPath || null;
       const text = [
         '📦 *Full Channel Info*',
-        `🆔 *ID:* ${safe(data?.id || channelJid)}`,
-        `👤 *Name:* ${safe(data?.name)}`,
+        `🆔 *JID:* ${safe(data?.id || channelJid)}`,
+        `👤 *Channel Name:* ${safe(data?.name || data?.channelName)}`,
+        `🏷️ *Newsletter Name:* ${safe(data?.newsletterName || data?.thread_metadata?.name || data?.name)}`,
         `👥 *Followers:* ${safe(data?.subscribers || data?.followerCount || data?.followers)}`,
         `📊 *Status:* ${safe(data?.state?.type || data?.state || data?.status)}`,
         `✔️ *Verified:* ${data?.verification === 'VERIFIED' || data?.verified ? 'Yes' : 'No'}`,
-        `📝 *Description:* ${safe(data?.description)}`,
-        `🖼️ *Picture:* ${safe(data?.picture?.directPath || data?.picture?.url)}`,
+        `📝 *Description:* ${safe(data?.description || data?.thread_metadata?.description)}`,
+        `🖼️ *Channel DP:* ${safe(dpUrl)}`,
         `🕒 *Created:* ${safe(data?.creationTime || data?.createdAt)}`
       ].join('\n');
+
+      if (dpUrl) {
+        return sock.sendMessage(from, {
+          image: { url: dpUrl },
+          caption: text
+        }, { quoted: message });
+      }
 
       return sock.sendMessage(from, { text }, { quoted: message });
     } catch (error) {
