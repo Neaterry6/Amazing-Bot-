@@ -2,6 +2,7 @@ import logger from '../utils/logger.js';
 import config from '../config.js';
 import { isBanned } from '../commands/admin/ban.js';
 import { normNum } from '../utils/adminUtils.js';
+import { getGroup } from '../models/Group.js';
 
 async function getProfilePic(sock, jid) {
     try { return await sock.profilePictureUrl(jid, 'image'); }
@@ -13,6 +14,10 @@ export default async function handleGroupJoin(sock, groupUpdate) {
     try {
         const meta = await sock.groupMetadata(groupId);
         const groupName = meta.subject || 'the group';
+        const savedGroup = await getGroup(groupId);
+        const welcomeEnabled = savedGroup?.settings?.welcome?.enabled;
+        const welcomeTemplate = savedGroup?.settings?.welcome?.message
+            || '👋 Welcome @user to @group!\n\nKindly do intro:\n• Pics\n• Age\n• Location\n\n📌 Please read the group description.';
 
         for (const participant of participants) {
             if (await isBanned(groupId, participant)) {
@@ -26,24 +31,22 @@ export default async function handleGroupJoin(sock, groupUpdate) {
                 continue;
             }
 
-            if (!config.events?.groupJoin) continue;
+            if (!config.events?.groupJoin || !welcomeEnabled) continue;
 
             try {
                 const num = normNum(participant);
                 const ppUrl = await getProfilePic(sock, participant);
-                const text = `Welcome @${num} to ${groupName}!\nWe now have ${meta.participants.length} members.`;
+                const text = welcomeTemplate
+                    .replace(/@user/gi, `@${num}`)
+                    .replace(/@group/gi, groupName);
 
                 if (ppUrl) {
-                    try {
-                        const axios = (await import('axios')).default;
-                        const res = await axios.get(ppUrl, { responseType: 'arraybuffer', timeout: 8000 });
-                        await sock.sendMessage(groupId, {
-                            image: Buffer.from(res.data),
-                            caption: text,
-                            mentions: [participant]
-                        });
-                        continue;
-                    } catch {}
+                    await sock.sendMessage(groupId, {
+                        image: { url: ppUrl },
+                        caption: text,
+                        mentions: [participant]
+                    });
+                    continue;
                 }
 
                 await sock.sendMessage(groupId, { text, mentions: [participant] });

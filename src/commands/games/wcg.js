@@ -67,16 +67,53 @@ function stopGame(chatId) {
     games.delete(chatId);
 }
 
+async function getProfilePicBuffer(sock, jid) {
+    try {
+        const ppUrl = await sock.profilePictureUrl(jid, 'image');
+        if (!ppUrl) return null;
+        const { data } = await axios.get(ppUrl, { responseType: 'arraybuffer', timeout: 12000 });
+        return Buffer.from(data);
+    } catch {
+        return null;
+    }
+}
+
 async function promptTurn(sock, game, quoted = null) {
     const alive = game.players.filter((p) => !p.out);
     if (alive.length <= 1) {
         const winner = alive[0];
-        await sock.sendMessage(game.chatId, {
-            text: winner
-                ? `🏆 *WCG Winner Board*\n\n🎉 ${mention(winner.jid)} is the winner!`
-                : 'No winner this round.',
-            mentions: winner ? [winner.jid] : []
-        }, quoted ? { quoted } : {});
+        const longestWord = game.longestWord?.word || null;
+        const longestBy = game.longestWord?.jid || null;
+
+        if (!winner) {
+            await sock.sendMessage(game.chatId, { text: 'No winner this round.' }, quoted ? { quoted } : {});
+            stopGame(game.chatId);
+            return;
+        }
+
+        const lines = [
+            '🏆 *WCG Winner Board*',
+            '',
+            `🎉 Winner: ${mention(winner.jid)}`,
+            longestWord
+                ? `🔠 Longest Word: *${longestWord}* (${mention(longestBy)})`
+                : '🔠 Longest Word: None submitted'
+        ];
+        const mentions = [winner.jid, ...(longestBy ? [longestBy] : [])];
+        const winnerPp = await getProfilePicBuffer(sock, winner.jid);
+
+        if (winnerPp) {
+            await sock.sendMessage(game.chatId, {
+                image: winnerPp,
+                caption: lines.join('\n'),
+                mentions
+            }, quoted ? { quoted } : {});
+        } else {
+            await sock.sendMessage(game.chatId, {
+                text: lines.join('\n'),
+                mentions
+            }, quoted ? { quoted } : {});
+        }
         stopGame(game.chatId);
         return;
     }
@@ -161,7 +198,8 @@ export default {
             joinTimer: null,
             turnTimer: null,
             round: 0,
-            minWordLength: 3
+            minWordLength: 3,
+            longestWord: null
         };
         games.set(from, game);
 
@@ -225,12 +263,14 @@ export default {
             live.usedWords.add(word);
             live.lastWord = word;
             live.round += 1;
-            if (live.round % 2 === 0) live.minWordLength += 1;
+            if (!live.longestWord || word.length > live.longestWord.word.length) {
+                live.longestWord = { word, jid: actor };
+            }
             if (live.turnTimer) clearTimeout(live.turnTimer);
 
             live.currentIndex = (live.currentIndex + 1) % live.players.length;
             await sock.sendMessage(from, {
-                text: `✅ ${mention(actor)} accepted: *${word}*\n🔢 Round: ${live.round}\n📏 Next minimum length: ${live.minWordLength}`,
+                text: `✅ ${mention(actor)} accepted: *${word}*\n🔢 Round: ${live.round}\n📏 Minimum length: ${live.minWordLength}`,
                 mentions: [actor]
             }, { quoted: incomingMsg });
             await promptTurn(sock, live, incomingMsg);
@@ -245,7 +285,7 @@ export default {
                 'Type *join* now. Join window: 40 seconds.',
                 'After join closes, a random player is tagged to start.',
                 '⏱️ Turn timeout is 30 seconds (late reply = out).',
-                '📏 Minimum word length starts at 3 and increases by +1 every 2 rounds.'
+                '📏 Minimum word length is 3 letters (longer words are allowed).'
             ].join('\n')
         }, { quoted: message });
 
