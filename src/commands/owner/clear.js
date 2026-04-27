@@ -11,7 +11,11 @@ const DEFAULT_TARGETS = [
 const PROTECTED_PATHS = [
     path.join('data', 'sessions'),
     path.join('data', 'auth_info_baileys'),
-    path.join('data', 'creds.json')
+    path.join('data', 'creds.json'),
+    path.join('session'),
+    path.join('sessions'),
+    path.join('backups', 'session'),
+    path.join('.wwebjs_auth')
 ].map((p) => path.join(process.cwd(), p));
 
 async function clearDir(abs) {
@@ -22,7 +26,11 @@ async function clearDir(abs) {
 
     for (const entry of entries) {
         const target = path.join(abs, entry);
-        const protectedHit = PROTECTED_PATHS.some((p) => target.startsWith(path.normalize(p)));
+        const lowerTarget = path.normalize(target).toLowerCase();
+        const protectedHit = PROTECTED_PATHS.some((p) => lowerTarget.startsWith(path.normalize(p).toLowerCase()))
+            || /(^|[/\\])session(s)?([/\\]|$)/i.test(lowerTarget)
+            || /auth(_info)?_?baileys/i.test(lowerTarget)
+            || /creds\.json$/i.test(lowerTarget);
         if (protectedHit) continue;
         const stat = await fs.stat(target).catch(() => null);
         if (!stat) continue;
@@ -38,7 +46,7 @@ export default {
     name: 'clear',
     aliases: ['cleanup', 'clean'],
     category: 'owner',
-    description: 'Clear temp/cache/download/log folders to free bot storage',
+    description: 'Clear temp/cache/download/log junk without touching active sessions',
     usage: 'clear [all|temp|downloads|cache|logs]',
     cooldown: 5,
     permissions: ['owner'],

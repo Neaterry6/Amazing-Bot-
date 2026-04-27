@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const JOIN_WINDOW_MS = 40_000;
-const TURN_TIMEOUT_MS = 30 * 60 * 1000;
+const TURN_TIMEOUT_MS = 30 * 1000;
 const games = new Map();
 
 const LOCAL_WORDS = new Set([
@@ -91,7 +91,8 @@ async function promptTurn(sock, game, quoted = null) {
         `${mention(player.jid)} it's your turn.`,
         `Send a valid English word starting with *${game.requiredLetter.toUpperCase()}*`,
         `Mode: ${game.mode === 'random' ? 'Random Letter' : 'Chain (last letter)'}`,
-        `Time limit: 30 minutes`
+        `Time limit: 30 seconds`,
+        `Minimum word length: ${game.minWordLength} letters`
     ].join('\n');
 
     await sock.sendMessage(game.chatId, { text: turnText, mentions: [player.jid] }, quoted ? { quoted } : {});
@@ -105,7 +106,7 @@ async function promptTurn(sock, game, quoted = null) {
         target.out = true;
 
         await sock.sendMessage(game.chatId, {
-            text: `⏰ ${mention(target.jid)} timed out and is disqualified. Moving to next player.`,
+            text: `⏰ ${mention(target.jid)} failed to reply in 30 seconds and is out.`,
             mentions: [target.jid]
         });
 
@@ -158,7 +159,9 @@ export default {
             requiredLetter: '',
             lastWord: '',
             joinTimer: null,
-            turnTimer: null
+            turnTimer: null,
+            round: 0,
+            minWordLength: 3
         };
         games.set(from, game);
 
@@ -194,6 +197,14 @@ export default {
                 return;
             }
 
+            if (word.length < live.minWordLength) {
+                await sock.sendMessage(from, {
+                    text: `❌ ${mention(actor)} your word must be at least *${live.minWordLength}* letters (you sent ${word.length}).`,
+                    mentions: [actor]
+                }, { quoted: incomingMsg });
+                return;
+            }
+
             if (live.usedWords.has(word)) {
                 await sock.sendMessage(from, {
                     text: `❌ ${mention(actor)} that word was already used.`,
@@ -213,11 +224,13 @@ export default {
 
             live.usedWords.add(word);
             live.lastWord = word;
+            live.round += 1;
+            if (live.round % 2 === 0) live.minWordLength += 1;
             if (live.turnTimer) clearTimeout(live.turnTimer);
 
             live.currentIndex = (live.currentIndex + 1) % live.players.length;
             await sock.sendMessage(from, {
-                text: `✅ ${mention(actor)} accepted: *${word}*`,
+                text: `✅ ${mention(actor)} accepted: *${word}*\n🔢 Round: ${live.round}\n📏 Next minimum length: ${live.minWordLength}`,
                 mentions: [actor]
             }, { quoted: incomingMsg });
             await promptTurn(sock, live, incomingMsg);
@@ -230,7 +243,9 @@ export default {
                 `Difficulty: ${game.difficulty}`,
                 '',
                 'Type *join* now. Join window: 40 seconds.',
-                'After join closes, a random player is tagged to start.'
+                'After join closes, a random player is tagged to start.',
+                '⏱️ Turn timeout is 30 seconds (late reply = out).',
+                '📏 Minimum word length starts at 3 and increases by +1 every 2 rounds.'
             ].join('\n')
         }, { quoted: message });
 

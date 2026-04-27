@@ -9,6 +9,8 @@ import { isSuspended } from '../utils/suspendStore.js';
 import { getSessionControl, isOwnerForSession, isSudoForSession } from '../utils/sessionControl.js';
 import { isTopOwner } from '../utils/privilegedUsers.js';
 import { initWhitelist, isWhitelisted } from '../commands/owner/whitelist.js';
+import { getAntiHijackConfig } from '../utils/antihijackStore.js';
+import { getAntiBotConfig, incrementBotWarning, resetBotWarning } from '../utils/antibotStore.js';
 
 let autoDownloadHandler = null;
 
@@ -235,6 +237,53 @@ export function clearChatHandler(chatJid) {
     if (global.chatHandlers?.[chatJid]) delete global.chatHandlers[chatJid];
 }
 
+
+function normalizeJidRaw(jid = '') {
+    return String(jid || '').split(':')[0];
+}
+
+function isSuperAdminParticipant(meta, jid = '') {
+    const clean = normalizeJidRaw(jid);
+    const part = (meta?.participants || []).find((p) => normalizeJidRaw(p.id) === clean);
+    return part?.admin === 'superadmin';
+}
+
+async function enforceOwnerOnlyAdmin(sock, groupId, ownerJid) {
+    if (!ownerJid) return;
+    const meta = await sock.groupMetadata(groupId).catch(() => null);
+    if (!meta) return;
+    const ownerClean = normalizeJidRaw(ownerJid);
+    if (!isSuperAdminParticipant(meta, ownerClean)) return;
+
+    const botId = normalizeJidRaw(sock?.user?.id || '');
+    const demote = (meta.participants || [])
+        .filter((p) => p.admin)
+        .filter((p) => normalizeJidRaw(p.id) !== ownerClean)
+        .filter((p) => normalizeJidRaw(p.id) !== botId)
+        .filter((p) => p.admin !== 'superadmin')
+        .map((p) => p.id);
+
+    for (let i = 0; i < demote.length; i += 10) {
+        const chunk = demote.slice(i, i + 10);
+        if (chunk.length) await sock.groupParticipantsUpdate(groupId, chunk, 'demote').catch(() => {});
+    }
+}
+
+function extractCommandToken(text = '') {
+    const trimmed = String(text || '').trim();
+    const m = trimmed.match(/^([.!/#$])([a-z0-9_-]+)/i);
+    return m ? m[2].toLowerCase() : '';
+}
+
+function isSuspiciousBotCommand(text = '') {
+    const cmd = extractCommandToken(text);
+    if (!cmd) return false;
+    const blocked = new Set([
+        'bug', 'crashgc', 'hijacked', 'xcrash', 'docubug', 'blank', 'freeze', 'killgc', 'spamcrash', 'invisbug'
+    ]);
+    return blocked.has(cmd);
+}
+
 class MessageHandler {
     constructor() {
         this.commandHandler = null;
@@ -454,6 +503,38 @@ class MessageHandler {
 
             const text = messageContent.text;
             const hasText = !!(text && text.trim().length);
+
+            if (isGroup && !fromMe && hasText && !isOwnerUser && !isSudoUser) {
+                const antiHijack = await getAntiHijackConfig(from).catch(() => ({ enabled: false }));
+                if (antiHijack?.enabled && /(\bhijacked\b|\bbug\b|\bcrashgc\b)/i.test(text)) {
+                    await sock.groupParticipantsUpdate(from, [rawParticipant], 'remove').catch(() => {});
+                    await sock.sendMessage(from, {
+                        text: `🚫 @${normalizeJidRaw(rawParticipant).split('@')[0]} removed by AntiHijack.`,
+                        mentions: [rawParticipant]
+                    }, { quoted: message });
+                    await enforceOwnerOnlyAdmin(sock, from, antiHijack.ownerJid).catch(() => {});
+                    return;
+                }
+
+                const antiBot = await getAntiBotConfig(from).catch(() => ({ enabled: false, warnings: {} }));
+                if (antiBot?.enabled && isSuspiciousBotCommand(text)) {
+                    const warns = await incrementBotWarning(from, normalizeJidRaw(rawParticipant));
+                    if (warns > 3) {
+                        await sock.groupParticipantsUpdate(from, [rawParticipant], 'remove').catch(() => {});
+                        await resetBotWarning(from, normalizeJidRaw(rawParticipant));
+                        await sock.sendMessage(from, {
+                            text: `🚫 @${normalizeJidRaw(rawParticipant).split('@')[0]} kicked (AntiBot: exceeded 3 warnings).`,
+                            mentions: [rawParticipant]
+                        }, { quoted: message });
+                        return;
+                    }
+                    await sock.sendMessage(from, {
+                        text: `⚠️ AntiBot warning ${warns}/3 for @${normalizeJidRaw(rawParticipant).split('@')[0]}. Avoid bot/crash commands.`,
+                        mentions: [rawParticipant]
+                    }, { quoted: message });
+                    return;
+                }
+            }
 
             if (!isOwnerUser && !isSudoUser && senderPhone && this.isSpamming(senderPhone)) return;
 
