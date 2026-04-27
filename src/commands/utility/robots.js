@@ -1,14 +1,14 @@
 import { handleLabCommand } from '../../utils/labTools.js';
 
 export default {
-    name: 'dns',
+    name: 'robots',
     aliases: [],
     category: 'utility',
-    description: 'DNS records lookup (A/MX/TXT/CNAME/NS)',
-    usage: 'dns <input>',
+    description: 'Fetch robots.txt for domain',
+    usage: 'robots <input>',
     cooldown: 3,
 
     async execute(ctx) {
-        return handleLabCommand('dns', ctx, { ownerOnly: null });
+        return handleLabCommand('robots', ctx, { ownerOnly: null });
     }
 };

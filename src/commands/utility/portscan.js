@@ -1,14 +1,14 @@
 import { handleLabCommand } from '../../utils/labTools.js';
 
 export default {
-    name: 'dns',
+    name: 'portscan',
     aliases: [],
     category: 'utility',
-    description: 'DNS records lookup (A/MX/TXT/CNAME/NS)',
-    usage: 'dns <input>',
+    description: 'Scan common ports on a host',
+    usage: 'portscan <input>',
     cooldown: 3,
 
     async execute(ctx) {
-        return handleLabCommand('dns', ctx, { ownerOnly: null });
+        return handleLabCommand('portscan', ctx, { ownerOnly: null });
     }
 };

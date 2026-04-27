@@ -1,14 +1,14 @@
 import { handleLabCommand } from '../../utils/labTools.js';
 
 export default {
-    name: 'dns',
+    name: 'minify',
     aliases: [],
     category: 'utility',
-    description: 'DNS records lookup (A/MX/TXT/CNAME/NS)',
-    usage: 'dns <input>',
+    description: 'Minify HTML/CSS/JS snippet',
+    usage: 'minify <input>',
     cooldown: 3,
 
     async execute(ctx) {
-        return handleLabCommand('dns', ctx, { ownerOnly: null });
+        return handleLabCommand('minify', ctx, { ownerOnly: null });
     }
 };

@@ -1,5 +1,6 @@
 import { applyFont } from './fontManager.js';
 import { getUserFont, getGlobalFont } from './fontStorage.js';
+import { getButtonMode } from './buttonMode.js';
 
 const SKIP_KEYS = new Set([
     'image','video','audio','sticker','document',
@@ -8,6 +9,25 @@ const SKIP_KEYS = new Set([
 ]);
 
 const TEXT_KEYS = ['text','caption'];
+
+function withQuickButtons(content) {
+if(!content || typeof content!=='object') return content;
+if(content.buttons || content.listMessage || content.templateMessage) return content;
+if(content.image || content.video || content.audio || content.sticker || content.document) return content;
+if(!content.text || typeof content.text!=='string') return content;
+
+return {
+text: content.text,
+footer: 'ILOM MD BOT',
+buttons: [
+{ buttonId: '.menu', buttonText: { displayText: '📋 Menu' }, type: 1 },
+{ buttonId: '.help', buttonText: { displayText: '❓ Help' }, type: 1 },
+{ buttonId: '.ping', buttonText: { displayText: '🏓 Ping' }, type: 1 }
+],
+headerType: 1
+};
+}
+
 
 function transformContent(content,font){
 
@@ -114,10 +134,15 @@ return async(jid,content,options)=>{
 try{
 
 const font=await getFont();
+const buttonMode=await getButtonMode().catch(()=>false);
 
-const transformed=font!=='normal'
+let transformed=font!=='normal'
 ? transformContent(content,font)
 : content;
+
+if(buttonMode){
+transformed=withQuickButtons(transformed);
+}
 
 return await target.sendMessage(jid,transformed,options);
 

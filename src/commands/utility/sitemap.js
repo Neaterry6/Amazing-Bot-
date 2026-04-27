@@ -1,14 +1,14 @@
 import { handleLabCommand } from '../../utils/labTools.js';
 
 export default {
-    name: 'dns',
+    name: 'sitemap',
     aliases: [],
     category: 'utility',
-    description: 'DNS records lookup (A/MX/TXT/CNAME/NS)',
-    usage: 'dns <input>',
+    description: 'Fetch sitemap URLs from domain',
+    usage: 'sitemap <input>',
     cooldown: 3,
 
     async execute(ctx) {
-        return handleLabCommand('dns', ctx, { ownerOnly: null });
+        return handleLabCommand('sitemap', ctx, { ownerOnly: null });
     }
 };

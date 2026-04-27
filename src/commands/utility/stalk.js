@@ -20,7 +20,7 @@ async function resolveTargetJid(sock, from, message, args) {
     const participant = ctx.participant;
     const quotedParticipant = ctx?.quotedParticipant
         || (ctx?.participant && ctx?.stanzaId ? ctx.participant : '');
-    const input = mention || quotedParticipant || participant || args[0] || '';
+    const input = mention || quotedParticipant || participant || args[0] || (message?.key?.participant || message?.key?.remoteJid || '');
     if (!input) return '';
 
     let raw = String(input);
@@ -64,11 +64,13 @@ export default {
         }
 
         const [result] = await sock.onWhatsApp(raw).catch(() => []);
-        if (!result?.exists) {
+        const fallbackJid = `${normalizeNum(raw)}@s.whatsapp.net`;
+        const finalResult = result?.exists ? result : { exists: true, jid: fallbackJid, biz: false };
+        if (!finalResult?.jid || fallbackJid === '@s.whatsapp.net') {
             return await sock.sendMessage(from, { text: '❌ User not found on WhatsApp.' }, { quoted: message });
         }
 
-        const targetJid = result.jid;
+        const targetJid = finalResult.jid;
         const resolvedLid = extractLidFromJid(raw) !== 'Not available'
             ? extractLidFromJid(raw)
             : extractLidFromJid(targetJid);
@@ -76,6 +78,10 @@ export default {
         let statusText = 'Unknown';
         let statusTime = 'Unknown';
         let name = targetJid.split('@')[0];
+        try {
+            const n = await sock.getName(targetJid);
+            if (n) name = n;
+        } catch {}
         try { profilePic = await sock.profilePictureUrl(targetJid, 'image'); } catch {}
         try {
             const fetched = await sock.fetchStatus(targetJid);
@@ -83,7 +89,7 @@ export default {
             if (fetched?.setAt) statusTime = new Date(fetched.setAt).toLocaleString();
         } catch {}
 
-        const caption = `🕵️ *User Stalker*\n\n👤 Name: ${name}\n🆔 JID: ${targetJid}\n📱 Number: +${targetJid.split('@')[0]}\n🧬 LID: ${resolvedLid}\n🏢 Business: ${result.biz ? 'Yes' : 'No'}\n📝 Bio: ${statusText}\n🕒 Bio Updated: ${statusTime}\n✅ Status: Found`;
+        const caption = `🕵️ *User Stalker*\n\n👤 Name: ${name}\n🆔 JID: ${targetJid}\n📱 Number: +${targetJid.split('@')[0]}\n🧬 LID: ${resolvedLid}\n🏢 Business: ${finalResult.biz ? 'Yes' : 'No'}\n📝 Bio: ${statusText}\n🕒 Bio Updated: ${statusTime}\n✅ Status: Found`;
 
         if (profilePic) {
             return await sock.sendMessage(from, { image: { url: profilePic }, caption: `${caption}\n🖼️ DP: Available`, mentions: [targetJid] }, { quoted: message });

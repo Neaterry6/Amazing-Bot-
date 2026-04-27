@@ -1,14 +1,14 @@
 import { handleLabCommand } from '../../utils/labTools.js';
 
 export default {
-    name: 'dns',
+    name: 'curl',
     aliases: [],
     category: 'utility',
-    description: 'DNS records lookup (A/MX/TXT/CNAME/NS)',
-    usage: 'dns <input>',
+    description: 'Make HTTP GET/POST requests',
+    usage: 'curl <input>',
     cooldown: 3,
 
     async execute(ctx) {
-        return handleLabCommand('dns', ctx, { ownerOnly: null });
+        return handleLabCommand('curl', ctx, { ownerOnly: null });
     }
 };

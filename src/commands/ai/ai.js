@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import axios from 'axios';
 import FormData from 'form-data';
+import yts from 'yt-search';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'ai');
@@ -531,6 +532,19 @@ async function getWeather(location) {
     }
 }
 
+
+async function fetchPlayAudio(query) {
+    const search = await yts(query);
+    if (!search?.videos?.length) throw new Error('No music result found');
+    const video = search.videos[0];
+    const { data } = await axios.get('https://api.ootaizumi.web.id/downloader/youtube', {
+        params: { url: video.url, format: 'mp3' },
+        timeout: 45000
+    });
+    if (!data?.status || !data?.result?.download) throw new Error('Play API did not return audio download URL');
+    return { video, result: data.result };
+}
+
 async function getDownloadUrl(url) {
     const { data } = await axios.get(`${PREXZY_BASE_URL}/download/aio`, {
         params: { url },
@@ -663,10 +677,14 @@ function buildHelp(settings, historyLen, prefix) {
         `${p}ai -mode:<name>`,
         `${p}ai claude <prompt>`,
         `${p}ai list`,
+        `${p}ai play <song name>`,
+        `${p}ai img <prompt>`,
+        `${p}ai (reply to image) [question]`,
         ``,
         `Personalities: ${Object.keys(PERSONALITIES).join(', ')}`,
         ``,
-        `Reply to any AI message to continue the conversation.`
+        `Reply to any AI message to continue the conversation.`,
+        `You can also tag users or reply to their text/image for context.`
     ].join('\n');
 }
 
@@ -819,6 +837,34 @@ export default {
             const location = body.replace(/^(weather|forecast)\s+/i, '').trim();
             const weather = await getWeather(location || 'Nigeria');
             return await sock.sendMessage(from, { text: `🌤️ Weather Update\n\n${weather}` }, { quoted: message });
+        }
+
+
+        if (/^play\s+/i.test(body)) {
+            const query = body.replace(/^play\s+/i, '').trim();
+            if (!query) return await sock.sendMessage(from, { text: '❌ Usage: ai play <song name>' }, { quoted: message });
+            await sock.sendMessage(from, { text: '🎵 Searching and downloading audio...' }, { quoted: message });
+            try {
+                const { video, result } = await fetchPlayAudio(query);
+                await sock.sendMessage(from, {
+                    text: [
+                        '🎵 *AI Play Result*',
+                        `📝 Title: ${result.title || video.title || 'Unknown'}`,
+                        `👤 Channel: ${result.author?.channelTitle || video.author?.name || 'Unknown'}`,
+                        `⏱️ Duration: ${video.timestamp || 'Unknown'}`,
+                        `🔗 URL: ${video.url}`
+                    ].join('\n')
+                }, { quoted: message });
+
+                return await sock.sendMessage(from, {
+                    audio: { url: result.download },
+                    mimetype: 'audio/mpeg',
+                    fileName: `${(result.title || video.title || 'audio').replace(/[\/:*?"<>|]/g, '').slice(0, 120)}.mp3`,
+                    ptt: false
+                }, { quoted: message });
+            } catch (error) {
+                return await sock.sendMessage(from, { text: `❌ Play failed: ${error.message}` }, { quoted: message });
+            }
         }
 
         if (/^(dl|download)\s+/i.test(body)) {

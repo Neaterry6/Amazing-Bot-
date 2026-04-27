@@ -66,7 +66,8 @@ async function getAllCommands() {
                             aliases: cmd.aliases || [],
                             description: cmd.description || 'No description',
                             usage: cmd.usage || cmd.name,
-                            permissions: cmd.permissions || ['user']
+                            permissions: cmd.permissions || ['user'],
+                            groupOnly: !!cmd.groupOnly
                         });
 
                         totalCommands++;
@@ -129,10 +130,13 @@ export default {
             let msg = `┏❐ 《 *${emoji} ${requestedCat.toUpperCase()} MENU* 》 ❐\n`;
             const sorted = [...categoryCommands].sort((a, b) => String(a.name).localeCompare(String(b.name)));
             sorted.forEach((cmd) => {
-                msg += `┣◆ ${prefix}${cmd.name}\n`;
+                const scope = cmd.groupOnly ? ' [GROUP]' : '';
+                msg += `┣◆ ${prefix}${cmd.name}${scope}\n`;
             });
+            const groupOnlyCount = sorted.filter((c) => c.groupOnly).length;
             msg += `┗❐\n\n`;
             msg += `*Total:* ${sorted.length} command(s)\n`;
+            msg += `*Group-only:* ${groupOnlyCount}\n`;
             msg += `*Tip:* ${prefix}help <command> for usage details`;
 
             return await sock.sendMessage(from, { text: msg }, { quoted: message });
@@ -160,10 +164,12 @@ export default {
         sortedCategories.forEach((cat) => {
             const emoji = categoryEmojis[cat] || '📂';
             const count = categories[cat].length;
-            menuText += `┣◆ ${emoji} ${cat} (${count})\n`;
+            const groupOnlyCount = categories[cat].filter((c) => c.groupOnly).length;
+            menuText += `┣◆ ${emoji} ${cat} (${count}) [groups: ${groupOnlyCount}]\n`;
         });
         menuText += `┗❐\n`;
-        menuText += `\nReply with category name or use ${prefix}menu <category>\n`;
+        menuText += `\n[GROUP] means command works only in groups.\n`;
+        menuText += `Reply with category name or use ${prefix}menu <category>\n`;
         menuText += `Example: ${prefix}menu ai`;
 
         let sentMsg;
@@ -199,7 +205,8 @@ export default {
                 let msg = `┏❐ 《 *${emoji} ${requestedCat.toUpperCase()} MENU* 》 ❐\n`;
                 const sorted = [...categoryCommands].sort((a, b) => String(a.name).localeCompare(String(b.name)));
                 sorted.forEach((cmd) => {
-                    msg += `┣◆ ${prefix}${cmd.name}\n`;
+                    const scope = cmd.groupOnly ? ' [GROUP]' : '';
+                    msg += `┣◆ ${prefix}${cmd.name}${scope}\n`;
                 });
                 msg += `┗❐`;
 
