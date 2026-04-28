@@ -4,7 +4,14 @@ const API_URL = 'https://arychauhann.onrender.com/api/hentai';
 
 function normalizeItems(payload) {
     const raw = payload?.results || payload?.result || payload?.data || payload;
-    return Array.isArray(raw) ? raw : [];
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === 'object') {
+        return Object.keys(raw)
+            .filter((k) => /^\d+$/.test(k))
+            .map((k) => raw[k])
+            .filter(Boolean);
+    }
+    return [];
 }
 
 export default {
@@ -17,7 +24,7 @@ export default {
 
     async execute({ sock, message, from }) {
         try {
-            const { data } = await axios.get(API_URL, { timeout: 90000 });
+            const { data } = await axios.get(API_URL, { timeout: 120000 });
             const items = normalizeItems(data).slice(0, 10);
             if (!items.length) return await sock.sendMessage(from, { text: '❌ No hentai results available.' }, { quoted: message });
 
@@ -33,7 +40,14 @@ export default {
                         return await sock.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: replyMessage });
                     }
                     const picked = items[n - 1];
-                    const videos = [picked?.video, picked?.video2, picked?.url, ...(Array.isArray(picked?.videos) ? picked.videos : [])].filter(Boolean).slice(0, 2);
+                    const videos = [
+                        picked?.video,
+                        picked?.video2,
+                        picked?.video_1,
+                        picked?.video_2,
+                        picked?.url,
+                        ...(Array.isArray(picked?.videos) ? picked.videos : [])
+                    ].filter(Boolean).slice(0, 2);
                     if (!videos.length) return await sock.sendMessage(from, { text: '❌ Video URL not found in selected item.' }, { quoted: replyMessage });
                     for (let i = 0; i < videos.length; i++) {
                         await sock.sendMessage(from, {
