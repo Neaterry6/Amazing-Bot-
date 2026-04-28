@@ -1,5 +1,5 @@
 import path from 'path';
-import { generatePairingCode } from '../../services/pairingService.js';
+import { generatePairingCode, upsertPairedSessionRecord } from '../../services/pairingService.js';
 import { getSessionControl, normalizePhone, updateSessionControl } from '../../utils/sessionControl.js';
 
 function digits(input = '') {
@@ -63,11 +63,28 @@ async function sendMenu(sock, from, message, sessionId) {
                 await sock.sendMessage(from, { text: `⏳ Requesting pairing code for +${number}...` }, { quoted: msg2 });
                 try {
                     const paired = await generatePairingCode(number, {
+                        onCodeSent: async ({ number: pairedNumber, sessionPath }) => {
+                            const sid = path.basename(sessionPath || '') || 'unknown';
+                            await upsertPairedSessionRecord({
+                                sessionId: sid,
+                                number: pairedNumber,
+                                sessionPath: sessionPath || '',
+                                source: 'manager_command',
+                                status: 'code_sent'
+                            });
+                        },
                         onLinked: async ({ number: linkedNumber, sessionPath, sessionId: linkedSessionRaw }) => {
                             const current = await getSessionControl(sock);
                             const owners = Array.from(new Set([...(current.owners || []), linkedNumber]));
                             await updateSessionControl(sock, { owners });
                             const linkedSessionId = path.basename(sessionPath || '') || linkedSessionRaw || 'unknown';
+                            await upsertPairedSessionRecord({
+                                sessionId: linkedSessionId,
+                                number: linkedNumber,
+                                sessionPath: sessionPath || '',
+                                source: 'manager_command',
+                                status: 'linked_connected'
+                            });
                             await sock.sendMessage(from, {
                                 text: `✅ +${linkedNumber} linked successfully.\n🆔 Session ID: ${linkedSessionId}\n🚀 Bot deployment hook triggered for this session.`
                             }, { quoted: msg2 });

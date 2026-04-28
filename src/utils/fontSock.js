@@ -1,6 +1,7 @@
 import { applyFont } from './fontManager.js';
 import { getUserFont, getGlobalFont } from './fontStorage.js';
 import { getButtonMode } from './buttonMode.js';
+import { resolveChatLanguage, translateOutgoingContent } from './languageManager.js';
 
 const SKIP_KEYS = new Set([
     'image','video','audio','sticker','document',
@@ -135,10 +136,13 @@ try{
 
 const font=await getFont();
 const buttonMode=await getButtonMode().catch(()=>false);
+const targetLang = await resolveChatLanguage(String(jid || ''));
 
 let transformed=font!=='normal'
 ? transformContent(content,font)
 : content;
+
+transformed = await translateOutgoingContent(transformed, targetLang);
 
 if(buttonMode){
 transformed=withQuickButtons(transformed);

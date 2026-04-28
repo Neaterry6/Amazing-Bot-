@@ -3,18 +3,32 @@ import config from '../config.js';
 import { isBanned } from '../commands/admin/ban.js';
 import { normNum } from '../utils/adminUtils.js';
 import { getGroup } from '../models/Group.js';
+import { translateTextIfNeeded } from '../utils/languageManager.js';
 
 async function getProfilePic(sock, jid) {
     try { return await sock.profilePictureUrl(jid, 'image'); }
     catch { return null; }
 }
 
+function renderWelcomeTemplate(template = '', participant = '', groupName = 'the group') {
+    const num = normNum(participant) || 'user';
+    const mention = `@${num}`;
+    return String(template || '')
+        .replace(/&getpp|\{pp\}/gi, '')
+        .replace(/@user|\{user\}|&mention|\bmentions user\b/gi, mention)
+        .replace(/@group|\{group\}|\(group name\)|&group/gi, groupName)
+        .replace(/\n{3,}/g, '\n\n')
+        .trim() || `👋 Welcome ${mention} to ${groupName}!`;
+}
+
 export default async function handleGroupJoin(sock, groupUpdate) {
-    const { id: groupId, participants } = groupUpdate;
+    const { id: groupId, participants, action } = groupUpdate;
+    if (action && action !== 'add') return;
     try {
         const meta = await sock.groupMetadata(groupId);
         const groupName = meta.subject || 'the group';
         const savedGroup = await getGroup(groupId);
+        const groupLang = savedGroup?.settings?.language || 'en';
         const welcomeEnabled = savedGroup?.settings?.welcome?.enabled;
         const welcomeTemplate = savedGroup?.settings?.welcome?.message
             || '👋 Welcome @user to @group!\n\nKindly do intro:\n• Pics\n• Age\n• Location\n\n📌 Please read the group description.';
@@ -34,11 +48,11 @@ export default async function handleGroupJoin(sock, groupUpdate) {
             if (!config.events?.groupJoin || !welcomeEnabled) continue;
 
             try {
-                const num = normNum(participant);
                 const ppUrl = await getProfilePic(sock, participant);
-                const text = welcomeTemplate
-                    .replace(/@user/gi, `@${num}`)
-                    .replace(/@group/gi, groupName);
+                const text = await translateTextIfNeeded(
+                    renderWelcomeTemplate(welcomeTemplate, participant, groupName),
+                    groupLang
+                );
 
                 if (ppUrl) {
                     await sock.sendMessage(groupId, {
