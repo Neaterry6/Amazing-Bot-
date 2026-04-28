@@ -39,7 +39,7 @@ function parseInput(args, quotedText) {
 
 export default {
     name: 'translate',
-    aliases: ['tr', 'trans', 'lang'],
+    aliases: ['tr', 'trans'],
     category: 'utility',
     description: 'Translate text or a replied message accurately using Google Translate',
     usage: 'translate <text> -> <lang> | translate <lang> <text> | reply + translate <lang>',

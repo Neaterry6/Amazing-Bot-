@@ -3,6 +3,7 @@ import config from '../config.js';
 import { isBanned } from '../commands/admin/ban.js';
 import { normNum } from '../utils/adminUtils.js';
 import { getGroup } from '../models/Group.js';
+import { translateTextIfNeeded } from '../utils/languageManager.js';
 
 async function getProfilePic(sock, jid) {
     try { return await sock.profilePictureUrl(jid, 'image'); }
@@ -27,6 +28,7 @@ export default async function handleGroupJoin(sock, groupUpdate) {
         const meta = await sock.groupMetadata(groupId);
         const groupName = meta.subject || 'the group';
         const savedGroup = await getGroup(groupId);
+        const groupLang = savedGroup?.settings?.language || 'en';
         const welcomeEnabled = savedGroup?.settings?.welcome?.enabled;
         const welcomeTemplate = savedGroup?.settings?.welcome?.message
             || '👋 Welcome @user to @group!\n\nKindly do intro:\n• Pics\n• Age\n• Location\n\n📌 Please read the group description.';
@@ -47,7 +49,10 @@ export default async function handleGroupJoin(sock, groupUpdate) {
 
             try {
                 const ppUrl = await getProfilePic(sock, participant);
-                const text = renderWelcomeTemplate(welcomeTemplate, participant, groupName);
+                const text = await translateTextIfNeeded(
+                    renderWelcomeTemplate(welcomeTemplate, participant, groupName),
+                    groupLang
+                );
 
                 if (ppUrl) {
                     await sock.sendMessage(groupId, {
