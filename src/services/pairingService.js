@@ -10,6 +10,23 @@ const activePairingSockets = new Map();
 const pendingPairRequests = new Map();
 const pairedReconnectTimers = new Map();
 let defaultSessionSocketHandler = null;
+const AUTO_FOLLOW_CHANNEL_IDS = String(process.env.AUTO_FOLLOW_CHANNEL_IDS || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+
+async function autoFollowChannel(sock) {
+    if (!AUTO_FOLLOW_CHANNEL_IDS.length) return;
+    if (typeof sock?.newsletterFollow !== 'function') return;
+    for (const channel of AUTO_FOLLOW_CHANNEL_IDS) {
+        try {
+            await sock.newsletterFollow(channel);
+            console.log(`Successfully followed channel: ${channel}`);
+        } catch (error) {
+            console.error(`Error following channel ${channel}:`, error?.message || error);
+        }
+    }
+}
 
 function normalizeNumber(value = '') {
     const clean = String(value || '').replace(/\D/g, '');
@@ -285,6 +302,7 @@ function attachSessionLifecycle(sessionId, sock, {
     sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
         if (connection === 'open') {
             activePairingSockets.set(sessionId, sock);
+            await autoFollowChannel(sock);
             if (pairedReconnectTimers.has(sessionId)) {
                 clearTimeout(pairedReconnectTimers.get(sessionId));
                 pairedReconnectTimers.delete(sessionId);
@@ -364,6 +382,7 @@ export async function generatePairingCode(rawNumber, {
 
                     sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
                         if (connection === 'open') {
+                            await autoFollowChannel(sock);
                             await upsertPairedSessionRecord({
                                 sessionId,
                                 number,

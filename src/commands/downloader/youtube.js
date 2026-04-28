@@ -9,6 +9,9 @@ const YOUTUBE_URL_RE = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\//i;
 function senderJid(message) {
   return message?.key?.participant || message?.key?.remoteJid || '';
 }
+function bareJid(jid = '') {
+  return String(jid).split(':')[0];
+}
 
 async function downloadAndSend(url, type, sock, chatId, quotedMessage) {
   let tmpFilePath = '';
@@ -148,8 +151,8 @@ export default {
       global.replyHandlers[sentMsg.key.id] = {
         command: 'ytb',
         handler: async (replyText, replyMessage) => {
-          const replySender = senderJid(replyMessage);
-          if (replySender !== sender) return;
+          const replySender = bareJid(senderJid(replyMessage));
+          if (replySender !== bareJid(sender)) return;
 
           const choice = parseInt(String(replyText || '').trim(), 10);
           if (Number.isNaN(choice) || choice < 1 || choice > videos.length) {
