@@ -132,11 +132,17 @@ async function askIlomApi(prompt, question) {
         return await askGeminiText(prompt, normalizedQuestion);
     } catch {}
 
-    const { data } = await axios.get('https://apis.prexzyvilla.site/ai/gpt-5', {
-        params: { text: composed },
-        timeout: LOW_RESOURCE_MODE ? 70000 : 120000
+    const { data } = await axios.post('https://qwen.aikit.club/v1/chat/completions', {
+        model: process.env.QWEN_MODEL || 'Qwen3.6-Plus',
+        messages: [{ role: 'user', content: composed }]
+    }, {
+        timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
+        headers: {
+            Authorization: `Bearer ${process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || ''}`,
+            'Content-Type': 'application/json'
+        }
     });
-    const out = data?.result || data?.response || data?.data || data?.message;
+    const out = data?.choices?.[0]?.message?.content || data?.result || data?.response || data?.data || data?.message;
     if (!out) throw new Error('All AI providers failed for ilomcreate');
     return stripTrailingDetailsBlock(String(out).trim());
 }
@@ -348,6 +354,7 @@ export default {
                 .map((h) => `${h.role}: ${h.text}`)
                 .join('\n');
 
+            const wantsCreateCommand = /\b(create|build|generate)\b[\s\w-]{0,20}\b(command|cmd)\b/i.test(userText);
             const finalPrompt = `${getModePrompt(userMemory.mode)}
 ROOT SNAPSHOT:
 ${getRepoSnapshot() || 'No snapshot available'}
@@ -363,6 +370,7 @@ COMMAND TEMPLATE REQUIREMENT:
 - When creating commands, output complete JS command file using export default.
 - Include: name, category, description, usage, cooldown, and execute().
 - Never auto-install or auto-save files. Always return code directly in chat.
+- If user did not explicitly request to create/build/generate a command, respond as normal assistant text only (no command file output).
 - Prefer raw code output without markdown wrappers.`;
 
             const output = await askIlomApi(finalPrompt, userText);
@@ -373,7 +381,7 @@ COMMAND TEMPLATE REQUIREMENT:
             saveMemory(memory);
 
             const generatedCode = String(output || '').trim();
-            const looksLikeCode = generatedCode.includes('export default') || generatedCode.includes('module.exports') || generatedCode.includes('function ');
+            const looksLikeCode = wantsCreateCommand && (generatedCode.includes('export default') || generatedCode.includes('module.exports') || generatedCode.includes('function '));
             if (looksLikeCode) {
                 const sentInfo = await sock.sendMessage(from, {
                     text: `📄 *Generated command output*\nMode: Native code view\nLines: ${generatedCode.split('\n').length}\nSize: ${Buffer.byteLength(generatedCode, 'utf8')} bytes`

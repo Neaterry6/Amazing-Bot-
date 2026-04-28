@@ -53,7 +53,7 @@ const QWEN_HELP_MODELS = [
 const DEFAULT_SETTINGS = {
     personality: 'ilom',
     voiceMode: false,
-    provider: 'prexzy',
+    provider: 'qwen',
     model: '',
     scraperMode: false,
     commandTool: false
@@ -78,6 +78,18 @@ const PROVIDER_DEFAULT_MODELS = {
     claude: CLAUDE_MODEL
 };
 let qwenModelCache = { at: 0, models: [] };
+const AI_PROFILE_PICS = [
+    'https://i.ibb.co/YTBPq5vj/fd53ebefdcd3.jpg',
+    'https://i.ibb.co/NnL8S4wh/a66e525b87e6.jpg',
+    'https://i.ibb.co/sddkLcYb/6d380869a836.jpg',
+    'https://i.ibb.co/dJbKGRs3/326a2aae34ae.jpg',
+    'https://i.ibb.co/d0yMX929/f600bd2bee3d.jpg',
+    'https://i.ibb.co/BKL2zxbc/2c46c549b9bf.jpg',
+    'https://i.ibb.co/W4vHzL2K/2a7d9aa8ada1.jpg',
+    'https://i.ibb.co/TDqPDWR7/e01a00c28dbe.jpg',
+    'https://i.ibb.co/7JpCFqLK/3cb6c963741f.jpg',
+    'https://i.ibb.co/5hPk0TBh/0b71da45787b.jpg'
+];
 
 function delay(ms = 1200) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -843,10 +855,16 @@ export default {
         if (/^play\s+/i.test(body)) {
             const query = body.replace(/^play\s+/i, '').trim();
             if (!query) return await sock.sendMessage(from, { text: '❌ Usage: ai play <song name>' }, { quoted: message });
-            await sock.sendMessage(from, { text: '🎵 Searching and downloading audio...' }, { quoted: message });
+            await sock.sendMessage(from, { text: '⏳ Hold on, let me fetch your song...' }, { quoted: message });
             try {
                 const { video, result } = await fetchPlayAudio(query);
                 await sock.sendMessage(from, {
+                    audio: { url: result.download },
+                    mimetype: 'audio/mpeg',
+                    fileName: `${(result.title || video.title || 'audio').replace(/[\/:*?"<>|]/g, '').slice(0, 120)}.mp3`,
+                    ptt: false
+                }, { quoted: message });
+                return await sock.sendMessage(from, {
                     text: [
                         '🎵 *AI Play Result*',
                         `📝 Title: ${result.title || video.title || 'Unknown'}`,
@@ -854,13 +872,6 @@ export default {
                         `⏱️ Duration: ${video.timestamp || 'Unknown'}`,
                         `🔗 URL: ${video.url}`
                     ].join('\n')
-                }, { quoted: message });
-
-                return await sock.sendMessage(from, {
-                    audio: { url: result.download },
-                    mimetype: 'audio/mpeg',
-                    fileName: `${(result.title || video.title || 'audio').replace(/[\/:*?"<>|]/g, '').slice(0, 120)}.mp3`,
-                    ptt: false
                 }, { quoted: message });
             } catch (error) {
                 return await sock.sendMessage(from, { text: `❌ Play failed: ${error.message}` }, { quoted: message });
@@ -984,7 +995,7 @@ export default {
         if (/^(img|image|imagine)\s+/i.test(body)) {
             const prompt = body.replace(/^(img|image|imagine)\s+/i, '').trim();
             if (!prompt) return await sock.sendMessage(from, { text: '❌ Provide prompt for image generation.' }, { quoted: message });
-            await sock.sendMessage(from, { text: '🎨 Generating image with Qwen... please wait.' }, { quoted: message });
+            await sock.sendMessage(from, { text: '🎨 Hold on, let me create your image...' }, { quoted: message });
             await delay(1800);
             try {
                 const imagePayload = await qwenImageGeneration(prompt);
@@ -1001,7 +1012,7 @@ Prompt: ${prompt}`
         if (/^(vid|video)\s+/i.test(body)) {
             const prompt = body.replace(/^(vid|video)\s+/i, '').trim();
             if (!prompt) return await sock.sendMessage(from, { text: '❌ Provide prompt for video generation.' }, { quoted: message });
-            await sock.sendMessage(from, { text: '🎬 Generating video with Qwen... this may take longer.' }, { quoted: message });
+            await sock.sendMessage(from, { text: '🎬 Wait while I create your video...' }, { quoted: message });
             await delay(2500);
             try {
                 const out = await qwenVideoGeneration(prompt);
@@ -1050,6 +1061,19 @@ Prompt: ${prompt || 'default'}` }, { quoted: message });
             } catch (error) {
                 return await sock.sendMessage(from, { text: `❌ Image analysis failed: ${error.message}` }, { quoted: message });
             }
+        }
+
+        if (/\b(what do you look like|show (me )?(your|ur) pics?|send (me )?(your|ur) pics?|lemme see (your|ur) pics?)\b/i.test(body)) {
+            const selected = AI_PROFILE_PICS[Math.floor(Math.random() * AI_PROFILE_PICS.length)];
+            return await sock.sendMessage(from, { image: { url: selected }, viewOnce: true, caption: '📸 This is me 😎' }, { quoted: message });
+        }
+
+        if (/^re-?transcript\b/i.test(body)) {
+            const content = body.replace(/^re-?transcript\b[:\s-]*/i, '').trim();
+            if (!content) return await sock.sendMessage(from, { text: '❌ Usage: ai re-transcript <text>' }, { quoted: message });
+            return await sock.sendMessage(from, {
+                text: `### Re-transcript\n\n${content}\n`,
+            }, { quoted: message });
         }
 
         try {

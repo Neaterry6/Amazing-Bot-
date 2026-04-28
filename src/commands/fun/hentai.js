@@ -51,9 +51,8 @@ export default {
                     if (!videos.length) return await sock.sendMessage(from, { text: '❌ Video URL not found in selected item.' }, { quoted: replyMessage });
                     for (let i = 0; i < videos.length; i++) {
                         await sock.sendMessage(from, {
-                            document: { url: videos[i] },
+                            video: { url: videos[i] },
                             mimetype: 'video/mp4',
-                            fileName: `hentai_${Date.now()}_${i + 1}.mp4`,
                             caption: i === 0 ? `🔞 ${picked?.title || picked?.name || 'Selected video'}` : undefined
                         }, { quoted: replyMessage });
                     }

@@ -4,7 +4,10 @@ import FormData from 'form-data';
 import ky from 'ky';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
 
-const UPLOAD_URL = 'https://tmp.malvryx.dev/upload';
+const UPLOAD_URLS = [
+    'https://tmp.malvryx.dev/upload',
+    'https://tmpfiles.org/api/v1/upload'
+];
 const ALLOWED_EXPIRY = new Set(['1h', '6h', '24h', '7d', '30d']);
 
 function humanSize(bytes) {
@@ -115,21 +118,31 @@ export default {
             if (flags.password) form.append('password', flags.password);
 
             const apiKey = process.env.MALVRYX_TMP_KEY || process.env.MALVRYX_API_KEY || '';
-            const res = await ky.post(UPLOAD_URL, {
-                body: form,
-                headers: {
-                    ...form.getHeaders(),
-                    ...(apiKey ? { 'X-API-Key': apiKey } : {}),
-                    'User-Agent': 'Mozilla/5.0'
-                },
-                timeout: 60000
-            }).json();
+            let res = null;
+            let lastError = null;
+            for (const url of UPLOAD_URLS) {
+                try {
+                    res = await ky.post(url, {
+                        body: form,
+                        headers: {
+                            ...form.getHeaders(),
+                            ...(apiKey ? { 'X-API-Key': apiKey } : {}),
+                            'User-Agent': 'Mozilla/5.0'
+                        },
+                        timeout: 60000
+                    }).json();
+                    if (res) break;
+                } catch (error) {
+                    lastError = error;
+                }
+            }
+            if (!res) throw lastError || new Error('All upload endpoints failed');
 
-            if (!res?.success) {
+            if (!res?.success && !res?.data?.url) {
                 throw new Error(res?.message || 'Upload failed');
             }
 
-            const link = res.cdnUrl || res.directUrl || 'N/A';
+            const link = res.cdnUrl || res.directUrl || res?.data?.url || res?.data?.download_url || 'N/A';
             await sock.sendMessage(from, {
                 text:
                     '*RTOURL SUCCESS*\n' +

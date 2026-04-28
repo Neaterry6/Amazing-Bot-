@@ -56,7 +56,7 @@ export default {
                 '',
                 ...items.map((v) => `${v.index}. ${v.title}`),
                 '',
-                'Reply with a number to get the video file.'
+                'Reply with a number to get the video in chat.'
             ].join('\n');
 
             const sent = await sock.sendMessage(from, { text }, { quoted: message });
@@ -71,9 +71,8 @@ export default {
                     }
                     const pick = items[n - 1];
                     return sock.sendMessage(from, {
-                        document: { url: pick.url },
+                        video: { url: pick.url },
                         mimetype: 'video/mp4',
-                        fileName: `${pick.title.replace(/[\\/:*?"<>|]/g, '').slice(0, 60) || 'anivid'}.mp4`,
                         caption: `🎬 ${pick.title}\n👤 ${pick.author}`
                     }, { quoted: replyMessage });
                 }
