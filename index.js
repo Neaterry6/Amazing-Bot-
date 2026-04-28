@@ -663,6 +663,13 @@ async function setupEventHandlers(sock, saveCreds) {
         }
     });
 
+    sock.ev.on('messages.delete', async (payload) => {
+        if (!config.events?.messageDelete) return;
+        const keys = Array.isArray(payload) ? payload : (Array.isArray(payload?.keys) ? payload.keys : []);
+        if (!keys.length) return;
+        await messageHandler.handleMessageDelete(sock, keys);
+    });
+
     sock.ev.on('group-participants.update', async (update) => {
         try {
             await groupHandler.handleParticipantsUpdate(sock, update);

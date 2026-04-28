@@ -11,8 +11,42 @@ import { isTopOwner } from '../utils/privilegedUsers.js';
 import { initWhitelist, isWhitelisted } from '../commands/owner/whitelist.js';
 import { getAntiHijackConfig } from '../utils/antihijackStore.js';
 import { getAntiBotConfig, incrementBotWarning, resetBotWarning } from '../utils/antibotStore.js';
+import { getWatchConfig, resolvePersonalTarget, shouldPassScope } from '../utils/messageWatchStore.js';
 
 let autoDownloadHandler = null;
+const MESSAGE_AUDIT_CACHE_LIMIT = 2000;
+
+function getMessageAuditCache() {
+    if (!global.messageAuditCache) global.messageAuditCache = new Map();
+    return global.messageAuditCache;
+}
+
+function cacheIncomingMessage(message, text = '') {
+    const key = message?.key;
+    if (!key?.id || !key?.remoteJid) return;
+    const cache = getMessageAuditCache();
+    const msg = message?.message || {};
+    const mediaType = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].find((k) => !!msg[k]) || null;
+    cache.set(key.id, {
+        id: key.id,
+        chatId: key.remoteJid,
+        participant: key.participant || key.remoteJid,
+        text: text || '',
+        mediaType,
+        mediaUrl: msg?.imageMessage?.url || msg?.videoMessage?.url || msg?.documentMessage?.url || msg?.audioMessage?.url || null,
+        ts: Date.now()
+    });
+    if (cache.size > MESSAGE_AUDIT_CACHE_LIMIT) {
+        const old = cache.keys().next().value;
+        if (old) cache.delete(old);
+    }
+}
+
+function getDestinationChatId(configObj, originChatId, appConfig) {
+    if (configObj.destination === 'g') return originChatId;
+    if (configObj.destination === 'jid' && configObj.targetJid) return configObj.targetJid;
+    return resolvePersonalTarget(appConfig);
+}
 
 async function getAutoDownload() {
     if (!autoDownloadHandler) {
@@ -503,6 +537,7 @@ class MessageHandler {
 
             const text = messageContent.text;
             const hasText = !!(text && text.trim().length);
+            cacheIncomingMessage(message, text);
 
             if (isGroup && !fromMe && hasText && !isOwnerUser && !isSudoUser) {
                 const antiHijack = await getAntiHijackConfig(from).catch(() => ({ enabled: false }));
@@ -670,6 +705,36 @@ class MessageHandler {
         for (const update of messageUpdates) {
             try {
                 logger.debug(`Message updated: ${update.key?.id}`);
+                const cfg = getWatchConfig('antiedit');
+                if (!cfg?.enabled) continue;
+                const key = update?.key;
+                if (!key?.id || !key?.remoteJid) continue;
+                const cache = getMessageAuditCache();
+                const prev = cache.get(key.id);
+                const editedText = update?.update?.editedMessage?.message?.conversation
+                    || update?.update?.editedMessage?.message?.extendedTextMessage?.text
+                    || update?.update?.conversation
+                    || update?.update?.extendedTextMessage?.text
+                    || '';
+                if (!editedText || !prev) continue;
+                const isGroup = String(key.remoteJid).endsWith('@g.us');
+                if (!shouldPassScope(cfg.scopes, isGroup)) continue;
+                if (String(prev.text || '').trim() === String(editedText).trim()) continue;
+
+                const dest = getDestinationChatId(cfg, key.remoteJid, config);
+                if (!dest) continue;
+                const actor = key.participant || prev.participant || key.remoteJid;
+                const lines = [
+                    '✏️ *ANTI-EDIT ALERT*',
+                    `👤 User: @${String(actor).split('@')[0]}`,
+                    `📍 Chat: ${key.remoteJid}`,
+                    '',
+                    `📝 Before: ${prev.text || '[non-text or unavailable]'}`,
+                    `🆕 After: ${editedText}`
+                ];
+                await sock.sendMessage(dest, { text: lines.join('\n'), mentions: [actor] }).catch(() => {});
+                prev.text = editedText;
+                cache.set(key.id, prev);
             } catch (error) {
                 logger.error('Message update error:', error);
             }
@@ -680,6 +745,29 @@ class MessageHandler {
         for (const deletion of deletedMessages) {
             try {
                 logger.debug(`Message deleted: ${deletion.id} from ${deletion.remoteJid}`);
+                const cfg = getWatchConfig('antidelete');
+                if (!cfg?.enabled) continue;
+                const id = deletion?.id || deletion?.key?.id;
+                const remoteJid = deletion?.remoteJid || deletion?.key?.remoteJid;
+                if (!id || !remoteJid) continue;
+                const isGroup = String(remoteJid).endsWith('@g.us');
+                if (!shouldPassScope(cfg.scopes, isGroup)) continue;
+                const cache = getMessageAuditCache();
+                const prev = cache.get(id);
+                if (!prev) continue;
+                const dest = getDestinationChatId(cfg, remoteJid, config);
+                if (!dest) continue;
+                const actor = deletion?.participant || deletion?.key?.participant || prev.participant || remoteJid;
+                const lines = [
+                    '🗑️ *ANTI-DELETE ALERT*',
+                    `👤 User: @${String(actor).split('@')[0]}`,
+                    `📍 Chat: ${remoteJid}`,
+                    '',
+                    `📝 Message: ${prev.text || '[media or unavailable text]'}`,
+                    prev.mediaType ? `📎 Media type: ${prev.mediaType}` : null
+                ].filter(Boolean);
+                await sock.sendMessage(dest, { text: lines.join('\n'), mentions: [actor] }).catch(() => {});
+                cache.delete(id);
             } catch (error) {
                 logger.error('Message deletion error:', error);
             }

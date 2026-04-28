@@ -43,21 +43,12 @@ export default {
                 const uniqueUrls = [...new Set(mediaUrls)].slice(0, 2);
                 for (let i = 0; i < uniqueUrls.length; i++) {
                     const fileName = `${(payload.title || pick.title || 'bilibili').replace(/[\\/:*?"<>|]/g, '').slice(0, 80)}_${i + 1}.mp4`;
-                    try {
-                        await sock.sendMessage(from, {
-                            video: { url: uniqueUrls[i] },
-                            mimetype: 'video/mp4',
-                            fileName,
-                            caption: i === 0 ? `🎬 ${payload.title || pick.title}` : undefined
-                        }, { quoted: replyMessage });
-                    } catch {
-                        await sock.sendMessage(from, {
-                            document: { url: uniqueUrls[i] },
-                            mimetype: 'video/mp4',
-                            fileName,
-                            caption: i === 0 ? `🎬 ${payload.title || pick.title}` : undefined
-                        }, { quoted: replyMessage });
-                    }
+                    await sock.sendMessage(from, {
+                        document: { url: uniqueUrls[i] },
+                        mimetype: 'video/mp4',
+                        fileName,
+                        caption: i === 0 ? `🎬 ${payload.title || pick.title}` : undefined
+                    }, { quoted: replyMessage });
                 }
                 return null;
             }

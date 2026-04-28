@@ -7,11 +7,19 @@ function pickList(data) {
     return [];
 }
 
+function pickTitle(it = {}) {
+    return it.title || it.name || it.movie || it.drama || 'Unknown';
+}
+
+function pickUrl(it = {}) {
+    return it.video || it.videoUrl || it.url || it.link || it.download || it.downloadUrl || null;
+}
+
 export default {
     name: 'movie',
-    aliases: ['film', 'mv'],
+    aliases: ['film', 'mv', 'moviedl'],
     category: 'downloader',
-    description: 'Search movies using apiskeith moviebox/dramabox',
+    description: 'Search movies and send selected item as file',
     usage: 'movie <moviebox|dramabox> <query>',
     args: true,
     minArgs: 2,
@@ -26,17 +34,42 @@ export default {
 
         try {
             const api = `https://apiskeith.top/${source}/search?q=${encodeURIComponent(query)}`;
-            const { data } = await axios.get(api, { timeout: 30000 });
-            const list = pickList(data);
+            const { data } = await axios.get(api, { timeout: 120000 });
+            const list = pickList(data).slice(0, 10);
             if (!list.length) return await sock.sendMessage(from, { text: `❌ No result for ${query}` }, { quoted: message });
 
-            const text = list.slice(0, 10).map((it, i) => {
-                const title = it.title || it.name || it.movie || it.drama || 'Unknown';
-                const year = it.year || it.release || '';
-                return `${i + 1}. ${title}${year ? ` (${year})` : ''}`;
-            }).join('\n');
+            const text = [
+                `🎬 *${source} results*`,
+                '',
+                ...list.map((it, i) => {
+                    const title = pickTitle(it);
+                    const year = it.year || it.release || '';
+                    return `${i + 1}. ${title}${year ? ` (${year})` : ''}`;
+                }),
+                '',
+                'Reply with number to download as file.'
+            ].join('\n');
 
-            await sock.sendMessage(from, { text: `🎬 *${source} results*\n\n${text}` }, { quoted: message });
+            const sent = await sock.sendMessage(from, { text }, { quoted: message });
+            if (!global.replyHandlers) global.replyHandlers = {};
+            global.replyHandlers[sent.key.id] = {
+                command: 'movie',
+                handler: async (replyText, replyMessage) => {
+                    const n = Number.parseInt(String(replyText || '').trim(), 10);
+                    if (!n || n < 1 || n > list.length) return sock.sendMessage(from, { text: '❌ Invalid number.' }, { quoted: replyMessage });
+                    const pick = list[n - 1];
+                    const url = pickUrl(pick);
+                    if (!url) return sock.sendMessage(from, { text: '❌ Selected item has no downloadable video URL.' }, { quoted: replyMessage });
+
+                    const safe = pickTitle(pick).replace(/[\\/:*?"<>|]/g, '').slice(0, 70) || 'movie';
+                    return sock.sendMessage(from, {
+                        document: { url },
+                        mimetype: 'video/mp4',
+                        fileName: `${safe}.mp4`,
+                        caption: `🎬 ${pickTitle(pick)}`
+                    }, { quoted: replyMessage });
+                }
+            };
         } catch (error) {
             await sock.sendMessage(from, { text: `❌ Movie failed: ${error.message}` }, { quoted: message });
         }
