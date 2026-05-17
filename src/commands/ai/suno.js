@@ -1,53 +1,128 @@
 import axios from 'axios';
-import fs from 'fs-extra';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const TEMP_DIR = path.join(__dirname, '../../cache/suno_temp');
+const SUNO_WRAPPER_BASE = process.env.SUNO_WRAPPER_BASE || 'https://api.sunoapi.org';
+const SUNO_ACCESS_TOKEN = process.env.SUNO_ACCESS_TOKEN || '';
+const DEFAULT_MODEL = process.env.SUNO_MODEL || 'V4_5';
+const POLL_INTERVAL_MS = 7000;
+const MAX_POLLS = 35; // ~4 minutes
 
-const HF_API = 'https://api-inference.huggingface.co/models/facebook/musicgen-small';
+function parsePrompt(text = '') {
+    const input = String(text || '').trim();
+    const byMatch = input.match(/\bby\s+(.+)$/i);
+    const artist = byMatch ? byMatch[1].trim() : '';
+    const core = byMatch ? input.slice(0, byMatch.index).trim() : input;
 
-function parsePrompt(text) {
-    text = text.trim();
-    let genre = '';
-    let artist = '';
+    const styleKeywords = [
+        'afrobeat', 'drill', 'hip hop', 'rap', 'trap', 'pop', 'rock', 'rnb', 'r&b', 'jazz',
+        'blues', 'reggae', 'dancehall', 'country', 'edm', 'house', 'techno', 'amapiano',
+        'gospel', 'soul', 'funk', 'lofi', 'lo-fi', 'classical', 'metal', 'punk', 'indie',
+        'folk', 'kpop', 'afropop', 'highlife', 'soca', 'dubstep', 'grime'
+    ];
 
-    // Extract "by <artist>"
-    const byMatch = text.match(/\bby\s+([A-Za-z0-9_\s]+)$/i);
-    if (byMatch) {
-        artist = byMatch[1].trim();
-        text = text.slice(0, byMatch.index).trim();
-    }
-
-    // Extract genre keywords
-    const possibleGenres = ['afrobeat', 'drill', 'hip hop', 'hiphop', 'rap', 'trap', 'pop', 'rock', 'rnb',
-        'r&b', 'jazz', 'blues', 'reggae', 'dancehall', 'country', 'edm', 'house', 'techno',
-        'amapiano', 'gospel', 'soul', 'funk', 'lofi', 'lo-fi', 'classical', 'metal', 'punk',
-        'alternative', 'indie', 'folk', 'latino', 'kpop', 'afropop', 'highlife', 'soca',
-        'dubstep', 'grime'];
-
-    for (const g of possibleGenres) {
-        const idx = text.toLowerCase().indexOf(g);
+    let style = '';
+    let prompt = core;
+    const lc = core.toLowerCase();
+    for (const keyword of styleKeywords) {
+        const idx = lc.indexOf(keyword);
         if (idx !== -1) {
-            genre = text.slice(idx, idx + g.length);
-            text = text.slice(0, idx).trim() + ' ' + text.slice(idx + g.length).trim();
+            style = keyword;
+            prompt = `${core.slice(0, idx)} ${core.slice(idx + keyword.length)}`.replace(/\s+/g, ' ').trim();
             break;
         }
     }
 
-    text = text.replace(/\s+/g, ' ').trim();
-    if (!text) text = 'a song';
+    if (!prompt) prompt = 'a creative song';
+    return {
+        prompt,
+        style,
+        title: prompt.slice(0, 60),
+        artist
+    };
+}
 
-    return { prompt: text, genre, artist };
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function pickAudioUrl(payload) {
+    const data = payload?.data || payload?.result || payload;
+    if (!data) return '';
+
+    if (Array.isArray(data?.songs)) {
+        const first = data.songs[0] || {};
+        return first.audioUrl || first.audio_url || first.url || first.streamUrl || '';
+    }
+
+    if (Array.isArray(data?.clips)) {
+        const first = data.clips[0] || {};
+        return first.audio_url || first.audioUrl || first.url || '';
+    }
+
+    return data.audioUrl || data.audio_url || data.streamUrl || data.url || '';
+}
+
+async function startGeneration({ prompt, style, title }) {
+    const { data } = await axios.post(
+        `${SUNO_WRAPPER_BASE}/api/v1/generate`,
+        {
+            customMode: true,
+            instrumental: false,
+            model: DEFAULT_MODEL,
+            prompt,
+            style: style || undefined,
+            title: title || undefined
+        },
+        {
+            timeout: 45000,
+            headers: {
+                Authorization: `Bearer ${SUNO_ACCESS_TOKEN}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'Asta-Bot/1.0'
+            }
+        }
+    );
+
+    const taskId = data?.data?.taskId || data?.taskId || data?.result?.taskId;
+    if (!taskId) throw new Error('Suno wrapper did not return a task ID');
+    return taskId;
+}
+
+async function waitForSong(taskId) {
+    let lastStatus = 'pending';
+
+    for (let i = 0; i < MAX_POLLS; i++) {
+        await sleep(POLL_INTERVAL_MS);
+
+        const { data } = await axios.get(`${SUNO_WRAPPER_BASE}/api/v1/generate/record-info`, {
+            params: { taskId },
+            timeout: 45000,
+            headers: {
+                Authorization: `Bearer ${SUNO_ACCESS_TOKEN}`,
+                'User-Agent': 'Asta-Bot/1.0'
+            }
+        });
+
+        const raw = data?.data || data?.result || data;
+        const status = String(raw?.status || raw?.state || '').toLowerCase();
+        if (status) lastStatus = status;
+
+        const audioUrl = pickAudioUrl(data);
+        if (audioUrl) return { audioUrl, meta: raw };
+
+        if (['failed', 'error', 'cancelled'].includes(status)) {
+            const reason = raw?.errorMessage || raw?.message || 'generation failed';
+            throw new Error(reason);
+        }
+    }
+
+    throw new Error(`Generation timeout (last status: ${lastStatus})`);
 }
 
 export default {
     name: 'suno',
     aliases: ['songgen', 'musicgen', 'musica'],
     category: 'ai',
-    description: 'Generate music using AI by prompt and style',
+    description: 'Generate AI music via Suno third-party wrapper API',
     usage: 'suno <description> <genre> by <artist>',
     example: 'suno I love you afrobeat by Kenzy',
     cooldown: 60,
@@ -55,82 +130,53 @@ export default {
     minArgs: 1,
 
     async execute({ sock, message, from, args }) {
-        const text = args.join(' ').trim();
-        if (!text) {
+        if (!SUNO_ACCESS_TOKEN) {
             return await sock.sendMessage(from, {
-                text: '🎵 *Music Generator*\n\nUsage:\n`.suno <description> <genre> by <artist>`\n\nExample:\n`.suno I love you afrobeat by Kenzy`'
+                text: '❌ SUNO_ACCESS_TOKEN is missing in env.'
             }, { quoted: message });
         }
 
-        const { prompt, genre, artist } = parsePrompt(text);
+        const text = args.join(' ').trim();
+        if (!text) {
+            return await sock.sendMessage(from, {
+                text: '🎵 *Suno Music Generator*\n\nUsage:\n`.suno <description> <genre> by <artist>`\n\nExample:\n`.suno calm piano classical by Mozart`'
+            }, { quoted: message });
+        }
 
+        const parsed = parsePrompt(text);
         await sock.sendMessage(from, { react: { text: '🎵', key: message.key } });
 
-        const statusMsg = await sock.sendMessage(from, {
-            text: `🎵 *Generating Music...*\n\n📝 ${prompt}\n🎶 ${genre || 'auto'}\n👤 ${artist || 'unknown'}\n\n⏳ This may take 30-60 seconds...`
+        const progress = await sock.sendMessage(from, {
+            text: [
+                '🎶 *Suno Generation Started*',
+                `📝 Prompt: ${parsed.prompt}`,
+                `🎼 Style: ${parsed.style || 'auto'}`,
+                `👤 Artist: ${parsed.artist || 'auto'}`,
+                '',
+                '⏳ Please wait 1-4 minutes...'
+            ].join('\n')
         }, { quoted: message });
 
         try {
-            await fs.ensureDir(TEMP_DIR);
-
-            // Build a rich music description for MusicGen
-            let hfPrompt = `${genre ? genre + ' style, ' : ''}${prompt}`;
-            if (artist) hfPrompt += `, in the style of ${artist}`;
-            hfPrompt += ', high quality music';
-
-            // Call Hugging Face MusicGen
-            const resp = await axios.post(HF_API, {
-                inputs: hfPrompt,
-                parameters: {
-                    max_new_tokens: 256,
-                    temperature: 0.9,
-                    top_k: 250,
-                    top_p: 0.95
-                }
-            }, {
-                responseType: 'arraybuffer',
-                timeout: 120000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0',
-                    'Accept': 'audio/wav,audio/mpeg,*/*'
-                }
-            });
-
-            const audioBuf = Buffer.from(resp.data);
-            if (!audioBuf || audioBuf.length < 1024) {
-                throw new Error('Empty response from music generator');
-            }
-
-            const outPath = path.join(TEMP_DIR, `suno_${Date.now()}.mp3`);
-            await fs.writeFile(outPath, audioBuf);
-
-            const caption = `🎵 *${prompt}*\n` +
-                (genre ? `🎶 Genre: ${genre}\n` : '') +
-                (artist ? `👤 Artist: ${artist}\n` : '') +
-                `🤖 Generated by AI`;
+            const taskId = await startGeneration(parsed);
+            const { audioUrl } = await waitForSong(taskId);
 
             await sock.sendMessage(from, {
-                audio: { url: outPath },
+                audio: { url: audioUrl },
                 mimetype: 'audio/mpeg',
-                fileName: `${prompt.replace(/[^a-zA-Z0-9]/g, '_')}.mp3`,
                 ptt: false,
-                caption: caption
+                fileName: `${(parsed.title || 'suno_track').replace(/[^a-z0-9_-]/gi, '_')}.mp3`,
+                caption: `🎵 *${parsed.title}*\n🆔 Task: ${taskId}`
             }, { quoted: message });
 
-            // Clean up
-            await fs.remove(outPath).catch(() => {});
-
-            await sock.sendMessage(from, { delete: statusMsg.key });
+            try { await sock.sendMessage(from, { delete: progress.key }); } catch {}
             await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
-
-        } catch (e) {
-            await sock.sendMessage(from, { delete: statusMsg.key });
+        } catch (error) {
+            try { await sock.sendMessage(from, { delete: progress.key }); } catch {}
             await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
-            let msg = `❌ Error: ${e.message}`;
-            if (e.response?.status === 503) {
-                msg = '❌ Model is loading. Try again in a moment.';
-            }
-            await sock.sendMessage(from, { text: msg }, { quoted: message });
+            await sock.sendMessage(from, {
+                text: `❌ Suno generation failed: ${error.message}`
+            }, { quoted: message });
         }
     }
 };

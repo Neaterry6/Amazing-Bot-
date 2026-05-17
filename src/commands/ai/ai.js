@@ -12,7 +12,7 @@ const HISTORY_FILE = path.join(DATA_DIR, 'ai_history.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'ai_settings.json');
 const LOW_RESOURCE_MODE = process.env.LOW_RESOURCE_MODE === 'true';
 const MAX_HISTORY = LOW_RESOURCE_MODE ? 8 : 20;
-const REPLY_TTL = 10 * 60 * 1000;
+const REPLY_TTL = 30 * 60 * 1000;
 const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
@@ -584,12 +584,44 @@ async function fetchPlayAudio(query) {
     const search = await yts(query);
     if (!search?.videos?.length) throw new Error('No music result found');
     const video = search.videos[0];
-    const { data } = await axios.get('https://api.ootaizumi.web.id/downloader/youtube', {
-        params: { url: video.url, format: 'mp3' },
-        timeout: 45000
-    });
-    if (!data?.status || !data?.result?.download) throw new Error('Play API did not return audio download URL');
-    return { video, result: data.result };
+
+    const endpoints = [
+        {
+            url: 'https://api.ootaizumi.web.id/downloader/youtube',
+            map: (data) => data?.status && data?.result?.download ? ({ download: data.result.download, title: data.result.title || video.title, author: data.result.author || {} }) : null,
+            params: { url: video.url, format: 'mp3' }
+        },
+        {
+            url: 'https://apis.prexzyvilla.site/download/aio',
+            map: (data) => {
+                const payload = data?.data || data?.result || data;
+                const dl = payload?.high || payload?.low || payload?.url || payload?.download;
+                return dl ? ({ download: dl, title: payload?.title || video.title, author: payload?.author || {} }) : null;
+            },
+            params: { url: video.url }
+        },
+        {
+            url: 'https://api.davidcyril.name.ng/play',
+            map: (data) => {
+                const payload = data?.result || data?.data || data;
+                const dl = payload?.download || payload?.url || payload?.audio;
+                return dl ? ({ download: dl, title: payload?.title || video.title, author: payload?.author || {} }) : null;
+            },
+            params: { query }
+        }
+    ];
+
+    let lastErr = 'All play APIs failed';
+    for (const ep of endpoints) {
+        try {
+            const { data } = await axios.get(ep.url, { params: ep.params, timeout: 45000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+            const mapped = ep.map(data);
+            if (mapped?.download) return { video, result: mapped };
+        } catch (err) {
+            lastErr = err.message;
+        }
+    }
+    throw new Error(lastErr);
 }
 
 async function getDownloadUrl(url) {
