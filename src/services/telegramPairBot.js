@@ -8,6 +8,7 @@ import { clearAllPairedSessions, generatePairingCode } from './pairingService.js
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const STORE_FILE = path.join(process.cwd(), 'data', 'telegram-pairs.json');
+const PLAY_API_TIMEOUT_MS = 45000;
 const OMEGA_DEFAULT_TIMEOUT_MS = 120000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyC6pBs6VepLVzINT9NV3U36bv6Pu8_jic0';
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
@@ -103,8 +104,62 @@ async function updatePairRecord(id, updater) {
     return store.pairs[idx];
 }
 
+function normalizeTelegramId(value = '') {
+    const clean = String(value || '').trim().replace(/^@+/, '');
+    return /^-?\d+$/.test(clean) ? clean : '';
+}
+
+function parseTelegramAdminIds(value = '') {
+    return String(value || '')
+        .split(/[\s,;|]+/)
+        .map(normalizeTelegramId)
+        .filter(Boolean);
+}
+
+function normalizeAdminIds(adminIds = []) {
+    return Array.from(new Set((Array.isArray(adminIds) ? adminIds : [adminIds])
+        .flatMap((x) => parseTelegramAdminIds(x))));
+}
+
 function isAdmin(userId, adminIds = []) {
-    return adminIds.includes(String(userId));
+    const normalizedUserId = normalizeTelegramId(userId);
+    if (!normalizedUserId) return false;
+    return normalizeAdminIds(adminIds).includes(normalizedUserId);
+}
+
+async function loadTelegramAdminIds(fallbackIds = []) {
+    const store = await loadStore();
+    const envIds = normalizeAdminIds(fallbackIds);
+    const savedIds = normalizeAdminIds(store.adminIds || []);
+    const adminIds = Array.from(new Set([...envIds, ...savedIds]));
+    if (adminIds.length !== savedIds.length || adminIds.some((id) => !savedIds.includes(id))) {
+        store.adminIds = adminIds;
+        await saveStore(store);
+    }
+    return adminIds;
+}
+
+async function saveTelegramAdminId(userId, actor = null) {
+    const normalizedUserId = normalizeTelegramId(userId);
+    if (!normalizedUserId) return { ok: false, adminIds: [], added: false };
+
+    const store = await loadStore();
+    const adminIds = normalizeAdminIds(store.adminIds || []);
+    const added = !adminIds.includes(normalizedUserId);
+    if (added) adminIds.push(normalizedUserId);
+    store.adminIds = adminIds;
+    store.adminAudit = (store.adminAudit || []).slice(-50);
+    if (added) {
+        store.adminAudit.push({
+            action: 'add',
+            adminId: normalizedUserId,
+            actorId: normalizeTelegramId(actor?.id) || null,
+            actorUsername: actor?.username || actor?.first_name || null,
+            createdAt: nowISO()
+        });
+    }
+    await saveStore(store);
+    return { ok: true, adminIds, added };
 }
 
 const REQUIRED_JOIN_TARGETS = [
@@ -141,6 +196,7 @@ function commandShortcutButtons() {
             [{ text: '/pair 2349031575131' }],
             [{ text: '/pairs' }, { text: '/delpair' }],
             [{ text: '/help' }, { text: '/buttons' }],
+            [{ text: '/admins' }, { text: '/addadmin 8586943787' }],
             [{ text: '/ilomai Hello' }, { text: '/img anime wallpaper' }],
             [{ text: '/play Billie Jean' }, { text: '/lyrics Billie Jean' }],
             [{ text: '/url' }],
@@ -152,7 +208,7 @@ function commandShortcutButtons() {
     };
 }
 
-async function ensureRequiredMembership({ token, chatId, user, adminIds }) {
+async function ensureRequiredMembership({ token, chatId, user, adminIds = [] }) {
     if (isAdmin(user?.id, adminIds)) return { ok: true, missing: [] };
 
     const missing = [];
@@ -228,6 +284,7 @@ function buildMenu(user, runtimeText = '') {
         '',
         '🛡️ Admin',
         '• /listpair  • /broadcast <text>  • /clearsession',
+        '• /addadmin <telegram_id>  • /admins',
         '╰──────────────────────────────╯'
     ].join('\n');
 }
@@ -254,7 +311,8 @@ function menuKeyboard() {
             [{ text: '/play Calm Down' }, { text: '/lyrics Calm Down' }],
             [{ text: '/tts Hello from ilom ai' }],
             [{ text: '/ping' }, { text: '/uptime' }],
-            [{ text: '/owners' }, { text: '/menu' }]
+            [{ text: '/owners' }, { text: '/admins' }],
+            [{ text: '/addadmin 8586943787' }, { text: '/menu' }]
         ],
         resize_keyboard: true,
         one_time_keyboard: false
@@ -332,6 +390,79 @@ async function resolveYoutube(input = '') {
     const first = search?.videos?.[0];
     if (!first?.url) throw new Error('Song not found');
     return first;
+}
+
+
+function findDownloadUrl(value, format = 'audio') {
+    if (!value) return '';
+    if (typeof value === 'string') return /^https?:\/\/\S+/i.test(value.trim()) ? value.trim() : '';
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findDownloadUrl(item, format);
+            if (found) return found;
+        }
+        return '';
+    }
+    if (typeof value !== 'object') return '';
+
+    const preferredKeys = format === 'video'
+        ? ['video', 'videoUrl', 'video_url', 'mp4', 'download', 'downloadUrl', 'url', 'link']
+        : ['audio', 'audioUrl', 'audio_url', 'mp3', 'download', 'downloadUrl', 'url', 'link'];
+
+    for (const key of preferredKeys) {
+        const found = findDownloadUrl(value[key], format);
+        if (found) return found;
+    }
+
+    for (const item of Object.values(value)) {
+        const found = findDownloadUrl(item, format);
+        if (found) return found;
+    }
+    return '';
+}
+
+async function fetchTelegramPlayAudio({ query, video }) {
+    const headers = { 'User-Agent': 'Mozilla/5.0 (Asta-Bot Telegram)' };
+    const endpoints = [
+        {
+            name: 'DrexApp',
+            url: 'https://api.drexapp.space/downloader/ytplayv2',
+            params: { q: query }
+        },
+        {
+            name: 'DavidCyril',
+            url: 'https://apis.davidcyril.name.ng/play',
+            params: { query, format: 'audio' }
+        },
+        {
+            name: 'OotaIzumi',
+            url: 'https://api.ootaizumi.web.id/downloader/youtube',
+            params: { url: video.url, format: 'mp3' }
+        },
+        {
+            name: 'Keith',
+            url: 'https://apiskeith.top/download/audio',
+            params: { url: video.url }
+        }
+    ];
+
+    let lastError = null;
+    for (const endpoint of endpoints) {
+        try {
+            const { data } = await axios.get(endpoint.url, {
+                params: endpoint.params,
+                timeout: PLAY_API_TIMEOUT_MS,
+                headers
+            });
+            const audioUrl = findDownloadUrl(data, 'audio');
+            if (!audioUrl) throw new Error(`${endpoint.name} did not return an audio URL`);
+            return { audioUrl, provider: endpoint.name };
+        } catch (error) {
+            lastError = error;
+            logger.warn(`Telegram play provider ${endpoint.name} failed: ${error.message}`);
+        }
+    }
+    throw lastError || new Error('All play providers failed');
 }
 
 async function omegatechRequest(model, payload = {}, {
@@ -435,12 +566,17 @@ export async function startTelegramPairBot({
     token = resolveTelegramTokenFromEnv(),
     botId = process.env.TELEGRAM_BOT_ID,
     onSessionSocket = null,
-    adminIds = (
-        process.env.TELEGRAM_ADMIN_IDS ||
-        process.env.TELEGRAM_ADMINS ||
-        process.env.TG_ADMIN_IDS ||
-        ''
-    ).split(',').map((x) => x.trim()).filter(Boolean)
+    adminIds = normalizeAdminIds([
+        process.env.TELEGRAM_ADMIN_IDS,
+        process.env.TELEGRAM_ADMIN_ID,
+        process.env.TELEGRAM_ADMINS,
+        process.env.TELEGRAM_OWNER_IDS,
+        process.env.TELEGRAM_OWNER_ID,
+        process.env.OWNER_TELEGRAM_ID,
+        process.env.OWNER_TELEGRAM_IDS,
+        process.env.TG_ADMIN_IDS,
+        process.env.TG_ADMIN_ID
+    ])
 } = {}) {
     token = resolveTelegramToken(token, botId);
 
@@ -459,8 +595,10 @@ export async function startTelegramPairBot({
     let offset = 0;
     const pendingPairRequests = new Map();
     const startedAt = Date.now();
+    let runtimeAdminIds = normalizeAdminIds(adminIds);
 
     try {
+        runtimeAdminIds = await loadTelegramAdminIds(runtimeAdminIds);
         await tgCall(token, 'getMe');
         await tgCall(token, 'setMyCommands', {
             commands: [
@@ -481,6 +619,8 @@ export async function startTelegramPairBot({
                 { command: 'ping', description: 'Show bot latency' },
                 { command: 'uptime', description: 'Show bot uptime' },
                 { command: 'restart', description: 'Restart bot process (admins only)' },
+                { command: 'addadmin', description: 'Add Telegram admin ID (admins only)' },
+                { command: 'admins', description: 'List Telegram admins (admins only)' },
                 { command: 'cmds', description: 'Show command shortcut list' },
                 { command: 'buttons', description: 'Show quick action buttons' },
                 { command: 'help', description: 'How to use this bot' },
@@ -539,13 +679,15 @@ export async function startTelegramPairBot({
             '/start, /menu, /buttons, /cmds, /help, /owners',
             '/pair, /pairs, /delpair, /listpair',
             '/ilomai, /img, /tts, /play, /lyrics, /url',
-            '/ping, /uptime, /fetch'
+            '/ping, /uptime, /fetch',
+            '/addadmin <telegram_id>, /admins (admins only)'
         ].join('\n'), {
             reply_markup: commandShortcutButtons()
         });
     };
 
     const handleRestart = async (chatId, user) => {
+        if (!isAdmin(user.id, runtimeAdminIds)) return sendText(chatId, '❌ Admin only.');
         await sendText(chatId, `♻️ Restart requested by ${user?.username || user?.first_name || user?.id}. Restarting...`);
         setTimeout(() => process.exit(0), 1200);
         return null;
@@ -614,9 +756,10 @@ export async function startTelegramPairBot({
 
         try {
             const existingStore = await loadStore();
+            const adminUser = isAdmin(user.id, runtimeAdminIds);
             const userPairs = (existingStore.pairs || []).filter((x) => x.tgUserId === String(user.id));
-            if (userPairs.length > 0) {
-                return sendText(chatId, '❌ You can only pair once with this bot. Use /pairs to view your existing pair.');
+            if (!adminUser && userPairs.length > 0) {
+                return sendText(chatId, '❌ You can only pair once with this bot. Ask an admin to add your Telegram ID for unlimited pairing. Use /pairs to view your existing pair.');
             }
             await sendText(chatId, '⏳ Generating your pairing code, please wait...');
             const store = await loadStore();
@@ -631,7 +774,8 @@ export async function startTelegramPairBot({
                 code: null,
                 sessionPath: null,
                 createdAt: nowISO(),
-                status: 'creating_code'
+                status: 'creating_code',
+                adminBypass: isAdmin(user.id, runtimeAdminIds)
             });
             await saveStore(store);
 
@@ -734,15 +878,39 @@ export async function startTelegramPairBot({
 ${rows.join('\n')}`);
     };
 
+    const handleAddAdmin = async (chatId, user, text) => {
+        const hasAnyAdmin = runtimeAdminIds.length > 0;
+        if (hasAnyAdmin && !isAdmin(user.id, runtimeAdminIds)) return sendText(chatId, '❌ Admin only.');
+
+        const raw = text.replace(/^\/addadmin(@\w+)?/i, '').trim();
+        const targetId = normalizeTelegramId(raw || user.id);
+        if (!targetId) return sendText(chatId, '❌ Usage: /addadmin <telegram_user_id>');
+
+        const saved = await saveTelegramAdminId(targetId, user);
+        if (!saved.ok) return sendText(chatId, '❌ Invalid Telegram user ID. Use digits only, for example: /addadmin 8586943787');
+        runtimeAdminIds = Array.from(new Set([...runtimeAdminIds, ...saved.adminIds]));
+
+        return sendText(chatId, saved.added
+            ? `✅ Added Telegram admin: ${targetId}\nThey can now pair unlimited numbers and use admin-only commands.`
+            : `ℹ️ Telegram admin ${targetId} is already saved.`);
+    };
+
+    const handleAdmins = async (chatId, user) => {
+        if (!isAdmin(user.id, runtimeAdminIds)) return sendText(chatId, '❌ Admin only.');
+        runtimeAdminIds = await loadTelegramAdminIds(runtimeAdminIds);
+        const rows = runtimeAdminIds.map((id, i) => `${i + 1}. ${id}`);
+        return sendText(chatId, rows.length ? `🛡️ Telegram admins:\n\n${rows.join('\n')}` : 'No Telegram admins configured.');
+    };
+
     const handleListPair = async (chatId, user) => {
-        if (!isAdmin(user.id, adminIds)) return sendText(chatId, '❌ Admin only.');
+        if (!isAdmin(user.id, runtimeAdminIds)) return sendText(chatId, '❌ Admin only.');
         const store = await loadStore();
         const rows = (store.pairs || []).slice(-25).map((x, i) => `${i + 1}. ${x.number} • ${x.tgUsername} • ${x.status}`);
         return sendText(chatId, rows.length ? `📄 Pair records:\n\n${rows.join('\n')}` : 'No pair records yet.');
     };
 
     const handleBroadcast = async (chatId, user, text) => {
-        if (!isAdmin(user.id, adminIds)) return sendText(chatId, '❌ Admin only.');
+        if (!isAdmin(user.id, runtimeAdminIds)) return sendText(chatId, '❌ Admin only.');
         const message = text.replace(/^\/broadcast(@\w+)?/i, '').trim();
         if (!message) return sendText(chatId, '❌ Usage: /broadcast <text>');
 
@@ -759,7 +927,7 @@ ${rows.join('\n')}`);
     };
 
     const handleClearSession = async (chatId, user) => {
-        if (!isAdmin(user.id, adminIds)) return sendText(chatId, '❌ Admin only.');
+        if (!isAdmin(user.id, runtimeAdminIds)) return sendText(chatId, '❌ Admin only.');
 
         const store = await loadStore();
         const totalPairs = (store.pairs || []).length;
@@ -840,22 +1008,33 @@ ${rows.join('\n')}`);
         const query = text.replace(/^\/play(@\w+)?/i, '').trim();
         if (!query) return sendText(chatId, '❌ Usage: /play <song name or youtube link>');
         try {
-            await tgCall(token, 'sendChatAction', { chat_id: chatId, action: 'upload_voice' });
+            await tgCall(token, 'sendChatAction', { chat_id: chatId, action: 'typing' });
             const video = await resolveYoutube(query);
-            const api = `https://apiskeith.top/download/audio?url=${encodeURIComponent(video.url)}`;
-            const { data } = await axios.get(api, { timeout: 30000 });
-            if (!data?.status || !data?.result) throw new Error('Audio not available');
+            await sendText(chatId, [
+                `🔎 Found: ${video?.title || query}`,
+                `⏱️ ${video?.timestamp || 'N/A'} • 👁️ ${video?.views?.toLocaleString?.() || 'N/A'}`,
+                '⬇️ Getting audio link...'
+            ].join('\n'));
 
+            const { audioUrl, provider } = await fetchTelegramPlayAudio({ query, video });
+            await tgCall(token, 'sendChatAction', { chat_id: chatId, action: 'upload_voice' });
             await tgCall(token, 'sendAudio', {
                 chat_id: chatId,
-                audio: data.result,
-                title: video?.title || query,
-                performer: video?.author?.name || 'Unknown',
-                caption: `🎵 ${video?.title || query}`
+                audio: audioUrl,
+                title: String(video?.title || query).slice(0, 64),
+                performer: String(video?.author?.name || 'Unknown').slice(0, 64),
+                caption: [
+                    `🎵 ${video?.title || query}`,
+                    `👤 ${video?.author?.name || 'Unknown'}`,
+                    `⏱️ ${video?.timestamp || 'N/A'} • 👁️ ${video?.views?.toLocaleString?.() || 'N/A'}`,
+                    `🔗 ${video?.url || ''}`,
+                    `Source: ${provider}`
+                ].filter(Boolean).join('\n')
             });
             return null;
         } catch (error) {
-            return sendText(chatId, `❌ Play error: ${error.message}`);
+            logger.warn(`Telegram play failed: ${error.message}`);
+            return sendText(chatId, `❌ Play error: ${error.message}\nTry a different song title or paste a YouTube link.`);
         }
     };
 
@@ -975,7 +1154,7 @@ ${rows.join('\n')}`);
         if (action === 'act_img_hint') return sendText(chatId, '🖼️ Use /img <your prompt>');
 
         if (action === 'act_check_join') {
-            const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
+            const gate = await ensureRequiredMembership({ token, chatId, user, adminIds: runtimeAdminIds });
             if (gate.ok) {
                 return sendText(chatId, '✅ Membership check passed. You can now use /pair or the buttons.', {
                     reply_markup: inlineMainButtons()
@@ -984,7 +1163,7 @@ ${rows.join('\n')}`);
             return null;
         }
 
-        const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
+        const gate = await ensureRequiredMembership({ token, chatId, user, adminIds: runtimeAdminIds });
         if (!gate.ok) return null;
 
         if (action === 'act_pair') {
@@ -1021,7 +1200,7 @@ ${rows.join('\n')}`);
             && pendingForChat.userId === String(user.id)
             && !text.startsWith('/')
         ) {
-            const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
+            const gate = await ensureRequiredMembership({ token, chatId, user, adminIds: runtimeAdminIds });
             if (!gate.ok) return null;
             return handlePair(chatId, user, `/pair ${text}`);
         }
@@ -1037,11 +1216,12 @@ ${rows.join('\n')}`);
             /^\/start/i,
             /^\/menu/i,
             /^\/buttons\b/i,
-            /^\/owners\b/i
+            /^\/owners\b/i,
+            /^\/addadmin\b/i
         ].some((x) => x.test(text));
 
         if (startsWithSlash && !nonRestricted) {
-            const gate = await ensureRequiredMembership({ token, chatId, user, adminIds });
+            const gate = await ensureRequiredMembership({ token, chatId, user, adminIds: runtimeAdminIds });
             if (!gate.ok) return null;
         }
 
@@ -1049,6 +1229,8 @@ ${rows.join('\n')}`);
         if (/^\/delpair\b/i.test(text)) return handleDeletePair(chatId, user, text);
         if (/^\/pairs\b/i.test(text)) return handlePairs(chatId, user);
         if (/^\/listpair\b/i.test(text)) return handleListPair(chatId, user);
+        if (/^\/addadmin\b/i.test(text)) return handleAddAdmin(chatId, user, text);
+        if (/^\/admins\b/i.test(text)) return handleAdmins(chatId, user);
         if (/^\/broadcast\b/i.test(text)) return handleBroadcast(chatId, user, text);
         if (/^\/clearsession\b/i.test(text)) return handleClearSession(chatId, user);
         if (/^\/ilomai\b/i.test(text)) return handleIlomAi(chatId, text);

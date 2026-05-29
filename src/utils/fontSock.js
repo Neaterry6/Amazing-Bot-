@@ -11,9 +11,9 @@ const NO_BUTTON_KEYS = new Set([
 const TEXT_KEYS = ['text', 'caption'];
 
 const QUICK_BUTTONS = [
-    { id: '.menu', text: '📋 Menu' },
-    { id: '.help', text: '❓ Help' },
-    { id: '.ping', text: '🏓 Ping' }
+    { buttonId: '.menu', buttonText: { displayText: '📋 Menu' }, type: 1 },
+    { buttonId: '.help', buttonText: { displayText: '❓ Help' }, type: 1 },
+    { buttonId: '.ping', buttonText: { displayText: '🏓 Ping' }, type: 1 }
 ];
 
 function hasAnyKey(content, keys) {
@@ -21,33 +21,48 @@ function hasAnyKey(content, keys) {
 }
 
 function normalizeButton(button = {}) {
-    if (button.id && button.text) return button;
+    const buttonId = button.buttonId || button.id || button.nativeFlowInfo?.name || '';
+    const displayText = button.buttonText?.displayText || button.text || button.displayText || '';
+    if (!buttonId || !displayText) return null;
+
     return {
-        id: button.id || button.buttonId || button.nativeFlowInfo?.name || '',
-        text: button.text || button.buttonText?.displayText || button.displayText || ''
+        ...button,
+        buttonId,
+        buttonText: { ...(button.buttonText || {}), displayText },
+        type: button.type || 1
     };
 }
 
-function normalizeButtonsForLoner(content) {
+function normalizeButtonsForBaileys(content) {
     if (!content || typeof content !== 'object' || !Array.isArray(content.buttons)) return content;
+
+    const buttons = content.buttons
+        .map(normalizeButton)
+        .filter(Boolean);
+
+    if (!buttons.length) {
+        const { buttons: _buttons, ...rest } = content;
+        return rest;
+    }
+
     return {
         ...content,
-        buttons: content.buttons
-            .map(normalizeButton)
-            .filter((button) => button.id && button.text)
+        buttons,
+        footer: content.footer || 'ILOM MD BOT',
+        headerType: content.headerType || (content.image ? 4 : content.video ? 5 : content.document ? 3 : 1)
     };
 }
 
 function withQuickButtons(content) {
     if (!content || typeof content !== 'object') return content;
-    if (content.buttons || content.listMessage || content.templateMessage || content.sections) return content;
+    if (content.buttons || content.listMessage || content.templateMessage || content.sections) return normalizeButtonsForBaileys(content);
     if (hasAnyKey(content, [...NO_BUTTON_KEYS])) return content;
 
     const hasText = typeof content.text === 'string' && content.text.trim();
     const hasCaption = typeof content.caption === 'string' && content.caption.trim();
     if (!hasText && !hasCaption) return content;
 
-    return normalizeButtonsForLoner({
+    return normalizeButtonsForBaileys({
         ...content,
         footer: content.footer || 'ILOM MD BOT',
         buttons: QUICK_BUTTONS,
@@ -136,11 +151,11 @@ export function createFontSock(sock, sender) {
                         if (buttonMode) {
                             transformed = withQuickButtons(transformed);
                         } else {
-                            transformed = normalizeButtonsForLoner(transformed);
+                            transformed = normalizeButtonsForBaileys(transformed);
                         }
 
                         transformed = await translateOutgoingContent(transformed, targetLang);
-                        transformed = normalizeButtonsForLoner(transformed);
+                        transformed = normalizeButtonsForBaileys(transformed);
 
                         if (font !== 'normal') {
                             transformed = transformContent(transformed, font);
