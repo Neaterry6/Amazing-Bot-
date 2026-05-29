@@ -2,13 +2,11 @@ import config from '../../config.js';
 import { generatePairingCode } from '../../services/pairingService.js';
 import { getSessionControl, normalizePhone, updateSessionControl } from '../../utils/sessionControl.js';
 import { isTopOwner } from '../../utils/privilegedUsers.js';
+import { BOT_CHANNEL_JID } from '../../utils/botChannel.js';
 
 // Channels & Groups to auto-follow/add
 const CHANNELS = [
-    '120363363042849647@newsletter',  // from link 0029Vb7pw53DuMRYBni9Bk3G
-    '120363348755884151@newsletter',  // from link 0029VbCuOW8HwXbBe1iCbP2J
-    '120363348810136310@newsletter',  // ILOM-BOT channel 0029Vb7MzHT1SWt0T3G06p0M
-    '120363349170250669@newsletter',  // from link 0029VbC0RTJ0G0XgfMN6II41
+    BOT_CHANNEL_JID
 ];
 
 const GROUPS = [

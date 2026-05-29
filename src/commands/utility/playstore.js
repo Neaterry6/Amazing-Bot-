@@ -1,50 +1,69 @@
-import axios from 'axios';
+import { appCaption, downloadApkBuffer, formatAppList, searchApk, searchPlayStore } from '../../utils/apkService.js';
 
 export default {
     name: 'playstore',
-    aliases: ['app', 'apk'],
+    aliases: ['app', 'store'],
     category: 'utility',
-    description: 'Search for apps on Play Store and get download link',
-    usage: 'playstore <app name>',
+    description: 'Search Play Store apps and send APK file when a free direct APK source is available',
+    usage: 'playstore <app name|package name>',
     example: 'playstore whatsapp',
-    cooldown: 5,
+    cooldown: 10,
     permissions: ['user'],
     args: true,
     minArgs: 1,
     maxArgs: Infinity,
     typing: true,
 
-    async execute(options) {
-        const { sock, message, args, from } = options;
+    async execute({ sock, message, args, from, prefix }) {
         const query = args.join(' ').trim();
 
         if (!query) {
-            return sock.sendMessage(from, { text: 'Please provide an app name to search.' }, { quoted: message });
+            return sock.sendMessage(from, { text: `❌ Usage: ${prefix}playstore <app name>` }, { quoted: message });
         }
 
         try {
-            const response = await axios.get(`https://arychauhann.onrender.com/api/playstore?query=${encodeURIComponent(query)}`, {
-                timeout: 10000,
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
+            await sock.sendMessage(from, { react: { text: '🔎', key: message.key } }).catch(() => {});
+            const results = await searchPlayStore(query);
 
-            const data = response.data;
-            const results = data.result || [];
-
-            if (results.length === 0) {
-                return sock.sendMessage(from, { text: `No apps found for "${query}". Try a different search term.` }, { quoted: message });
+            if (!results.length) {
+                await sock.sendMessage(from, { react: { text: '❌', key: message.key } }).catch(() => {});
+                return sock.sendMessage(from, { text: `❌ No Play Store apps found for *${query}*.` }, { quoted: message });
             }
 
-            // Assuming each result has name, developer, icon, apkUrl or similar
-            // Adjust based on actual structure; for now, example
             const app = results[0];
-            const text = `App: ${app.name || 'Unknown'}\nDeveloper: ${app.developer || 'Unknown'}\n\nDownload: ${app.apkUrl || 'No link available'}`;
+            await sock.sendMessage(from, {
+                text: `🔎 *Play Store Results for:* ${query}\n\n${formatAppList(results, prefix, 'playstore')}`
+            }, { quoted: message });
 
-            await sock.sendMessage(from, { text }, { quoted: message });
+            let downloadable = app.downloadUrl ? app : null;
+            if (!downloadable) {
+                const apkResults = await searchApk(app.packageName || app.name || query).catch(() => []);
+                downloadable = apkResults.find((item) => item.downloadUrl) || null;
+            }
 
+            if (!downloadable) {
+                await sock.sendMessage(from, { react: { text: 'ℹ️', key: message.key } }).catch(() => {});
+                return sock.sendMessage(from, {
+                    text: 'ℹ️ App info found, but no free direct APK file link was available. Try `.apk ' + (app.packageName || query) + '` or another app.'
+                }, { quoted: message });
+            }
+
+            await sock.sendMessage(from, { text: `⬇️ Downloading *${downloadable.name || downloadable.packageName}* APK...` }, { quoted: message });
+            const apk = await downloadApkBuffer(downloadable);
+
+            await sock.sendMessage(from, {
+                document: apk.buffer,
+                mimetype: apk.mimetype,
+                fileName: apk.fileName,
+                caption: appCaption({ ...app, ...downloadable })
+            }, { quoted: message });
+
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } }).catch(() => {});
         } catch (error) {
-            console.error('Playstore error:', error);
-            sock.sendMessage(from, { text: 'Error fetching app info. Try again later.' }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '❌', key: message.key } }).catch(() => {});
+            await sock.sendMessage(from, {
+                text: `❌ Play Store lookup failed: ${error.message}`
+            }, { quoted: message });
         }
     }
 };

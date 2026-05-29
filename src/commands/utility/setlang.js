@@ -1,60 +1,58 @@
-import { getUserLang, setUserLang, clearUserLang, clearMenuCache, getPrefixForSession } from '../../services/databaseService.js';
-import { normalizeJidToNumber } from '../../utils/helpers.js';
-import { translateText, setUserLangCache } from '../../utils/translator.js';
-import logger from '../../utils/logger.js';
+import { listSupportedLangs, normalizeLang, resolveChatLanguage, setChatLanguage } from '../../utils/languageManager.js';
 
-const COMMON_LANGS = [
-  { code: 'af', name: 'Afrikaans' }, { code: 'ar', name: 'Arabic' }, { code: 'zh', name: 'Chinese' },
-  { code: 'nl', name: 'Dutch' }, { code: 'fr', name: 'French' }, { code: 'de', name: 'German' },
-  { code: 'hi', name: 'Hindi' }, { code: 'id', name: 'Indonesian' }, { code: 'it', name: 'Italian' },
-  { code: 'ja', name: 'Japanese' }, { code: 'ko', name: 'Korean' }, { code: 'ms', name: 'Malay' },
-  { code: 'pt', name: 'Portuguese' }, { code: 'ru', name: 'Russian' }, { code: 'es', name: 'Spanish' },
-  { code: 'sw', name: 'Swahili' }, { code: 'th', name: 'Thai' }, { code: 'tr', name: 'Turkish' },
-  { code: 'ur', name: 'Urdu' }, { code: 'vi', name: 'Vietnamese' }, { code: 'yo', name: 'Yoruba' },
-  { code: 'zu', name: 'Zulu' },
-];
+function formatLangList() {
+    return Object.entries(listSupportedLangs())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([code, name]) => `  • ${code} — ${name}`)
+        .join('\n');
+}
 
 export default {
     name: 'setlang',
-    aliases: ['lang'],
+    aliases: ['setlanguage'],
     category: 'utility',
-    description: 'Set your preferred language for bot replies and menu',
-    usage: 'setlang <code> | setlang reset',
+    description: 'Set the language used for all bot replies in this chat',
+    usage: 'setlang <code> | setlang list | setlang reset',
     cooldown: 3,
 
-    async execute({ sock, message, args, from, sender }) {
-        const userId = sender;
-        const botNumber = normalizeJidToNumber(sock?.user?.id, sock);
-        const prefix = process.env.PREFIX || '.';
-        const current = getUserLang(userId, botNumber);
+    async execute({ sock, message, args, from, isGroup, isGroupAdmin, isOwner, isSudo, prefix }) {
+        const current = await resolveChatLanguage(from);
         const input = String(args[0] || '').toLowerCase().trim();
 
         if (!input) {
-            const langList = COMMON_LANGS.map(l => `  • ${l.code} — ${l.name}`).join('\n');
             return sock.sendMessage(from, {
-                text: `🌐 *LANGUAGE SETTINGS*\n\n📍 Your Language: ${current === 'en' ? 'English (default)' : current}\n\nUsage:\n  ${prefix}setlang fr → French\n  ${prefix}setlang reset → English\n\nCommon codes:\n${langList}\n\n⚠️ Menu will be translated on first use.`
+                text: `🌐 *LANGUAGE SETTINGS*\n\n📍 Current chat language: *${current}* (${listSupportedLangs()[current] || 'Custom'})\n\nUsage:\n  ${prefix}setlang fr → French\n  ${prefix}setlang reset → English\n  ${prefix}setlang list → All language codes\n\nCommon codes:\n${formatLangList()}\n\n✅ After setting this, bot text, captions, footers, buttons, and previews sent to this chat will be translated.`
             }, { quoted: message });
         }
 
-        if (input === 'reset' || input === 'en') {
-            clearUserLang(userId, botNumber);
-            setUserLangCache(userId, null);
-            return sock.sendMessage(from, { text: '✅ Language reset to English.' }, { quoted: message });
+        if (input === 'list' || input === 'all') {
+            return sock.sendMessage(from, {
+                text: `🌐 *SUPPORTED LANGUAGES*\n\n${formatLangList()}\n\nExample: ${prefix}setlang yo`
+            }, { quoted: message });
         }
 
-        try {
-            const test = await translateText('Hello! Language set successfully.', input);
-            if (!test || test === 'Hello! Language set successfully.') {
-                return sock.sendMessage(from, { text: `❌ Invalid code "${input}". Try: fr, es, de, hi, ar` }, { quoted: message });
-            }
-            setUserLang(userId, botNumber, input);
-            setUserLangCache(userId, input);
-            clearMenuCache(input);
-
-            const success = await translateText('✅ Language updated! All bot replies will now be in your language.', input);
-            await sock.sendMessage(from, { text: success }, { quoted: message });
-        } catch (err) {
-            await sock.sendMessage(from, { text: `❌ Error: ${err.message}` }, { quoted: message });
+        if (isGroup && !(isGroupAdmin || isOwner || isSudo)) {
+            return sock.sendMessage(from, {
+                text: '❌ Only group admins can change the bot language for this group.'
+            }, { quoted: message });
         }
+
+        const nextCode = input === 'reset' || input === 'default' || input === 'en' ? 'en' : normalizeLang(input);
+        if (!nextCode) {
+            return sock.sendMessage(from, {
+                text: `❌ Unsupported language code: *${input}*\n\nUse ${prefix}setlang list to see valid codes.`
+            }, { quoted: message });
+        }
+
+        await setChatLanguage(from, nextCode);
+
+        return sock.sendMessage(from, {
+            text: [
+                '✅ *Language Updated*',
+                `All bot replies in this chat will now use: *${nextCode}* (${listSupportedLangs()[nextCode] || 'Custom'})`,
+                '',
+                `To reset: ${prefix}setlang reset`
+            ].join('\n')
+        }, { quoted: message });
     }
 };

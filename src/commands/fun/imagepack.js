@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const COMMANDS = [
     'moe', 'aipic', 'hentai', 'bluearchive', 'boypic', 'carimage', 'random-girl', 'loli',
-    'rwaifu', 'panda', 'bird', 'koala', 'animewlp', 'animeavatar'
+    'rwaifu', 'bird', 'koala', 'animewlp', 'animeavatar'
 ];
 
 const WAIFU_ACTION_MAP = {
@@ -24,7 +24,7 @@ async function resolveImage(cmd) {
         return data?.message;
     }
 
-    if (['panda', 'bird', 'koala'].includes(cmd)) {
+    if (['bird', 'koala'].includes(cmd)) {
         const animal = cmd === 'bird' ? 'birb' : cmd;
         const { data } = await axios.get(`https://some-random-api.com/animal/${animal}`, { timeout: 15000 });
         return data?.image || data?.link;

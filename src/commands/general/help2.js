@@ -1,5 +1,6 @@
 import config from '../../config.js';
 import { getBotProfile } from '../../utils/botProfile.js';
+import { BOT_CHANNEL_LINK, MENU_HELP_IMAGE_URL, withBotChannelPreview } from '../../utils/botChannel.js';
 
 export default {
     name: 'help2',
@@ -78,8 +79,9 @@ export default {
             text += '\n\n';
         }
 
-        text += `Type ${prefix}help [command] for details on any command`;
+        text += `Type ${prefix}help [command] for details on any command\n`;
+        text += `Bot Channel: ${BOT_CHANNEL_LINK}`;
 
-        await sock.sendMessage(from, { image: { url: botProfile.image }, caption: text, mentions: [sender] }, { quoted: message });
+        await sock.sendMessage(from, withBotChannelPreview({ image: { url: MENU_HELP_IMAGE_URL }, caption: text, mentions: [sender] }), { quoted: message });
     }
 };
