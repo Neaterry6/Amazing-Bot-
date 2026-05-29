@@ -2,6 +2,7 @@ import moment from 'moment';
 import os from 'os';
 import config from '../../config.js';
 import { getAutomationConfig } from '../../utils/automationStore.js';
+import { getBotProfile } from '../../utils/botProfile.js';
 
 const bootTime = Date.now();
 function ups(ms) {
@@ -29,13 +30,14 @@ export default {
 
     async execute({ sock, message, args, from, sender, prefix, pushName }) {
         const auto = getAutomationConfig();
+        const botProfile = await getBotProfile();
         const now = moment();
         const user = pushName || sender.split('@')[0];
         const upt = ups(Date.now() - bootTime);
         const ram = fmt(process.memoryUsage().rss);
         const total = fmt(os.totalmem());
 
-        let msg = `╭━━━ ❰ 🤖 ILOM BOT ❱ ━━━╮\n`;
+        let msg = `╭━━━ ❰ 🤖 ${botProfile.name || config.botName || 'ILOM BOT'} ❱ ━━━╮\n`;
         msg += `┃ 👤 User: ${user}\n`;
         msg += `┃ ⏱ Uptime: ${upt}\n`;
         msg += `┃ 💾 RAM: ${bar(process.memoryUsage().rss, os.totalmem())} ${ram}/${total}\n`;
@@ -71,10 +73,10 @@ export default {
         msg += `┃ .aza to support project\n`;
         msg += `╰━━━━━━━━━━━━━━━━━━━━╯\n\n`;
 
-        msg += `🤖 *Ilom Bot* — Powered by Amazing Engine`;
+        msg += `🤖 *${botProfile.name || config.botName || 'Ilom Bot'}* — Powered by Amazing Engine`;
 
         try {
-            const imgUrl = 'https://i.ibb.co/1YQKfrfC/afb92fba6b4e.jpg';
+            const imgUrl = botProfile.image;
             await sock.sendMessage(from, { image: { url: imgUrl }, caption: msg, mentions: [sender] }, { quoted: message });
         } catch {
             await sock.sendMessage(from, { text: msg, mentions: [sender] }, { quoted: message });

@@ -2,9 +2,8 @@ import axios from 'axios';
 
 const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
-const QWEN_BASE = process.env.QWEN_API_BASE_URL || '';
-const QWEN_TOKEN = process.env.QWEN_TOKEN || process.env.QWEN_API_TOKEN || '';
-const QWEN_MODEL = process.env.QWEN_MODEL || 'qwen-plus';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 const TTS_VOICE = process.env.LONER_TTS_VOICE || 'Joanna';
 const CLAUDE_API_BASE_URL = process.env.CLAUDE_API_BASE_URL || 'https://omegatech-api.dixonomega.tech/api/ai';
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'Claude-pro';
@@ -19,17 +18,16 @@ async function tts(text) {
     return Buffer.from(data);
 }
 
-async function qwenChat(history, mode = 'chat') {
+async function geminiChat(history, mode = 'chat') {
     try {
-        if (QWEN_BASE && QWEN_TOKEN) {
-            const { data } = await axios.post(`${QWEN_BASE.replace(/\/$/, '')}/chat/completions`, {
-                model: mode === 'coder' ? (process.env.QWEN_CODER_MODEL || QWEN_MODEL) : QWEN_MODEL,
-                messages: history
-            }, {
-                timeout: 120000,
-                headers: { Authorization: `Bearer ${QWEN_TOKEN}`, 'Content-Type': 'application/json' }
-            });
-            const text = data?.choices?.[0]?.message?.content?.trim();
+        if (GEMINI_API_KEY) {
+            const prompt = history.map((h) => `${h.role}: ${h.content}`).join('\n');
+            const { data } = await axios.post(
+                `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+                { contents: [{ parts: [{ text: prompt }] }] },
+                { timeout: 120000 }
+            );
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
             if (text) return text;
         }
     } catch {}
@@ -54,9 +52,9 @@ async function qwenChat(history, mode = 'chat') {
 
 export default {
     name: 'loner',
-    aliases: ['qwenai', 'lonerai'],
+    aliases: ['geminiai', 'lonerai'],
     category: 'ai',
-    description: 'Unified Qwen/Groq command with chat, coder, image, video and vn modes',
+    description: 'Unified Gemini/Groq command with chat, coder, image, video and vn modes',
     usage: 'loner <prompt> | loner mode <chat|coder|image|video|vn on|vn off>',
     cooldown: 3,
 
@@ -111,7 +109,7 @@ export default {
             ...state.history.slice(-14),
             { role: 'user', content: prompt }
         ];
-        const answer = await qwenChat(history, state.mode);
+        const answer = await geminiChat(history, state.mode);
         if (!answer) return sock.sendMessage(from, { text: '❌ Empty AI response.' }, { quoted: message });
         state.history.push({ role: 'user', content: prompt }, { role: 'assistant', content: answer });
         state.history = state.history.slice(-20);

@@ -6,10 +6,6 @@ import { promisify } from 'util';
 import { isTopOwner } from '../../utils/privilegedUsers.js';
 
 const execAsync = promisify(exec);
-const QWEN_BASE_URL = process.env.QWEN_BASE_URL || 'https://qwen.aikit.club/v1';
-const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || '';
-const QWEN_MODEL = process.env.QWEN_MODEL || 'Qwen3.6-Plus';
-const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen-Image';
 const LOG_FILE = path.join(process.cwd(), 'logs', 'combined.log');
 
 function clamp(n, min, max) {
@@ -30,36 +26,11 @@ const terryMemory = global.terryMemory || (global.terryMemory = new Map());
 
 async function geminiChat(prompt, history = []) {
     if (!process.env.GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
-    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
     const merged = [...history.slice(-6), { role: 'user', content: prompt }].map((m)=>`${m.role}: ${m.content}`).join('\n');
     const { data } = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, { contents: [{ parts: [{ text: merged }] }] }, { timeout: 90000 });
     return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'No response';
 }
-
-async function qwenChat(prompt, history = []) {
-    try {
-        const { data } = await axios.get('https://apis.prexzyvilla.site/ai/gpt-5', {
-            params: { text: prompt },
-            timeout: 120000
-        });
-        const answer = data?.result || data?.response || data?.data?.response || data?.message;
-        if (answer) return String(answer).trim();
-    } catch (err) {
-        if (![404, 410].includes(err?.response?.status)) throw err;
-    }
-
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY');
-    const { data } = await axios.post(`${QWEN_BASE_URL}/chat/completions`, {
-        model: QWEN_MODEL,
-        messages: [{ role: 'system', content: 'You are Terry, the Amazing-Bot maintenance agent. Give concise, practical fixes and exact file paths.' }, ...history.slice(-6), { role: 'user', content: prompt }],
-        temperature: 0.3,
-        max_tokens: 1400
-    }, { timeout: 120000, headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' } });
-    const text = data?.choices?.[0]?.message?.content?.trim();
-    if (!text) throw new Error('Empty response from AI');
-    return text;
-}
-
 
 async function groqChat(prompt, history = []) {
     if (!process.env.GROQ_API_KEY) throw new Error('Missing GROQ_API_KEY');
@@ -67,20 +38,24 @@ async function groqChat(prompt, history = []) {
     const { data } = await axios.post('https://api.groq.com/openai/v1/chat/completions', { model, messages: [{ role: 'system', content: 'You are Terry, a coding and maintenance agent.' }, ...history.slice(-6), { role: 'user', content: prompt }] }, { timeout: 120000, headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' } });
     return data?.choices?.[0]?.message?.content?.trim() || 'No response';
 }
-async function qwenImage(prompt) {
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY');
-    const { data } = await axios.post(`${QWEN_BASE_URL}/images/generations`, {
-        model: QWEN_IMAGE_MODEL,
-        prompt,
-        size: '1024x1024'
-    }, {
-        timeout: 180000,
-        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+async function raphaelImage(prompt) {
+    const { data } = await axios.get('https://omegatech-api.dixonomega.tech/api/ai/Raphael-text-to-image', {
+        params: {
+            prompt,
+            aspect: '9:16',
+            model_id: 'raphael-basic',
+            number_of_images: 1,
+            highQuality: true,
+            fastMode: true,
+            isSafeContent: false,
+            autoTranslate: true
+        },
+        timeout: 120000,
+        headers: { 'User-Agent': 'Asta-Bot/1.0' }
     });
-
-    return data?.data?.[0]?.url || data?.url || null;
+    const first = data?.images?.[0]?.url || data?.images?.[0] || data?.result?.[0]?.url || data?.data?.[0]?.url || data?.url;
+    return typeof first === 'string' ? first : '';
 }
-
 async function tailLogs(lines = 120) {
     if (!(await fs.pathExists(LOG_FILE))) return 'No log file found at logs/combined.log';
     const content = await fs.readFile(LOG_FILE, 'utf8');
@@ -91,8 +66,8 @@ export default {
     name: 'terry',
     aliases: ['agentterry', 'maintainer'],
     category: 'ai',
-    description: 'Root maintenance agent for bot diagnostics, Qwen text/image, and safe shell checks',
-    usage: 'terry <prompt> | terry provider <qwen|gemini|grok> | terry img <prompt> | terry logs [n] | terry sh <cmd>',
+    description: 'Root maintenance agent for bot diagnostics, Gemini text/Raphael image, and safe shell checks',
+    usage: 'terry <prompt> | terry provider <gemini|grok> | terry img <prompt> | terry logs [n] | terry sh <cmd>',
     cooldown: 3,
 
     async execute({ sock, message, from, args, sender }) {
@@ -113,7 +88,7 @@ export default {
                 const prompt = input.replace(/^img\s+/i, '').trim();
                 if (!prompt) return sock.sendMessage(from, { text: '❌ Usage: terry img <prompt>' }, { quoted: message });
                 await sock.sendMessage(from, { text: '🎨 Terry generating image...' }, { quoted: message });
-                const url = process.env.FLUX_API_URL ? (await axios.post(process.env.FLUX_API_URL, { prompt }, { headers: { Authorization: `Bearer ${process.env.FLUX_API_KEY || ''}` }, timeout: 180000 })).data?.url : await qwenImage(prompt);
+                const url = process.env.FLUX_API_URL ? (await axios.post(process.env.FLUX_API_URL, { prompt }, { headers: { Authorization: `Bearer ${process.env.FLUX_API_KEY || ''}` }, timeout: 180000 })).data?.url : await raphaelImage(prompt);
                 if (!url) throw new Error('No image URL returned');
                 return sock.sendMessage(from, { image: { url }, caption: `✅ Terry Image\nPrompt: ${prompt}` }, { quoted: message });
             }
@@ -152,7 +127,7 @@ export default {
 
                         if (/^provider\s+/i.test(input)) {
                 const p = input.replace(/^provider\s+/i, '').trim().toLowerCase();
-                if (!['qwen','gemini','grok'].includes(p)) return sock.sendMessage(from, { text: '❌ provider: qwen|gemini|grok' }, { quoted: message });
+                if (!['gemini','grok'].includes(p)) return sock.sendMessage(from, { text: '❌ provider: gemini|grok' }, { quoted: message });
                 providerState.set(from, p);
                 return sock.sendMessage(from, { text: `✅ Terry provider set to ${p}` }, { quoted: message });
             }
@@ -160,7 +135,7 @@ export default {
             const provider = providerState.get(from) || 'gemini';
             const memKey = `${from}:${sender}`;
             const history = terryMemory.get(memKey) || [];
-            const answer = provider === 'gemini' ? await geminiChat(input, history) : provider === 'grok' ? await groqChat(input, history) : await qwenChat(input, history);
+            const answer = provider === 'grok' ? await groqChat(input, history) : await geminiChat(input, history);
             terryMemory.set(memKey, [...history.slice(-8), { role: 'user', content: input }, { role: 'assistant', content: answer }]);
             return sock.sendMessage(from, { text: `🤖 Terry\n\n${answer}` }, { quoted: message });
         } catch (error) {

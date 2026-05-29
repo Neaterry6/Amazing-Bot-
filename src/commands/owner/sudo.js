@@ -2,6 +2,7 @@ import config from '../../config.js';
 import fs from 'fs-extra';
 import path from 'path';
 import { resolveJidFromMentionOrReply } from '../../utils/jidResolver.js';
+import { getSessionControl, normalizePhone, updateSessionControl } from '../../utils/sessionControl.js';
 
 const SUDO_FILE = path.join(process.cwd(), 'cache', 'sudoers.json');
 
@@ -129,7 +130,7 @@ Please specify a user by:
                 }, { quoted: message });
             }
 
-            const targetNumber = targetJid.replace(/@s\.whatsapp\.net|@c\.us|@lid|:\d+/g, '').split(':')[0].split('@')[0].trim();
+            const targetNumber = normalizePhone(targetJid);
             if (!targetNumber || targetNumber.length < 7) {
                 return await sock.sendMessage(from, {
                     text: `❌ *Unable to Resolve User*\n\nCould not resolve this LID user to a phone-based WhatsApp JID. Try mentioning the user inside a group where the bot can read participants.`
@@ -168,6 +169,10 @@ No need to add as bot admin.`,
                 sudoers.push(normalizedJid);
                 await saveSudoers(sudoers);
                 await updateEnvFile(sudoers);
+                {
+                    const session = await getSessionControl(sock);
+                    await updateSessionControl(sock, { sudoers: Array.from(new Set([...(session.sudoers || []), targetNumber])) });
+                }
 
                 await sock.sendMessage(from, {
                     text: `✅ *Bot Admin Added*
@@ -211,6 +216,10 @@ Use \`.sudo list\` to view all admins.`,
                 const updatedSudoers = sudoers.filter(s => s !== normalizedJid);
                 await saveSudoers(updatedSudoers);
                 await updateEnvFile(updatedSudoers);
+                {
+                    const session = await getSessionControl(sock);
+                    await updateSessionControl(sock, { sudoers: (session.sudoers || []).filter((n) => normalizePhone(n) !== targetNumber) });
+                }
 
                 await sock.sendMessage(from, {
                     text: `✅ *Bot Admin Removed*

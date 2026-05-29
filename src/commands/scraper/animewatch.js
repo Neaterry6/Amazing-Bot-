@@ -1,193 +1,200 @@
 import axios from 'axios';
 
-const API_BASE = 'https://apis.prexzyvilla.site/anime';
+const ANOBOY_API = 'https://omegatech-api.dixonomega.tech/api/Anime/Anoboy';
+const AIO_API = 'https://omegatech-api-lscz.onrender.com/api/download/All-downloader-v2';
 
-export default {
-    name: 'animewatch',
-    aliases: ['anime', 'anidownload'],
-    category: 'scraper',
-    description: 'Search anime on AnimeKompi, download episodes as mp4',
-    usage: 'anime <search term>',
-    cooldown: 5,
+function cleanTitle(text = '') {
+    return String(text || '').replace(/\s+/g, ' ').trim();
+}
 
-    async execute({ sock, message, args, from }) {
-        const query = args.join(' ').trim();
-        if (!query) {
+function truncate(text = '', max = 900) {
+    const value = String(text || '').trim();
+    return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
+async function anoboy(action, params = {}) {
+    const { data } = await axios.get(ANOBOY_API, {
+        params: { action, ...params },
+        timeout: 60000,
+        headers: { 'User-Agent': 'Asta-Bot/1.0' }
+    });
+    if (!data?.success) throw new Error(data?.error || data?.message || `Anoboy ${action} failed`);
+    return data.result || {};
+}
+
+function episodeNumber(ep = {}, fallback = 0) {
+    const n = Number(ep.episode || ep.number || fallback);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function sortedEpisodes(episodes = []) {
+    return [...episodes].sort((a, b) => episodeNumber(a) - episodeNumber(b));
+}
+
+function pickMedia(result = {}) {
+    const medias = Array.isArray(result.medias) ? result.medias : [];
+    return medias.find((m) => /^https?:\/\//i.test(m?.url || '') && m?.type === 'video')
+        || medias.find((m) => /^https?:\/\//i.test(m?.url || ''))
+        || null;
+}
+
+async function tryAioDownload(url) {
+    try {
+        const { data } = await axios.get(AIO_API, {
+            params: { url },
+            timeout: 90000,
+            headers: { 'User-Agent': 'Asta-Bot/1.0' }
+        });
+        if (!data?.success) return null;
+        return { raw: data, media: pickMedia(data.result || {}) };
+    } catch {
+        return null;
+    }
+}
+
+async function sendEpisode(sock, from, message, animeTitle, ep) {
+    const epTitle = cleanTitle(ep.title || `Episode ${ep.episode || ''}`);
+    const epUrl = ep.url;
+    if (!epUrl) return sock.sendMessage(from, { text: '❌ Episode URL not found.' }, { quoted: message });
+
+    await sock.sendMessage(from, { text: `📥 Preparing ${epTitle}...` }, { quoted: message });
+    const aio = await tryAioDownload(epUrl);
+    const media = aio?.media;
+
+    if (media?.url) {
+        const result = aio.raw?.result || {};
+        const caption = [
+            `🎬 *${cleanTitle(animeTitle)}*`,
+            `📺 ${epTitle}`,
+            result.duration ? `⏱️ ${result.duration}` : '',
+            `🔗 ${epUrl}`
+        ].filter(Boolean).join('\n');
+
+        if (media.type === 'audio') {
             return sock.sendMessage(from, {
-                text: '🎬 *Anime Download*\n\n.anime <name>\nReply with number to select.\nReply with episode number to download.'
+                audio: { url: media.url },
+                mimetype: 'audio/mpeg',
+                fileName: `${epTitle.replace(/[\\/:*?"<>|]/g, '').slice(0, 120)}.${media.extension || 'mp3'}`,
+                caption
             }, { quoted: message });
         }
 
-        await sock.sendMessage(from, { react: { text: '🔍', key: message.key } });
+        return sock.sendMessage(from, {
+            video: { url: media.url },
+            mimetype: media.extension === 'mkv' ? 'video/x-matroska' : 'video/mp4',
+            caption
+        }, { quoted: message });
+    }
+
+    return sock.sendMessage(from, {
+        text: `🎬 *${cleanTitle(animeTitle)}*\n📺 ${epTitle}\n\n🔗 Watch/Download: ${epUrl}\n\nI could not extract a direct media file, so open the link in your browser.`
+    }, { quoted: message });
+}
+
+export default {
+    name: 'animewatch',
+    aliases: ['anime', 'anoboy', 'anidownload', 'animedl'],
+    category: 'scraper',
+    description: 'Search Anoboy anime, show details, and open/download episodes',
+    usage: 'anime <search term>',
+    cooldown: 5,
+    permissions: ['user'],
+    args: false,
+
+    async execute({ sock, message, args, from, prefix }) {
+        const query = args.join(' ').trim();
+        if (!query) {
+            return sock.sendMessage(from, {
+                text: `🎬 *Anime Search & Download*\n\nUsage: ${prefix}anime <name>\n\nReply with a result number, then reply with an episode number.`
+            }, { quoted: message });
+        }
 
         try {
-            // Search anime via prexzyvilla
-            const { data } = await axios.get(`${API_BASE}/animesearch?query=${encodeURIComponent(query)}`, { timeout: 20000 });
-            const results = data?.data?.results || [];
-
+            await sock.sendMessage(from, { react: { text: '🔍', key: message.key } });
+            const search = await anoboy('search', { query });
+            const results = Array.isArray(search.results) ? search.results : [];
             if (!results.length) {
                 await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
-                return sock.sendMessage(from, { text: '❌ No anime found.' }, { quoted: message });
+                return sock.sendMessage(from, { text: `❌ No anime found for "${query}".` }, { quoted: message });
             }
 
             const list = results.slice(0, 10);
-            let msg = '🎬 *Anime Results*\n\nReply with number:\n\n';
-            list.forEach((a, i) => {
-                msg += `${i + 1}. ${a.title}\n   📺 ${a.type || '?'} | ${a.status || '?'} | ⭐ ${a.rating || '?'}\n`;
-            });
+            const lines = list.map((anime, i) => [
+                `${i + 1}. *${cleanTitle(anime.title)}*`,
+                `   📺 ${anime.type || 'N/A'} | ${anime.status || 'N/A'} | ${anime.subtitle || 'Sub'}`,
+                `   🎞️ ${anime.episode || 'N/A'}`
+            ].join('\n'));
 
-            const sentMsg = await sock.sendMessage(from, { text: msg }, { quoted: message });
+            const sent = await sock.sendMessage(from, {
+                text: `🎬 *Anime Results for:* ${query}\n\n${lines.join('\n\n')}\n\nReply with a number to view details.`
+            }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+
             if (!global.replyHandlers) global.replyHandlers = {};
-
-            global.replyHandlers[sentMsg.key.id] = {
-                command: 'animewatch',
+            global.replyHandlers[sent.key.id] = {
+                command: 'animewatch_select',
                 handler: async (replyText, replyMessage) => {
-                    const choice = parseInt(replyText.trim(), 10);
-                    if (isNaN(choice) || choice < 1 || choice > list.length) {
-                        return sock.sendMessage(from, { text: '❌ Invalid.' }, { quoted: replyMessage });
+                    const choice = Number(String(replyText || '').trim());
+                    if (!Number.isInteger(choice) || choice < 1 || choice > list.length) {
+                        return sock.sendMessage(from, { text: '❌ Invalid selection.' }, { quoted: replyMessage });
                     }
-                    delete global.replyHandlers?.[sentMsg.key.id];
-
+                    delete global.replyHandlers?.[sent.key.id];
                     const selected = list[choice - 1];
-                    const animeUrl = selected.url;
-                    const title = selected.title;
-
-                    await sock.sendMessage(from, { text: `📥 Fetching episodes for ${title}...` }, { quoted: replyMessage });
+                    await sock.sendMessage(from, { text: `📖 Fetching details for ${cleanTitle(selected.title)}...` }, { quoted: replyMessage });
 
                     try {
-                        const epRes = await axios.get(`${API_BASE}/animedetail?url=${encodeURIComponent(animeUrl)}`, { timeout: 20000 });
-                        let episodes = epRes?.data?.data?.episodes || [];
+                        const detail = await anoboy('detail', { query, url: selected.url });
+                        const episodes = sortedEpisodes(detail.episode_list || []);
+                        const genres = Array.isArray(detail.genres) ? detail.genres.join(', ') : 'N/A';
+                        const chars = Array.isArray(detail.characters)
+                            ? detail.characters.slice(0, 5).map((c) => `${c.name}${c.role ? ` (${c.role})` : ''}`).join(', ')
+                            : '';
 
-                        if (!episodes.length) {
-                            return sock.sendMessage(from, { text: `❌ No episodes found for ${title}.` }, { quoted: replyMessage });
-                        }
+                        const text = [
+                            `🎬 *${cleanTitle(detail.title || selected.title)}*`,
+                            `📺 Type: ${detail.type || 'N/A'} | Status: ${detail.status || 'N/A'}`,
+                            `⭐ Rating: ${detail.rating_percent ? `${detail.rating_percent}%` : detail.rating || 'N/A'}`,
+                            `🎞️ Episodes: ${detail.episodes_total || episodes.length || 'N/A'}`,
+                            `📅 Released: ${detail.released || 'N/A'} | Season: ${detail.season || 'N/A'}`,
+                            `🏢 Studio: ${detail.studio || 'N/A'}`,
+                            `🏷️ Genres: ${genres}`,
+                            chars ? `👥 Characters: ${chars}` : '',
+                            '',
+                            `📝 ${truncate(detail.synopsis || 'No synopsis available.', 850)}`,
+                            '',
+                            episodes.length
+                                ? `📥 *Episodes*\n${episodes.slice(0, 24).map((ep, i) => `${i + 1}. Ep ${ep.episode || i + 1} — ${cleanTitle(ep.title || '')}`).join('\n')}`
+                                : '❌ No episodes found.',
+                            '',
+                            episodes.length ? 'Reply with an episode number to watch/download.' : ''
+                        ].filter(Boolean).join('\n');
 
-                        const display = episodes.slice(0, 50);
-                        let epList = `📺 *${title}*\n\nReply with number:\n\n`;
-                        // Episodes come in reverse order (latest first)
-                        const sorted = [...display].reverse();
-                        sorted.forEach((ep, i) => {
-                            epList += `${i + 1}. ${ep.title || ep.number || `Episode ${i + 1}`}\n`;
-                        });
+                        const detailMsg = await sock.sendMessage(from, detail.thumbnail ? {
+                            image: { url: detail.thumbnail },
+                            caption: text
+                        } : { text }, { quoted: replyMessage });
 
-                        const epMsg = await sock.sendMessage(from, { text: epList }, { quoted: replyMessage });
-                        global.replyHandlers[epMsg.key.id] = {
-                            command: 'animewatch_ep',
-                            handler: async (epReply, epReplyMsg) => {
-                                const epChoice = parseInt(epReply.trim(), 10);
-                                if (isNaN(epChoice) || epChoice < 1 || epChoice > sorted.length) {
-                                    return sock.sendMessage(from, { text: '❌ Invalid.' }, { quoted: epReplyMsg });
+                        if (episodes.length) {
+                            global.replyHandlers[detailMsg.key.id] = {
+                                command: 'animewatch_episode',
+                                handler: async (epReply, epReplyMessage) => {
+                                    const epChoice = Number(String(epReply || '').trim());
+                                    if (!Number.isInteger(epChoice) || epChoice < 1 || epChoice > Math.min(episodes.length, 24)) {
+                                        return sock.sendMessage(from, { text: '❌ Invalid episode number.' }, { quoted: epReplyMessage });
+                                    }
+                                    delete global.replyHandlers?.[detailMsg.key.id];
+                                    return sendEpisode(sock, from, epReplyMessage, detail.title || selected.title, episodes[epChoice - 1]);
                                 }
-                                delete global.replyHandlers?.[epMsg.key.id];
-
-                                const epData = sorted[epChoice - 1];
-                                const epTitle = epData.title || `Episode ${epChoice}`;
-                                await downloadEpisode(sock, from, epReplyMsg, epData.url, title, epTitle);
-                            }
-                        };
-                    } catch (epErr) {
-                        await sock.sendMessage(from, { text: `❌ ${epErr.message}` }, { quoted: replyMessage });
+                            };
+                        }
+                    } catch (error) {
+                        return sock.sendMessage(from, { text: `❌ Detail failed: ${error.message}` }, { quoted: replyMessage });
                     }
                 }
             };
         } catch (error) {
-            await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
-            return sock.sendMessage(from, { text: '❌ ' + error.message }, { quoted: message });
+            await sock.sendMessage(from, { react: { text: '❌', key: message.key } }).catch(() => {});
+            return sock.sendMessage(from, { text: `❌ Anime search failed: ${error.message}` }, { quoted: message });
         }
     }
 };
-
-async function downloadEpisode(sock, from, msg, episodeUrl, animeTitle, epTitle) {
-    await sock.sendMessage(from, { text: `🔍 Getting download links...` }, { quoted: msg });
-
-    try {
-        const dlRes = await axios.get(`${API_BASE}/animedownload?url=${encodeURIComponent(episodeUrl)}`, { timeout: 20000 });
-        const data = dlRes?.data?.data || {};
-
-        const title = data.title || epTitle;
-        const servers = data.streamingServers || [];
-        const downloads = data.downloadLinks || [];
-
-        // Try to find a direct download URL
-        let directUrl = null;
-
-        // Check download links first
-        if (downloads.length) {
-            for (const dl of downloads) {
-                if (dl.url && (dl.quality === 'Mp4' || dl.quality === 'GDrive')) {
-                    directUrl = dl.url;
-                    break;
-                }
-            }
-            if (!directUrl && downloads[0]?.url) directUrl = downloads[0].url;
-        }
-
-        // If no direct URL, try streaming servers for iframe URLs
-        if (!directUrl && servers.length) {
-            const serverUrls = [];
-            servers.forEach(s => {
-                if (s.iframeSrc) serverUrls.push(s.iframeSrc);
-            });
-            if (serverUrls.length) {
-                directUrl = serverUrls[0]; // First server's iframe URL
-            }
-        }
-
-        const titleClean = title.replace(/[^a-zA-Z0-9 ]/g, '').trim().slice(0, 50);
-
-        if (directUrl) {
-            // Try to send the video
-            await sock.sendMessage(from, { text: `📥 Sending from ${servers[0]?.name || 'source'}...` }, { quoted: msg });
-
-            // Check if it's a download link (mp4upload, gdriveplayer) vs embed
-            if (directUrl.includes('download.php') || directUrl.includes('mp4upload')) {
-                // Direct download URL - try to fetch and forward
-                try {
-                    const resp = await axios.get(directUrl, {
-                        responseType: 'arraybuffer',
-                        timeout: 120000,
-                        headers: { 'User-Agent': 'Mozilla/5.0', 'Referer': 'https://v6.animekompi.fun/' }
-                    });
-                    const buffer = Buffer.from(resp.data);
-                    await sock.sendMessage(from, {
-                        document: buffer,
-                        mimetype: 'video/mp4',
-                        fileName: `${titleClean}.mp4`,
-                        caption: `🎬 ${animeTitle} - ${epTitle}`
-                    }, { quoted: msg });
-                    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
-                    return;
-                } catch {}
-            }
-
-            // Send as streaming link (most reliable)
-            await sock.sendMessage(from, {
-                text: `🎬 *${animeTitle} - ${epTitle}*\n\n📺 *Watch:* ${directUrl}\n\n💡 Open in Chrome to watch or download.`
-            }, { quoted: msg });
-        } else {
-            // No URL found - show available servers as links
-            let linkMsg = `🎬 *${animeTitle} - ${epTitle}*\n\n*Available sources:*\n\n`;
-            servers.forEach((s, i) => {
-                if (s.iframeSrc) {
-                    const url = s.iframeSrc.startsWith('//') ? 'https:' + s.iframeSrc : s.iframeSrc;
-                    linkMsg += `${i + 1}. ${s.name}: ${url}\n`;
-                }
-            });
-            downloads.forEach((d, i) => {
-                if (d.url) {
-                    linkMsg += `\n📥 Download ${d.quality || i + 1}: ${d.url}`;
-                }
-            });
-
-            if (linkMsg.length < 100) {
-                linkMsg = `❌ No playable links found for this episode.`;
-            }
-
-            await sock.sendMessage(from, { text: linkMsg }, { quoted: msg });
-        }
-
-        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } });
-    } catch (error) {
-        await sock.sendMessage(from, { text: `❌ Failed: ${error.message}` }, { quoted: msg });
-    }
-}

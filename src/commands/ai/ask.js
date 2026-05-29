@@ -44,7 +44,7 @@ async function tts(text, lang = 'en') {
 async function askGemini(text) {
     const key = process.env.GEMINI_API_KEY || '';
     if (!key) throw new Error('GEMINI_API_KEY not set');
-    const { data } = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+    const { data } = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`, {
         contents: [{ parts: [{ text }] }],
         generationConfig: { temperature: 0.5, maxOutputTokens: 2000 }
     }, { timeout: 60000 });
@@ -62,24 +62,13 @@ async function askGroq(text) {
     return data?.choices?.[0]?.message?.content?.trim() || 'No response';
 }
 
-async function askQwen(text) {
-    const key = process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || '';
-    if (!key) throw new Error('QWEN_API_KEY not set');
-    const base = process.env.QWEN_BASE_URL || 'https://qwen.aikit.club/v1';
-    const { data } = await axios.post(`${base}/chat/completions`, {
-        model: 'Qwen3.5-Plus',
-        messages: [{ role: 'user', content: text }],
-        temperature: 0.5, max_tokens: 2000
-    }, { timeout: 60000, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' } });
-    return data?.choices?.[0]?.message?.content?.trim() || 'No response';
-}
 
 export default {
     name: 'ask',
-    aliases: ['ai', 'chat', 'gemini', 'groq', 'qwen'],
+    aliases: ['ai', 'chat', 'gemini', 'groq'],
     category: 'ai',
-    description: 'Chat with AI (gemini/groq/qwen). Reply to voice note to transcribe.',
-    usage: '.ask <text> | .ask gemini|groq|qwen <text> | reply to VN with .ask',
+    description: 'Chat with AI (gemini/groq). Reply to voice note to transcribe.',
+    usage: '.ask <text> | .ask gemini|groq <text> | reply to VN with .ask',
     cooldown: 3,
 
     async execute({ sock, message, args, from, sender, command }) {
@@ -106,7 +95,7 @@ export default {
         // Provider selection
         let provider = settings[uid].provider || 'gemini';
         const first = (args[0] || '').toLowerCase();
-        if (['gemini', 'groq', 'qwen'].includes(first)) {
+        if (['gemini', 'groq'].includes(first)) {
             provider = first;
             settings[uid].provider = provider;
             saveSettings();
@@ -114,7 +103,7 @@ export default {
         }
 
         if (!userText) {
-            return sock.sendMessage(from, { text: `❌ Usage: .ask <question>\n.ask groq <text>\n.ask qwen <text>\nReply VN with .ask\n\nProvider: ${provider}` }, { quoted: message });
+            return sock.sendMessage(from, { text: `❌ Usage: .ask <question>\n.ask groq <text>\nReply VN with .ask\n\nProvider: ${provider}` }, { quoted: message });
         }
 
         await sock.sendMessage(from, { react: { text: '🤔', key: message.key } });
@@ -127,7 +116,7 @@ export default {
             let reply;
             if (provider === 'gemini') reply = await askGemini(userText);
             else if (provider === 'groq') reply = await askGroq(userText);
-            else reply = await askQwen(userText);
+            else reply = await askGemini(userText);
 
             history[uid].push({ role: 'assistant', content: reply });
             saveHistory();

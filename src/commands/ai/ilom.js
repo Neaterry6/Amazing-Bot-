@@ -11,7 +11,7 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY || process.env.GROG_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_ILOM_MODEL || process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
-const GEMINI_TEXT_MODEL = process.env.GEMINI_ILOM_MODEL || 'gemini-2.0-flash';
+const GEMINI_TEXT_MODEL = process.env.GEMINI_ILOM_MODEL || 'gemini-3.5-flash';
 const GEMINI_VISION_MODEL = process.env.GEMINI_ILOM_VISION_MODEL || GEMINI_TEXT_MODEL;
 
 const MEMORY_PATH = './data/ilom_memory.json';
@@ -152,17 +152,11 @@ async function askIlomApi(prompt, question) {
         return await askGeminiText(prompt, normalizedQuestion);
     } catch {}
 
-    const { data } = await axios.post('https://qwen.aikit.club/v1/chat/completions', {
-        model: process.env.QWEN_MODEL || 'Qwen3.6-Plus',
-        messages: [{ role: 'user', content: composed }]
-    }, {
-        timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
-        headers: {
-            Authorization: `Bearer ${process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || ''}`,
-            'Content-Type': 'application/json'
-        }
+    const { data } = await axios.get(`${process.env.CLAUDE_API_BASE_URL || 'https://omegatech-api.dixonomega.tech/api/ai'}/${encodeURIComponent(process.env.CLAUDE_MODEL || 'Claude-pro')}`, {
+        params: { prompt: composed },
+        timeout: LOW_RESOURCE_MODE ? 70000 : 120000
     });
-    const out = data?.choices?.[0]?.message?.content || data?.result || data?.response || data?.data || data?.message;
+    const out = data?.response || data?.result || data?.data || data?.message;
     if (!out) throw new Error('All AI providers failed for ilomcreate');
     return stripTrailingDetailsBlock(String(out).trim());
 }
@@ -182,7 +176,7 @@ async function generateIlomVideo() {
     throw new Error('Video generation is disabled in ilomcreate. Use dedicated video commands instead.');
 }
 
-async function analyzeImageWithQwen(buffer, prompt) {
+async function analyzeImageWithGemini(buffer, prompt) {
     if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY for image analysis');
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_VISION_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
     const { data } = await axios.post(endpoint, {
@@ -364,7 +358,7 @@ export default {
             if (quoted?.imageMessage) {
                 const imageBuffer = await downloadMediaMessage({ message: quoted }, 'buffer', {}, sock);
                 const prompt = userText && !/^(analyze|describe)$/i.test(userText) ? userText : 'Describe this image clearly.';
-                const vision = await analyzeImageWithQwen(imageBuffer, prompt);
+                const vision = await analyzeImageWithGemini(imageBuffer, prompt);
                 const sentVision = await sock.sendMessage(from, { text: vision || 'No image insight returned.' }, { quoted: message });
                 if (sentVision?.key?.id) {
                     registerReplyHandler(sentVision.key.id, async (replyText, replyMessage) => {

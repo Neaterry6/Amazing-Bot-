@@ -8,7 +8,7 @@ const execAsync = promisify(exec);
 const DEE_PHOTOS = [
   'https://i.ibb.co/YTBPq5vj/fd53ebefdcd3.jpg','https://i.ibb.co/NnL8S4wh/a66e525b87e6.jpg','https://i.ibb.co/sddkLcYb/6d380869a836.jpg'
 ];
-const MODEL_CHOICES = { qwen: process.env.DEE_QWEN_MODEL || 'qwen/qwen2.5-vl-72b-instruct:free', gemini: process.env.DEE_GEMINI_MODEL || 'google/gemini-2.5-flash', groq: process.env.DEE_GROQ_MODEL || 'meta-llama/llama-3.3-70b-instruct' };
+const MODEL_CHOICES = { gemini: process.env.DEE_GEMINI_MODEL || 'google/gemini-3.5-flash', groq: process.env.DEE_GROQ_MODEL || 'meta-llama/llama-3.3-70b-instruct' };
 const state = global.deeState || (global.deeState = { enabledChats: new Set(), memory: new Map(), models: new Map(), voiceMode: new Set() });
 const ASSEMBLY_API_KEY = process.env.ASSEMBLYAI_API_KEY || '22b87c4a57e04c73914de4b75edd05c1';
 
@@ -50,7 +50,7 @@ async function callDeeModel(selected, messages) {
     return data?.choices?.[0]?.message?.content?.trim();
   }
   if (selected === 'gemini' && process.env.GEMINI_API_KEY) {
-    const model = process.env.DEE_GEMINI_MODEL || 'gemini-2.5-flash';
+    const model = process.env.DEE_GEMINI_MODEL || 'gemini-3.5-flash';
     const prompt = messages.map(m => `${m.role}: ${m.content}`).join('\n');
     const { data } = await axios.post(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`, { contents: [{ parts: [{ text: prompt }] }] }, { timeout: 90000 });
     return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
@@ -61,7 +61,7 @@ async function callDeeModel(selected, messages) {
   return data?.choices?.[0]?.message?.content?.trim();
 }
 export default {
-  name: 'dee', aliases: ['mrsdee', 'babe', 'bestie'], category: 'ai', usage: 'dee on/off | dee vn on/off | dee model <qwen|gemini|groq> | dee <message>', cooldown: 3,
+  name: 'dee', aliases: ['mrsdee', 'babe', 'bestie'], category: 'ai', usage: 'dee on/off | dee vn on/off | dee model <gemini|groq> | dee <message>', cooldown: 3,
   async execute({ sock, message, from, args, sender, prefix = '.' }) {
     let text = args.join(' ').trim();
     const cmd = text.toLowerCase();
@@ -69,8 +69,8 @@ export default {
     if (cmd === 'off') { state.enabledChats.delete(from); return sock.sendMessage(from, { text: '✅ Dee OFF' }, { quoted: message }); }
     if (cmd === 'vn on') { state.voiceMode.add(`${from}:${sender}`); return sock.sendMessage(from, { text: '✅ Dee voice-reply ON for you.' }, { quoted: message }); }
     if (cmd === 'vn off') { state.voiceMode.delete(`${from}:${sender}`); return sock.sendMessage(from, { text: '✅ Dee voice-reply OFF for you.' }, { quoted: message }); }
-    if (cmd === 'help' || !cmd) return sock.sendMessage(from, { text: `Use: ${prefix}dee on/off\n${prefix}dee vn on/off\n${prefix}dee model gemini|groq|qwen\n${prefix}dee <chat>` }, { quoted: message });
-    if (cmd.startsWith('model ')) { const want = cmd.split(/\s+/)[1]; if (!MODEL_CHOICES[want]) return sock.sendMessage(from, { text: '❌ model: qwen|gemini|groq' }, { quoted: message }); state.models.set(from, want); return sock.sendMessage(from, { text: `✅ Dee model ${want}` }, { quoted: message }); }
+    if (cmd === 'help' || !cmd) return sock.sendMessage(from, { text: `Use: ${prefix}dee on/off\n${prefix}dee vn on/off\n${prefix}dee model gemini|groq\n${prefix}dee <chat>` }, { quoted: message });
+    if (cmd.startsWith('model ')) { const want = cmd.split(/\s+/)[1]; if (!MODEL_CHOICES[want]) return sock.sendMessage(from, { text: '❌ model: gemini|groq' }, { quoted: message }); state.models.set(from, want); return sock.sendMessage(from, { text: `✅ Dee model ${want}` }, { quoted: message }); }
     if (!state.enabledChats.has(from)) return sock.sendMessage(from, { text: '⚠️ Dee is off. Use .dee on' }, { quoted: message });
 
     if (isAudioMsg(message)) {
