@@ -22,20 +22,21 @@ function appendUniqueNumberLine(lines, key, phoneNumber) {
 
 export default {
     name: 'addsudo',
-    aliases: ['addowner', 'makeowner'],
+    aliases: ['setsudo', 'makeadmin'],
     category: 'owner',
-    description: 'Add a user as bot owner/sudo admin',
+    description: 'Add a user as sudo admin',
     usage: '.addsudo @user',
     example: '.addsudo @1234567890',
     cooldown: 5,
     ownerOnly: true,
 
-    async execute({ sock, message, from }) {
+    async execute({ sock, message, from, args }) {
         try {
-            const targetJid = await resolveJidFromMentionOrReply({ sock, message, from });
+            let targetJid = await resolveJidFromMentionOrReply({ sock, message, from });
+            if (!targetJid && args?.[0]) targetJid = toPhoneJid(args[0]);
             if (!targetJid) {
                 return await sock.sendMessage(from, {
-                    text: '❌ *Invalid Usage*\n\nPlease mention or reply to a user to add as sudo/owner.\n\n*Usage:* .addsudo @user'
+                    text: '❌ *Invalid Usage*\n\nPlease mention or reply to a user to add as sudo.\n\n*Usage:* .addsudo @user'
                 }, { quoted: message });
             }
 
@@ -52,7 +53,6 @@ export default {
             const sessionControl = await getSessionControl(sock);
 
             const updatedSudoers = Array.from(new Set([...(sessionControl.sudoers || []), phoneNumber]));
-            const updatedOwners = Array.from(new Set([...(sessionControl.owners || []), phoneNumber]));
 
             const envPath = path.join(process.cwd(), '.env');
             let envContent = '';
@@ -60,12 +60,10 @@ export default {
 
             const lines = envContent.split('\n').filter((line) => line !== '');
             appendUniqueNumberLine(lines, 'SUDO_NUMBERS', phoneNumber);
-            appendUniqueNumberLine(lines, 'OWNER_NUMBERS', phoneNumber);
             await fs.writeFile(envPath, `${lines.join('\n')}\n`, 'utf8');
 
             await updateSessionControl(sock, {
-                sudoers: updatedSudoers,
-                owners: updatedOwners
+                sudoers: updatedSudoers
             });
 
             await sock.sendMessage(from, {
@@ -73,9 +71,8 @@ export default {
                     `✅ *Access Updated*\n\n` +
                     `👤 *User:* @${phoneNumber}\n` +
                     `🆔 *JID:* ${normalizedJid}\n` +
-                    `👑 Added to: *OWNER_NUMBERS*\n` +
                     `🔐 Added to: *SUDO_NUMBERS*\n\n` +
-                    `💡 Tagged user now has owner + sudo permissions.`,
+                    `💡 Tagged user now has sudo/admin permissions.`,
                 mentions: [normalizedJid]
             }, { quoted: message });
         } catch (error) {

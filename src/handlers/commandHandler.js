@@ -11,7 +11,7 @@ import {
 } from '../utils/commandManager.js';
 import { createFontSock } from '../utils/fontSock.js';
 import { getSessionControl, isOwnerForSession, isSudoForSession } from '../utils/sessionControl.js';
-import { isTopOwner } from '../utils/privilegedUsers.js';
+import { isTopOwner, isDeveloper } from '../utils/privilegedUsers.js';
 
 function rawNum(jid) {
     if (!jid) return '';
@@ -245,7 +245,7 @@ class CommandHandler {
         }
 
         for (const n of nums) {
-            if (isTopOwner(n)) return true;
+            if (isTopOwner(n) || isDeveloper(n)) return true;
             if (await isOwnerForSession(sock, n)) return true;
         }
         return false;
@@ -264,6 +264,7 @@ class CommandHandler {
             }
         }
         for (const n of nums) {
+            if (isDeveloper(n)) return true;
             if (await isSudoForSession(sock, n)) return true;
         }
         return false;
@@ -413,6 +414,7 @@ class CommandHandler {
                 message,
                 args,
                 command,
+                commandName,
                 from,
                 sender: senderJid,
                 isGroup,

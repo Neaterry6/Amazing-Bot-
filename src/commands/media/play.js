@@ -3,6 +3,66 @@ import fs from 'fs-extra';
 import path from 'path';
 
 // Try dynamic import of distube ytdl-core
+
+function findDownloadUrl(value, format = 'audio') {
+  if (!value) return '';
+  if (typeof value === 'string') {
+    return /^https?:\/\//i.test(value) ? value : '';
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findDownloadUrl(item, format);
+      if (found) return found;
+    }
+    return '';
+  }
+  if (typeof value !== 'object') return '';
+
+  const preferredKeys = format === 'video'
+    ? ['video', 'videoUrl', 'video_url', 'mp4', 'download', 'downloadUrl', 'url', 'link']
+    : ['audio', 'audioUrl', 'audio_url', 'mp3', 'download', 'downloadUrl', 'url', 'link'];
+
+  for (const key of preferredKeys) {
+    const found = findDownloadUrl(value[key], format);
+    if (found) return found;
+  }
+
+  for (const item of Object.values(value)) {
+    const found = findDownloadUrl(item, format);
+    if (found) return found;
+  }
+  return '';
+}
+
+async function fetchFromPlaybackApis(axios, query, format) {
+  const headers = { 'User-Agent': 'Mozilla/5.0 (Asta-Bot)' };
+  const providers = [
+    {
+      name: 'DrexApp',
+      url: `https://api.drexapp.space/downloader/ytplayv2?q=${encodeURIComponent(query)}`
+    },
+    {
+      name: 'DavidCyril',
+      url: `https://apis.davidcyril.name.ng/play?query=${encodeURIComponent(query)}&format=${format}`
+    }
+  ];
+
+  let lastError = null;
+  for (const provider of providers) {
+    try {
+      const apiRes = await axios.get(provider.url, { timeout: 90000, headers });
+      const dlUrl = findDownloadUrl(apiRes.data, format);
+      if (!dlUrl) throw new Error(`${provider.name} did not return a download URL`);
+      const mediaRes = await axios.get(dlUrl, { responseType: 'arraybuffer', timeout: 180000, headers });
+      return { buffer: Buffer.from(mediaRes.data), provider: provider.name };
+    } catch (error) {
+      lastError = error;
+      console.error(`${provider.name} play API failed:`, error.message);
+    }
+  }
+  throw lastError || new Error('All play APIs failed');
+}
+
 async function getYtdl() {
   try {
     return await import('@distube/ytdl-core');
@@ -79,7 +139,7 @@ export default {
       if (ytdl && ytdl.default?.validateURL) {
         try {
           const yt = ytdl.default || ytdl;
-          const info = await yt.getInfo(videoUrl);
+          await yt.getInfo(videoUrl);
           const tempDir = path.join(process.cwd(), 'temp', 'downloads');
           await fs.ensureDir(tempDir);
 
@@ -166,24 +226,15 @@ export default {
         }
       }
 
-      // Fallback: use external API
+      // Fallback: use current query-based APIs (DrexApp first, DavidCyril second)
       await sock.sendMessage(from, { text: '🔄 Using fallback API...' }, { quoted: message });
       const axios = (await import('axios')).default;
-      const apiUrl = format === 'video'
-        ? `https://api.ootaizumi.web.id/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=mp4`
-        : `https://api.ootaizumi.web.id/downloader/youtube?url=${encodeURIComponent(videoUrl)}&format=mp3`;
-
-      const apiRes = await axios.get(apiUrl, { timeout: 60000 });
-      const dlUrl = apiRes.data?.result?.download || apiRes.data?.download || apiRes.data?.url;
-      if (!dlUrl) throw new Error('API did not return download URL');
-
-      const mediaRes = await axios.get(dlUrl, { responseType: 'arraybuffer', timeout: 180000 });
-      const mediaBuffer = Buffer.from(mediaRes.data);
+      const { buffer: mediaBuffer, provider } = await fetchFromPlaybackApis(axios, query, format);
 
       await sock.sendMessage(from, { react: { text: '🎧', key: message.key } });
 
       const msgOpts = format === 'video'
-        ? { video: mediaBuffer, mimetype: 'video/mp4', caption: `${title}\n${videoUrl}` }
+        ? { video: mediaBuffer, mimetype: 'video/mp4', caption: `${title}\n${videoUrl}\n\nSource: ${provider}` }
         : {
             audio: mediaBuffer,
             mimetype: 'audio/mpeg',

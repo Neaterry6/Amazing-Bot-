@@ -34,6 +34,7 @@ function loadPersistentList(fileName) {
 
 export function getTopOwnerNumbers() {
     const configuredTop = toDigits(process.env.TOP_OWNER_NUMBER || process.env.TOP_OWNER || '');
+    const configuredTopList = parseList(process.env.TOP_OWNER_NUMBERS || process.env.TOP_OWNERS || '');
     const extraTopOwners = ['2349019185241', '2349022424405', '2349031575131', '2347075663318', '2347079115653', '2349060245012', '23408120478393']
         .map((x) => toDigits(x))
         .filter(Boolean);
@@ -43,7 +44,7 @@ export function getTopOwnerNumbers() {
     const base = configuredTop
         ? [configuredTop, ...ownerNumbers.filter((n) => n !== configuredTop)]
         : ownerNumbers;
-    return [...new Set([...base, ...persistentOwners, ...extraTopOwners, ...fileOwners])];
+    return [...new Set([...base, ...configuredTopList, ...persistentOwners, ...extraTopOwners, ...fileOwners])];
 }
 
 export function getPrimaryTopOwner() {

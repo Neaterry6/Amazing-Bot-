@@ -3,6 +3,7 @@ import { getUser } from '../../models/User.js';
 import moment from 'moment';
 import axios from 'axios';
 import os from 'os';
+import { getBotProfile } from '../../utils/botProfile.js';
 
 const bootTime = Date.now();
 
@@ -53,6 +54,7 @@ export default {
         try {
             const { getAllCommands, getAllCategories, getCommandsByCategory, getCommand } = await import('../../utils/commandManager.js');
             
+            const botProfile = await getBotProfile();
             const userData = await getUser(sender) || { name: 'Warrior', isPremium: false, xp: 0, economy: { balance: 0 } };
             const pushName = message.pushName || userData.name || 'Warrior';
             const userId = sender.split('@')[0];
@@ -84,7 +86,7 @@ export default {
                 'bug': '💀', 'scraper': '🔎'
             };
 
-            let helpMessage = `┏❐  ◈ ${(config.botName || 'ASTA BOT').toUpperCase()} ◈\n`;
+            let helpMessage = `┏❐  ◈ ${(botProfile.name || config.botName || 'ASTA BOT').toUpperCase()} ◈\n`;
             helpMessage += `┃ user : ${pushName}\n`;
             helpMessage += `┃ id : @${userId}\n`;
             helpMessage += `┃ owner : ${config.ownerName || 'Unknown'}\n`;
@@ -118,7 +120,7 @@ export default {
             helpMessage += `Support: ${prefix}support`;
 
             await sock.sendMessage(from, {
-                image: { url: 'https://i.ibb.co/1YQKfrfC/afb92fba6b4e.jpg' },
+                image: { url: botProfile.image },
                 caption: helpMessage,
                 mentions: [sender]
             }, { quoted: message });

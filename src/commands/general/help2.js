@@ -1,4 +1,5 @@
 import config from '../../config.js';
+import { getBotProfile } from '../../utils/botProfile.js';
 
 export default {
     name: 'help2',
@@ -15,6 +16,7 @@ export default {
 
     async execute({ sock, message, args, from, sender, prefix, isOwner, isSudo, pushName }) {
         const { getAllCommands, getAllCategories, getCommandsByCategory, getCommand } = await import('../../utils/commandManager.js');
+        const botProfile = await getBotProfile();
 
         if (args[0]) {
             const cmdName = args[0].toLowerCase().replace(prefix, '');
@@ -63,7 +65,7 @@ export default {
         };
 
         const name = pushName || 'User';
-        let text = `${config.botName}\n`;
+        let text = `${botProfile.name || config.botName}\n`;
         text += `Hey ${name}! Here are all ${allCmds.length} commands:\n\n`;
 
         for (const cat of categories) {
@@ -78,6 +80,6 @@ export default {
 
         text += `Type ${prefix}help [command] for details on any command`;
 
-        await sock.sendMessage(from, { text }, { quoted: message });
+        await sock.sendMessage(from, { image: { url: botProfile.image }, caption: text, mentions: [sender] }, { quoted: message });
     }
 };

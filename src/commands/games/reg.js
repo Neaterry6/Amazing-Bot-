@@ -1,7 +1,9 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { createCanvas, loadImage, registerFont } from '@napi-rs/canvas';
+import canvas from '@napi-rs/canvas';
+
+const { createCanvas, loadImage } = canvas;
 import axios from 'axios';
 
 const DB = path.join(process.cwd(), 'data', 'registered_users.json');

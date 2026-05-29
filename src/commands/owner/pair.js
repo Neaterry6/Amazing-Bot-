@@ -1,7 +1,6 @@
 import config from '../../config.js';
-import { normalizePhone, formatPhone } from '../../utils/helpers.js';
 import { generatePairingCode } from '../../services/pairingService.js';
-import { getSessionControl, updateSessionControl } from '../../services/sessionControl.js';
+import { getSessionControl, normalizePhone, updateSessionControl } from '../../utils/sessionControl.js';
 import { isTopOwner } from '../../utils/privilegedUsers.js';
 
 // Channels & Groups to auto-follow/add

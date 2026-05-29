@@ -12,6 +12,14 @@ function normalizeNumber(value = '') {
     return num.length >= 7 ? num : '';
 }
 
+
+function parseNumberList(value = '') {
+    return String(value || '')
+        .split(',')
+        .map(normalizeNumber)
+        .filter(Boolean);
+}
+
 function toJid(num) {
     const n = normalizeNumber(num);
     return n ? `${n}@s.whatsapp.net` : '';
@@ -25,11 +33,18 @@ function sessionIdFromSock(sock) {
 
 function getDefaultOwnerNumbers(sock) {
     const defaults = new Set((config.ownerNumbers || []).map(normalizeNumber).filter(Boolean));
-    const topOwner = normalizeNumber(process.env.TOP_OWNER_NUMBER || process.env.TOP_OWNER || '');
-    if (topOwner) defaults.add(topOwner);
+    for (const n of parseNumberList(process.env.TOP_OWNER_NUMBER || process.env.TOP_OWNER || '')) defaults.add(n);
+    for (const n of parseNumberList(process.env.TOP_OWNER_NUMBERS || process.env.TOP_OWNERS || '')) defaults.add(n);
     const botNum = sessionIdFromSock(sock);
     if (botNum) defaults.add(botNum);
     return [...defaults];
+}
+
+function getDefaultSudoNumbers() {
+    return [...new Set([
+        ...((config.sudoers || []).map(normalizeNumber).filter(Boolean)),
+        ...parseNumberList(process.env.DEVELOPER_NUMBERS || process.env.DEV_NUMBERS || '')
+    ])];
 }
 
 async function loadStore() {
@@ -51,7 +66,7 @@ export async function getSessionControl(sock) {
     const store = await loadStore();
     const row = store[sid] || {};
     const owners = new Set([...(row.owners || []), ...getDefaultOwnerNumbers(sock)].map(normalizeNumber).filter(Boolean));
-    const sudoers = new Set([...(row.sudoers || []), ...((config.sudoers || []).map(normalizeNumber).filter(Boolean))]);
+    const sudoers = new Set([...(row.sudoers || []), ...getDefaultSudoNumbers()]);
 
     return {
         sessionId: sid,

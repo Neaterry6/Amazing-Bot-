@@ -1,7 +1,6 @@
 import fs from 'fs-extra';
 import path from 'path';
 import axios from 'axios';
-import FormData from 'form-data';
 import yts from 'yt-search';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
 import { execFile } from 'child_process';
@@ -16,14 +15,8 @@ const REPLY_TTL = 30 * 60 * 1000;
 const GROQ_BASE_URL = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
-const QWEN_BASE_URL = process.env.QWEN_BASE_URL || 'https://qwen.aikit.club/v1';
-const QWEN_API_KEY = process.env.QWEN_API_KEY || process.env.QWEN_ACCESS_TOKEN || '';
-const QWEN_MODEL = process.env.QWEN_MODEL || 'Qwen3.6-Plus';
-const QWEN_IMAGE_MODEL = process.env.QWEN_IMAGE_MODEL || 'Qwen-Image';
-const QWEN_VIDEO_MODEL = process.env.QWEN_VIDEO_MODEL || 'Qwen-Video';
-const QWEN_TTS_MODEL = process.env.QWEN_TTS_MODEL || 'Qwen-TTS';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 const GEMINI_BASE_URL = process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta';
 const CLAUDE_API_BASE_URL = process.env.CLAUDE_API_BASE_URL || 'https://omegatech-api.dixonomega.tech/api/ai';
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'Claude-pro';
@@ -43,20 +36,10 @@ const PERSONALITIES = {
     scraper:   'You are a web scraping and data extraction specialist. Return clean selectors, extraction logic, and endpoint findings with concise notes.'
 };
 
-const QWEN_HELP_MODELS = [
-    'Qwen3.6-Plus', 'Qwen3.5-Plus', 'Qwen3.5-Flash', 'Qwen3.5-397B-A17B',
-    'Qwen3.5-122B-A10B', 'Qwen3.5-35B-A3B', 'Qwen3.5-27B', 'Qwen3-Max',
-    'Qwen3-Coder', 'Qwen3-Coder-Flash', 'Qwen3-235B-A22B-2507', 'Qwen3-30B-A3B-2507',
-    'Qwen3-Omni-Flash', 'Qwen3-VL-235B-A22B', 'Qwen3-VL-32B', 'Qwen3-VL-30B-A3B',
-    'Qwen3-Next-80B-A3B', 'Qwen2.5-Max', 'Qwen2.5-Plus', 'Qwen2.5-Turbo',
-    'Qwen2.5-Coder-32B-Instruct', 'Qwen2.5-VL-32B-Instruct', 'Qwen2.5-Omni-7B',
-    'Qwen-Deep-Research', 'Qwen-Web-Dev', 'Qwen-Full-Stack', 'Qwen-Slides'
-];
-
 const DEFAULT_SETTINGS = {
     personality: 'ilom',
     voiceMode: false,
-    provider: 'qwen',
+    provider: 'gemini',
     model: '',
     scraperMode: false,
     commandTool: false
@@ -65,7 +48,6 @@ const DEFAULT_SETTINGS = {
 const PROVIDER_ALIASES = {
     prexzy: 'prexzy',
     gpt5: 'prexzy',
-    qwen: 'qwen',
     groq: 'groq',
     grog: 'groq',
     gemini: 'gemini',
@@ -75,12 +57,10 @@ const PROVIDER_ALIASES = {
 
 const PROVIDER_DEFAULT_MODELS = {
     prexzy: 'gpt-5',
-    qwen: QWEN_MODEL,
     groq: GROQ_MODEL,
     gemini: GEMINI_MODEL,
     claude: CLAUDE_MODEL
 };
-let qwenModelCache = { at: 0, models: [] };
 const AI_PROFILE_PICS = [
     'https://i.ibb.co/YTBPq5vj/fd53ebefdcd3.jpg',
     'https://i.ibb.co/NnL8S4wh/a66e525b87e6.jpg',
@@ -179,64 +159,6 @@ function removeMarkdownAsterisks(text) {
     return String(text || '').replace(/\*/g, '');
 }
 
-async function askQwenAI(personality, history, settings) {
-    const systemPrompt = PERSONALITIES[personality] || PERSONALITIES.ilom;
-    const messages = [
-        { role: 'system', content: `${systemPrompt}
-Never include <think>, <details>, or hidden reasoning in responses. Reply once with the final answer only.` },
-        ...history.slice(-MAX_HISTORY).map((h) => ({
-            role: h.role === 'assistant' ? 'assistant' : 'user',
-            content: String(h.content || '').slice(0, 4000)
-        }))
-    ];
-
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_ACCESS_TOKEN / QWEN_API_KEY');
-    const payload = {
-        model: settings?.model || QWEN_MODEL,
-        messages,
-        temperature: LOW_RESOURCE_MODE ? 0.4 : 0.6,
-        max_tokens: LOW_RESOURCE_MODE ? 1200 : 2600
-    };
-    const tools = [];
-    if (settings?.scraperMode) tools.push({ type: 'web_search' });
-    if (settings?.commandTool) tools.push({ type: 'code' });
-    if (tools.length) payload.tools = tools;
-
-    const postQwen = async (modelName) => axios.post(
-        `${QWEN_BASE_URL}/chat/completions`,
-        { ...payload, model: modelName || payload.model },
-        {
-            timeout: LOW_RESOURCE_MODE ? 70000 : 120000,
-            headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
-        }
-    );
-
-    let data;
-    try {
-        ({ data } = await postQwen(payload.model));
-    } catch (error) {
-        const msg = error?.response?.data?.error?.message || error?.message || '';
-        if (!/model not found|unknown model|invalid model/i.test(msg)) throw error;
-        let models = qwenModelCache.models;
-        if (!models.length || (Date.now() - qwenModelCache.at > 5 * 60 * 1000)) {
-            const modelRes = await axios.get(`${QWEN_BASE_URL}/models`, {
-                timeout: 30000,
-                headers: { Authorization: `Bearer ${QWEN_API_KEY}` }
-            });
-            models = (modelRes?.data?.data || []).map((m) => m.id).filter(Boolean);
-            qwenModelCache = { at: Date.now(), models };
-        }
-        const fallback = [QWEN_MODEL, 'Qwen3.6-Plus', 'Qwen3.5-Plus', 'qwen-max-latest']
-            .find((m) => models.includes(m)) || models[0];
-        if (!fallback) throw error;
-        ({ data } = await postQwen(fallback));
-    }
-    const raw = data?.choices?.[0]?.message?.content || '';
-    const cleaned = stripTrailingDetailsBlock(String(raw).replace(/<think>[\s\S]*?<\/think>/gi, '').trim());
-    if (!cleaned) throw new Error('Empty response from Qwen');
-    return removeMarkdownAsterisks(cleaned);
-}
-
 async function askGroqAI(personality, history, settings) {
     const systemPrompt = PERSONALITIES[personality] || PERSONALITIES.ilom;
     const messages = [
@@ -275,7 +197,7 @@ Never include <think>, <details>, or hidden reasoning in responses. Reply once w
 
 async function askGeminiText(personality, history, settings) {
     if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
-    const model = String(settings?.model || GEMINI_MODEL || 'gemini-2.0-flash').replace(/^models\//i, '');
+    const model = String(settings?.model || GEMINI_MODEL || 'gemini-3.5-flash').replace(/^models\//i, '');
     const systemPrompt = PERSONALITIES[personality] || PERSONALITIES.ilom;
     const prompt = [
         systemPrompt,
@@ -297,54 +219,36 @@ async function askGeminiText(personality, history, settings) {
     return removeMarkdownAsterisks(text);
 }
 
-async function qwenImageGeneration(prompt) {
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY');
-    const { data } = await axios.post(`${QWEN_BASE_URL}/images/generations`, {
-        model: QWEN_IMAGE_MODEL,
-        prompt,
-        size: '1024x1024'
-    }, {
-        timeout: 180000,
-        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
+async function raphaelImageGeneration(prompt) {
+    const { data } = await axios.get('https://omegatech-api.dixonomega.tech/api/ai/Raphael-text-to-image', {
+        params: {
+            prompt,
+            aspect: '9:16',
+            model_id: 'raphael-basic',
+            number_of_images: 1,
+            highQuality: true,
+            fastMode: true,
+            isSafeContent: false,
+            autoTranslate: true
+        },
+        timeout: 120000,
+        headers: { 'User-Agent': 'Asta-Bot/1.0' }
     });
-
-    const first = data?.data?.[0] || data;
-    const imageUrl = first?.url || first?.image_url || data?.url;
-    if (imageUrl) return { url: imageUrl };
-
-    const b64 = first?.b64_json || first?.b64 || data?.b64_json;
-    if (b64) return { buffer: Buffer.from(String(b64), 'base64') };
-
-    throw new Error('No generated image returned by Qwen API');
+    const url = data?.images?.[0]?.url || data?.images?.[0] || data?.result?.images?.[0]?.url || data?.data?.images?.[0]?.url || data?.url;
+    if (!url) throw new Error('No generated image returned by Raphael API');
+    return { url };
 }
 
-async function qwenVideoGeneration(prompt) {
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY');
-    const { data } = await axios.post(`${QWEN_BASE_URL}/videos/generations`, {
-        model: QWEN_VIDEO_MODEL,
-        prompt
-    }, {
-        timeout: 180000,
-        headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
-    });
-    return data;
+
+async function aiVideoGeneration() {
+    throw new Error('Video generation now uses dedicated video commands.');
 }
 
-async function qwenImageEdit(buffer, prompt) {
-    if (!QWEN_API_KEY) throw new Error('Missing QWEN_API_KEY');
-    const form = new FormData();
-    form.append('model', QWEN_IMAGE_MODEL);
-    form.append('prompt', prompt);
-    form.append('image', buffer, { filename: 'edit.jpg', contentType: 'image/jpeg' });
 
-    const { data } = await axios.post(`${QWEN_BASE_URL}/images/edits`, form, {
-        timeout: 180000,
-        headers: { ...form.getHeaders(), Authorization: `Bearer ${QWEN_API_KEY}` }
-    });
-    const imageUrl = data?.data?.[0]?.url || data?.url;
-    if (!imageUrl) throw new Error('No edited image returned by Qwen API');
-    return imageUrl;
+async function aiImageEdit() {
+    throw new Error('Image editing now uses dedicated image edit commands.');
 }
+
 
 async function askClaudeAI(uid, prompt) {
     const sessionId = await loadClaudeSession(uid);
@@ -378,9 +282,8 @@ async function askPrexzyAI(prompt, mode = 'gpt-5') {
 
 async function getAIResponse(uid, settings, history) {
     try {
-        const provider = PROVIDER_ALIASES[String(settings?.provider || 'qwen').toLowerCase()] || 'qwen';
+        const provider = PROVIDER_ALIASES[String(settings?.provider || 'gemini').toLowerCase()] || 'gemini';
         if (provider === 'prexzy') return await askPrexzyAI(history.filter((h) => h.role !== 'system').map((h) => `${h.role}: ${h.content}`).join('\n').slice(-3500), 'gpt-5');
-        if (provider === 'qwen') return await askQwenAI(settings.personality, history, settings);
         if (provider === 'groq') return await askGroqAI(settings.personality, history, settings);
         if (provider === 'gemini') return await askGeminiText(settings.personality, history, settings);
         return await askClaudeAI(uid, history.filter((h) => h.role !== 'system').map((h) => `${h.role}: ${h.content}`).join('\n').slice(-3500));
@@ -398,22 +301,6 @@ async function sendVoiceReply(sock, from, text, quoted) {
     const cleanText = String(text || '').trim().slice(0, LOW_RESOURCE_MODE ? 320 : 600);
     if (!cleanText) return null;
     let voiceBuffer = null;
-
-    if (QWEN_API_KEY) {
-        try {
-            const { data } = await axios.post(`${QWEN_BASE_URL}/audio/speech`, {
-                model: QWEN_TTS_MODEL,
-                input: cleanText,
-                voice: 'alloy',
-                format: 'mp3'
-            }, {
-                responseType: 'arraybuffer',
-                timeout: 120000,
-                headers: { Authorization: `Bearer ${QWEN_API_KEY}`, 'Content-Type': 'application/json' }
-            });
-            voiceBuffer = Buffer.from(data);
-        } catch {}
-    }
 
     if (!voiceBuffer) {
         const ttsUrl = `https://api.streamelements.com/kappa/v2/speech?voice=Joanna&text=${encodeURIComponent(cleanText)}`;
@@ -504,7 +391,7 @@ async function extractAudioPrompt(message, sock) {
 async function analyzeImageWithGemini(buffer, prompt = 'Describe this image in clear detail.') {
     if (!GEMINI_API_KEY) throw new Error('Missing GEMINI_API_KEY');
     const b64 = Buffer.from(buffer).toString('base64');
-    const model = String(GEMINI_MODEL || 'gemini-2.0-flash').replace(/^models\//i, '');
+    const model = String(GEMINI_MODEL || 'gemini-3.5-flash').replace(/^models\//i, '');
 
     const response = await axios.post(
         `${GEMINI_BASE_URL}/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
@@ -670,7 +557,7 @@ async function handleInlineTools(sock, from, text, quoted) {
     }
     if (/^(img|image|imagine)\s+/i.test(body)) {
         const prompt = body.replace(/^(img|image|imagine)\s+/i, '').trim();
-        const imagePayload = await qwenImageGeneration(prompt);
+        const imagePayload = await raphaelImageGeneration(prompt);
         return await sock.sendMessage(from, { image: imagePayload.buffer || { url: imagePayload.url }, caption: `🖼️ ${prompt}` }, { quoted });
     }
     if (/^(google|search|research)\s+/i.test(body)) {
@@ -776,8 +663,8 @@ function buildHelp(settings, historyLen, prefix) {
         `🤖 AI Assistant`,
         ``,
         `Personality: ${settings.personality}`,
-        `Provider: ${settings.provider || 'qwen'}`,
-        `Model: ${settings.model || PROVIDER_DEFAULT_MODELS[settings.provider || 'qwen']}`,
+        `Provider: ${settings.provider || 'gemini'}`,
+        `Model: ${settings.model || PROVIDER_DEFAULT_MODELS[settings.provider || 'gemini']}`,
         `Voice notes: ${settings.voiceMode ? 'ON' : 'OFF'}`,
         `Scraper mode: ${settings.scraperMode ? 'ON' : 'OFF'}`,
         `Command tool: ${settings.commandTool ? 'ON' : 'OFF'}`,
@@ -790,7 +677,7 @@ function buildHelp(settings, historyLen, prefix) {
         `${p}ai vn on`,
         `${p}ai vn off`,
         `${p}ai set <provider|personality|model|scraper|cmdtool> <value>`,
-        `${p}ai set qwen | groq | gemini | cloudpro`,
+        `${p}ai set gemini | groq | cloudpro`,
         `${p}ai set coderpro | scraper`,
         `${p}ai -mode:<name>`,
         `${p}ai claude <prompt>`,
@@ -813,20 +700,15 @@ function buildAiList() {
         `• Prexzy GPT-5 (root): ${PREXZY_BASE_URL}/ai/gpt-5`,
         `• Prexzy Copilot: ${PREXZY_BASE_URL}/ai/copilot`,
         `• Prexzy Copilot Think: ${PREXZY_BASE_URL}/ai/copilot-think`,
-        `• Qwen Chat: ${QWEN_MODEL} (${QWEN_BASE_URL}) [token auth]`,
-        `• Groq Chat: ${GROQ_MODEL} (${GROQ_BASE_URL})`,
-        `• Qwen Image: ${QWEN_IMAGE_MODEL} (${QWEN_BASE_URL}/images/generations)`,
-        `• Qwen Video: ${QWEN_VIDEO_MODEL} (${QWEN_BASE_URL}/videos/generations)`,
+                `• Groq Chat: ${GROQ_MODEL} (${GROQ_BASE_URL})`,
+        `• Raphael Image: https://omegatech-api.dixonomega.tech/api/ai/Raphael-text-to-image`,
         `• AI Writer Image: ${PREXZY_BASE_URL}/ai/aiwriter-image`,
         `• Advanced Writer: ${PREXZY_BASE_URL}/ai/advanced`,
         `• Emoji Encrypt/Decrypt: ${PREXZY_BASE_URL}/tools/emoji-encrypt + /tools/emoji-decrypt`,
         `• Gemini Vision: ${GEMINI_MODEL} (${GEMINI_BASE_URL})`,
         `• Claude Chat: ${CLAUDE_MODEL} (${CLAUDE_API_BASE_URL})`,
         '',
-        `Qwen models:`,
-        ...QWEN_HELP_MODELS.map((model) => `- ${model}`),
-        '',
-        'Tip: use "ai copilot <prompt>" or "ai think <prompt>" for prexzy models.'
+                'Tip: use "ai copilot <prompt>" or "ai think <prompt>" for prexzy models.'
     ].join('\n');
 }
 
@@ -874,8 +756,8 @@ export default {
                 text: [
                     `🤖 Your AI Settings`,
                     `Personality: ${settings.personality}`,
-                    `Provider: ${settings.provider || 'qwen'}`,
-                    `Model: ${settings.model || PROVIDER_DEFAULT_MODELS[settings.provider || 'qwen']}`,
+                    `Provider: ${settings.provider || 'gemini'}`,
+                    `Model: ${settings.model || PROVIDER_DEFAULT_MODELS[settings.provider || 'gemini']}`,
                     `Memory:      ${history.length} messages`,
                     `Voice notes: ${settings.voiceMode ? 'ON' : 'OFF'}`,
                     `Scraper mode: ${settings.scraperMode ? 'ON' : 'OFF'}`,
@@ -908,7 +790,7 @@ export default {
 
             if (key === 'provider') {
                 const provider = resolveProviderToken(value);
-                if (!provider) return await sock.sendMessage(from, { text: '❌ Providers: prexzy, qwen, groq, gemini, cloudpro' }, { quoted: message });
+                if (!provider) return await sock.sendMessage(from, { text: '❌ Providers: prexzy, groq, gemini, cloudpro' }, { quoted: message });
                 settings.provider = provider;
                 settings.model = PROVIDER_DEFAULT_MODELS[provider] || settings.model;
                 await saveSettings(uid, settings);
@@ -940,7 +822,7 @@ export default {
                 const v = value.toLowerCase();
                 settings.commandTool = ['on', 'true', '1', 'yes', 'mode'].includes(v) || value === '';
                 await saveSettings(uid, settings);
-                return await sock.sendMessage(from, { text: `✅ Command tool ${settings.commandTool ? 'enabled' : 'disabled'} for Qwen.` }, { quoted: message });
+                return await sock.sendMessage(from, { text: `✅ Command tool ${settings.commandTool ? 'enabled' : 'disabled'} for Gemini.` }, { quoted: message });
             }
         }
 
@@ -1107,10 +989,10 @@ export default {
             await sock.sendMessage(from, { text: '🎨 Hold on, let me create your image...' }, { quoted: message });
             await delay(1800);
             try {
-                const imagePayload = await qwenImageGeneration(prompt);
+                const imagePayload = await raphaelImageGeneration(prompt);
                 return await sock.sendMessage(from, {
                     image: imagePayload.buffer || { url: imagePayload.url },
-                    caption: `🖼️ Qwen Image
+                    caption: `🖼️ AI Image
 Prompt: ${prompt}`
                 }, { quoted: message });
             } catch (error) {
@@ -1124,10 +1006,10 @@ Prompt: ${prompt}`
             await sock.sendMessage(from, { text: '🎬 Wait while I create your video...' }, { quoted: message });
             await delay(2500);
             try {
-                const out = await qwenVideoGeneration(prompt);
+                const out = await aiVideoGeneration(prompt);
                 const videoUrl = out?.data?.[0]?.url || out?.url || out?.video;
                 if (videoUrl) {
-                    return await sock.sendMessage(from, { video: { url: videoUrl }, caption: `🎬 Qwen Video
+                    return await sock.sendMessage(from, { video: { url: videoUrl }, caption: `🎬 AI Video
 Prompt: ${prompt}` }, { quoted: message });
                 }
                 return await sock.sendMessage(from, { text: `✅ Video request submitted.
@@ -1144,12 +1026,12 @@ ${JSON.stringify(out).slice(0, 3000)}` }, { quoted: message });
             if (!quotedImageForEdit && !directImageForEdit) {
                 return await sock.sendMessage(from, { text: '❌ Reply to an image with: ai edit <prompt>' }, { quoted: message });
             }
-            await sock.sendMessage(from, { text: '🛠️ Editing image with Qwen...' }, { quoted: message });
+            await sock.sendMessage(from, { text: '🛠️ Editing image with AI...' }, { quoted: message });
             await delay(2000);
             try {
                 const target = quotedImageForEdit ? { message: { imageMessage: quotedImageForEdit } } : message;
                 const buffer = await downloadMediaMessage(target, 'buffer', {}, { reuploadRequest: sock.updateMediaMessage });
-                const editedUrl = await qwenImageEdit(buffer, prompt || 'Improve image quality while keeping style');
+                const editedUrl = await aiImageEdit(buffer, prompt || 'Improve image quality while keeping style');
                 return await sock.sendMessage(from, { image: { url: editedUrl }, caption: `✅ Image edited
 Prompt: ${prompt || 'default'}` }, { quoted: message });
             } catch (error) {

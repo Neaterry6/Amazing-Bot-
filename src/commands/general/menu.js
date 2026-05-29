@@ -2,6 +2,7 @@ import axios from 'axios';
 import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
+import { getBotProfile } from '../../utils/botProfile.js';
 
 const startTime = Date.now();
 const CATEGORY_ORDER = ['ai', 'audio', 'downloader', 'fun', 'games', 'group', 'image', 'owner', 'religion', 'search', 'settings', 'sports', 'support', 'tools', 'translate', 'video', 'media', 'general', 'utility', 'ephoto360', 'groupstatus', 'other'];
@@ -96,8 +97,9 @@ export default {
 
     async execute({ sock, message, from, prefix }) {
         const { cats, total } = await scanCommands();
+        const botProfile = await getBotProfile();
 
-        const botName = process.env.BOT_NAME || 'Asta Bot';
+        const botName = botProfile.name || process.env.BOT_NAME || 'Asta Bot';
         const ownerName = process.env.OWNER_NAME || 'Ilom';
         const version = process.env.BOT_VERSION || '1.0.0';
         const mode = process.env.PUBLIC_MODE === 'true' ? 'Public' : 'Private';
@@ -147,7 +149,7 @@ export default {
         }
 
         // Try to send with image
-        const imgUrl = process.env.BOT_THUMBNAIL || 'https://files.catbox.moe/13uws5.jpg';
+        const imgUrl = botProfile.image;
         try {
             const imgResp = await axios.get(imgUrl, {
                 responseType: 'arraybuffer',

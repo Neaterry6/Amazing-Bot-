@@ -14,7 +14,7 @@ const config = {
     botName: process.env.BOT_NAME || 'Asta Bot',
     botVersion: process.env.BOT_VERSION || '1.0.0',
     botDescription: process.env.BOT_DESCRIPTION || 'Asta Bot created by Ilom',
-    botThumbnail: process.env.BOT_THUMBNAIL || 'https://files.catbox.moe/13uws5.jpg',
+    botThumbnail: process.env.BOT_THUMBNAIL || 'https://i.ibb.co/sr8Jy29/69b07b2a6afd.png',
     botRepository: process.env.BOT_REPOSITORY || 'https://github.com/NexusCoders-cyber/Asta-Bot-.git',
     botWebsite: process.env.BOT_WEBSITE || 'https://ilom.tech',
 
@@ -138,7 +138,7 @@ const config = {
         },
         gemini: {
             apiKey: process.env.GEMINI_API_KEY,
-            model: process.env.GEMINI_MODEL || 'gemini-2.5-flash'
+            model: process.env.GEMINI_MODEL || 'gemini-3.5-flash'
         },
         weather: {
             apiKey: process.env.WEATHER_API_KEY,

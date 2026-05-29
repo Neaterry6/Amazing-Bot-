@@ -1,30 +1,14 @@
-import { setReplyCallback } from "../../handler/replyHandler.js";
-
 export default {
-  config: {
-    name: "ask",
-    description: "Ask user something"
-  },
+    name: 'askprompt',
+    aliases: ['askname'],
+    category: 'asta_addons',
+    description: 'Prompt a user to reply with their name',
+    usage: 'askprompt',
+    cooldown: 3,
 
-  onRun: async (sock, message) => {
-    const sent = await sock.sendMessage(
-      message.key.remoteJid,
-      { text: "Reply to this message with your name:" },
-      { quoted: message }
-    );
-
-    const userJid =
-      message.key.participantAlt ||
-      message.key.participant ||
-      message.key.remoteJid;
-
-    setReplyCallback(sent.key.id, userJid, async (sock, replyMsg) => {
-      const text =
-        replyMsg.message?.conversation ||
-        replyMsg.message?.extendedTextMessage?.text;
-
-      await replyMsg.reply(`Nice to meet you, ${text}!`)
-      });
-  }
+    async execute({ sock, message, from }) {
+        await sock.sendMessage(from, {
+            text: 'Reply to this message with your name:'
+        }, { quoted: message });
+    }
 };
-
