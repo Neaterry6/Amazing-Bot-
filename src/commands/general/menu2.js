@@ -3,6 +3,7 @@ import os from 'os';
 import config from '../../config.js';
 import { getAutomationConfig } from '../../utils/automationStore.js';
 import { getBotProfile } from '../../utils/botProfile.js';
+import { BOT_CHANNEL_LINK, MENU_HELP_IMAGE_URL, withBotChannelPreview } from '../../utils/botChannel.js';
 
 const bootTime = Date.now();
 function ups(ms) {
@@ -48,12 +49,12 @@ export default {
         msg += `┃ 💀 *Bug* — ilom-crash, ilom-destroy, ilom-infinity, crashgc, ddos, ipcrash, callgc, killios, delayg, brat, inviscrash, nuke, spam\n`;
         msg += `┃ 🛡️ *Admin* — hijack, welcome, antigm, delete, autostatus, automode\n`;
         msg += `┃ 📥 *Downloader* — tiktok, spotify, play, ytmp3, facebook, capcut\n`;
-        msg += `┃ 🎭 *Fun* — 8ball, truth, dare, joke, fact, define, flip, roll, pick, reverse, emojify, carbon, qrcode, ascii, art, insp, glitch, writetext, typographytext, underwatertext, watercolortext, neko, waifu\n`;
-        msg += `┃ 🎮 *Games* — wcg, tictactoe, trivia\n`;
+        msg += `┃ 🎭 *Fun* — 8ball, truth, dare, joke, fact, define, flip, roll, pick, reverse, emojify, carbon, qrcode, ascii, art, insp, glitch, neko, waifu\n`;
+        msg += `┃ 🎮 *Games* — tictactoe, trivia\n`;
         msg += `┃ 📱 *General* — help, menu2, alive, aza, creato, produk\n`;
-        msg += `┃ 🎨 *Media* — savestatus, tostatus, vv, tomp3, tomp4, tourl, bass\n`;
+        msg += `┃ 🎨 *Media* — savestatus, tostatus, vv, tomp3, tovideo, toimg, tourl, bass\n`;
         msg += `┃ 👑 *Owner* — eval, shell, join, restart, self, public\n`;
-        msg += `┃ 🔧 *Utility* — setlang, jid, cekid, tempmail, wiki, urban, weather, crypto, upload\n`;
+        msg += `┃ 🔧 *Utility* — setlang, jid, cekid, tempmail, wiki, urban, weather, crypto, upload, apk, playstore\n`;
         msg += `┃ 🔎 *Scraper* — reddit, recipe, lyrics, movie, github\n`;
         msg += `┃ ✏️ *Edit* — blur, brightness\n`;
         msg += `╰━━━━━━━━━━━━━━━━━━━━╯\n\n`;
@@ -71,15 +72,15 @@ export default {
         msg += `┃ Prefix: ${prefix}\n`;
         msg += `┃ .help <cmd> for details\n`;
         msg += `┃ .aza to support project\n`;
+        msg += `┃ Channel: ${BOT_CHANNEL_LINK}\n`;
         msg += `╰━━━━━━━━━━━━━━━━━━━━╯\n\n`;
 
         msg += `🤖 *${botProfile.name || config.botName || 'Ilom Bot'}* — Powered by Amazing Engine`;
 
         try {
-            const imgUrl = botProfile.image;
-            await sock.sendMessage(from, { image: { url: imgUrl }, caption: msg, mentions: [sender] }, { quoted: message });
+            await sock.sendMessage(from, withBotChannelPreview({ image: { url: MENU_HELP_IMAGE_URL }, caption: msg, mentions: [sender] }), { quoted: message });
         } catch {
-            await sock.sendMessage(from, { text: msg, mentions: [sender] }, { quoted: message });
+            await sock.sendMessage(from, withBotChannelPreview({ text: msg, mentions: [sender] }), { quoted: message });
         }
     }
 };

@@ -8,7 +8,7 @@ function formatLangList(limit = null) {
 
 export default {
     name: 'lang',
-    aliases: ['language', 'setlang'],
+    aliases: ['language'],
     category: 'general',
     description: 'Set chat language for bot responses',
     usage: 'setlang <code> | setlang list | setlang reset',
@@ -35,7 +35,7 @@ export default {
                     formatLangList(),
                     '',
                     '⚠️ Menu will be translated and cached on first use.',
-                    'Each person sets their own language independently.'
+                    'Group admins set the group language for everyone.'
                 ].join('\n')
             }, { quoted: message });
         }

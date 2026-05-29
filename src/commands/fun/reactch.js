@@ -19,7 +19,7 @@ export default {
             if (!link) {
                 return await sock.sendMessage(from, {
                     text: `❌ Usage: ${prefix}reactch react <channel_link> <emoji>\n` +
-                          `Example: ${prefix}reactch react https://whatsapp.com/channel/0029Vb7MzHT1SWt0T3G06p0M ❤️`
+                          `Example: ${prefix}reactch react https://whatsapp.com/channel/0029Vb8Ko1ZAe5VhZaGl3E3m ❤️`
                 }, { quoted: message });
             }
 
@@ -144,9 +144,9 @@ export default {
             `${prefix}reactch react <link> <emoji> — react to channel\n` +
             `${prefix}reactch send <link> <text> — send message to channel\n\n` +
             `*Examples:*\n` +
-            `${prefix}reactch follow https://whatsapp.com/channel/0029Vb7MzHT1SWt0T3G06p0M\n` +
-            `${prefix}reactch react https://whatsapp.com/channel/0029Vb7MzHT1SWt0T3G06p0M ❤️\n` +
-            `${prefix}reactch send https://whatsapp.com/channel/0029Vb7MzHT1SWt0T3G06p0M Hello!`;
+            `${prefix}reactch follow https://whatsapp.com/channel/0029Vb8Ko1ZAe5VhZaGl3E3m\n` +
+            `${prefix}reactch react https://whatsapp.com/channel/0029Vb8Ko1ZAe5VhZaGl3E3m ❤️\n` +
+            `${prefix}reactch send https://whatsapp.com/channel/0029Vb8Ko1ZAe5VhZaGl3E3m Hello!`;
 
         await sock.sendMessage(from, { text }, { quoted: message });
     }

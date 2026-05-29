@@ -90,17 +90,17 @@ function inferExt(fileType, mime = '', kind = 'video') {
 }
 
 export default {
-    name: 'tomp4',
-    aliases: ['tovideo', 'mp4'],
+    name: 'tovideo',
+    aliases: ['tomp4', 'mp4'],
     category: 'media',
-    description: 'Convert replied media to MP4',
-    usage: 'tomp4 (reply to media)',
+    description: 'Convert replied media to MP4 video',
+    usage: 'tovideo (reply to media)',
     cooldown: 5,
 
     async execute({ sock, message, from, prefix }) {
         const src = extractSource(message);
         if (!src) {
-            return sock.sendMessage(from, { text: `❌ Reply to audio/video/image/sticker first.\nExample: ${prefix}tomp4` }, { quoted: message });
+            return sock.sendMessage(from, { text: `❌ Reply to audio/video/image/sticker first.\nExample: ${prefix}tovideo` }, { quoted: message });
         }
 
         try {

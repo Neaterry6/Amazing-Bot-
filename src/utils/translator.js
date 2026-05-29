@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { resolveChatLanguage, translateOutgoingContent, translateTextIfNeeded } from './languageManager.js';
 
 const langCache = {};
 
@@ -17,31 +18,27 @@ export async function translateText(text, targetLang) {
         const { data } = await axios.get(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text.slice(0, 4000))}`, { timeout: 10000 });
         if (data?.[0]) return data[0].map(s => s[0]).join('');
     } catch {}
-    return text;
+    return translateTextIfNeeded(text, targetLang);
 }
 
 export function enableAutoTranslate(sock) {
     const originalSend = sock.sendMessage.bind(sock);
-    
+
     sock.sendMessage = async function(jid, content, options) {
         try {
-            if (content?.text) {
-                const opts = options || {};
-                // For group replies, get the quoted participant
-                const targetJid = String(jid).endsWith('@g.us')
-                    ? opts?.quoted?.key?.participant || null
-                    : jid;
-                
-                const lang = targetJid ? langCache[targetJid] : null;
-                if (lang && lang !== 'en') {
-                    const translated = await translateText(content.text, lang);
-                    if (translated) content.text = translated;
-                }
+            if (content?.__skipAutoTranslate) {
+                const { __skipAutoTranslate, ...cleanContent } = content;
+                return originalSend(jid, cleanContent, options);
             }
+            const targetJid = String(jid || '').endsWith('@g.us')
+                ? jid
+                : (options?.quoted?.key?.participant || jid);
+            const lang = langCache[targetJid] || await resolveChatLanguage(String(targetJid || jid || ''));
+            content = await translateOutgoingContent(content, lang);
         } catch {}
-        
+
         return originalSend(jid, content, options);
     };
-    
+
     return sock;
 }

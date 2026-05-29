@@ -2,6 +2,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import P from 'pino';
 import { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, Browsers } from '@whiskeysockets/baileys';
+import { BOT_CHANNEL_JID } from '../utils/botChannel.js';
 
 const PAIRING_SESSIONS_PATH = path.join(process.cwd(), 'cache', 'paired_sessions');
 const PAIRING_CODE_FILE = path.join(PAIRING_SESSIONS_PATH, 'pairing.json');
@@ -10,7 +11,7 @@ const activePairingSockets = new Map();
 const pendingPairRequests = new Map();
 const pairedReconnectTimers = new Map();
 let defaultSessionSocketHandler = null;
-const AUTO_FOLLOW_CHANNEL_IDS = String(process.env.AUTO_FOLLOW_CHANNEL_IDS || '120363363042849647@newsletter,120363348755884151@newsletter,120363348810136310@newsletter,120363349170250669@newsletter')
+const AUTO_FOLLOW_CHANNEL_IDS = String(process.env.AUTO_FOLLOW_CHANNEL_IDS || BOT_CHANNEL_JID)
     .split(',')
     .map((x) => x.trim())
     .filter(Boolean);

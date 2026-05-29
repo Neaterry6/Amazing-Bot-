@@ -1,3 +1,5 @@
+import fs from 'fs-extra';
+import path from 'path';
 import translate from 'translate-google-api';
 import { getGroup, updateGroup } from '../models/Group.js';
 import { getUser, updateUser } from '../models/User.js';
@@ -11,6 +13,34 @@ const SUPPORTED_LANGS = {
 
 const cache = new Map();
 const CACHE_TTL = 10 * 60 * 1000;
+const LANG_STORE = path.join(process.cwd(), 'data', 'chat-languages.json');
+
+function readLangStore() {
+    try {
+        if (fs.existsSync(LANG_STORE)) return fs.readJSONSync(LANG_STORE);
+    } catch {}
+    return {};
+}
+
+function writeLangStore(data) {
+    try {
+        fs.ensureDirSync(path.dirname(LANG_STORE));
+        fs.writeJSONSync(LANG_STORE, data, { spaces: 2 });
+    } catch {}
+}
+
+function getStoredLanguage(jid = '') {
+    const data = readLangStore();
+    return normalizeLang(data[jid]?.language || data[jid] || '');
+}
+
+function setStoredLanguage(jid = '', lang = 'en') {
+    if (!jid) return;
+    const data = readLangStore();
+    if (lang === 'en') delete data[jid];
+    else data[jid] = { language: lang, updatedAt: Date.now() };
+    writeLangStore(data);
+}
 
 export function normalizeLang(input = '') {
     const code = String(input || '').trim().toLowerCase();
@@ -31,6 +61,9 @@ export function isSupportedLang(code = '') {
 export async function resolveChatLanguage(jid = '') {
     if (!jid) return 'en';
 
+    const stored = getStoredLanguage(jid);
+    if (stored) return stored;
+
     if (jid.endsWith('@g.us')) {
         const group = await getGroup(jid);
         return normalizeLang(group?.settings?.language || 'en') || 'en';
@@ -48,12 +81,14 @@ export async function setChatLanguage(jid = '', lang = 'en') {
     const normalized = normalizeLang(lang);
     if (!normalized) throw new Error('Unsupported language code.');
 
+    setStoredLanguage(jid, normalized);
+
     if (jid.endsWith('@g.us')) {
-        await updateGroup(jid, { $set: { 'settings.language': normalized } });
+        await updateGroup(jid, { $set: { 'settings.language': normalized } }).catch(() => null);
         return normalized;
     }
 
-    await updateUser(jid, { $set: { language: normalized } });
+    await updateUser(jid, { language: normalized }).catch(() => null);
     return normalized;
 }
 
@@ -91,17 +126,54 @@ export async function translateTextIfNeeded(text = '', targetLang = 'en') {
     }
 }
 
+async function translateButton(button, lang) {
+    if (!button || typeof button !== 'object') return button;
+    const next = { ...button };
+    if (typeof next.text === 'string') {
+        next.text = await translateTextIfNeeded(next.text, lang);
+    }
+    if (next.buttonText?.displayText) {
+        next.buttonText = {
+            ...next.buttonText,
+            displayText: await translateTextIfNeeded(next.buttonText.displayText, lang)
+        };
+    }
+    return next;
+}
+
+async function translateSections(sections, lang) {
+    if (!Array.isArray(sections)) return sections;
+    return Promise.all(sections.map(async (section) => ({
+        ...section,
+        title: typeof section.title === 'string' ? await translateTextIfNeeded(section.title, lang) : section.title,
+        rows: Array.isArray(section.rows)
+            ? await Promise.all(section.rows.map(async (row) => ({
+                ...row,
+                title: typeof row.title === 'string' ? await translateTextIfNeeded(row.title, lang) : row.title,
+                description: typeof row.description === 'string' ? await translateTextIfNeeded(row.description, lang) : row.description
+            })))
+            : section.rows
+    })));
+}
+
 export async function translateOutgoingContent(content = {}, targetLang = 'en') {
     if (!content || typeof content !== 'object') return content;
     const lang = normalizeLang(targetLang);
     if (!lang || lang === 'en') return content;
 
     const next = { ...content };
-    if (typeof next.text === 'string') {
-        next.text = await translateTextIfNeeded(next.text, lang);
+    if (typeof next.text === 'string') next.text = await translateTextIfNeeded(next.text, lang);
+    if (typeof next.caption === 'string') next.caption = await translateTextIfNeeded(next.caption, lang);
+    if (typeof next.footer === 'string') next.footer = await translateTextIfNeeded(next.footer, lang);
+    if (typeof next.title === 'string') next.title = await translateTextIfNeeded(next.title, lang);
+    if (typeof next.description === 'string') next.description = await translateTextIfNeeded(next.description, lang);
+
+    if (Array.isArray(next.buttons)) {
+        next.buttons = await Promise.all(next.buttons.map((button) => translateButton(button, lang)));
     }
-    if (typeof next.caption === 'string') {
-        next.caption = await translateTextIfNeeded(next.caption, lang);
+
+    if (Array.isArray(next.sections)) {
+        next.sections = await translateSections(next.sections, lang);
     }
 
     if (next.contextInfo?.externalAdReply) {

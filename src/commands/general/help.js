@@ -4,6 +4,7 @@ import moment from 'moment';
 import axios from 'axios';
 import os from 'os';
 import { getBotProfile } from '../../utils/botProfile.js';
+import { BOT_CHANNEL_LINK, MENU_HELP_IMAGE_URL, withBotChannelPreview } from '../../utils/botChannel.js';
 
 const bootTime = Date.now();
 
@@ -117,13 +118,14 @@ export default {
 
             helpMessage += `Total Commands: ${cmdCount}\n`;
             helpMessage += `Usage: ${prefix}help <command>\n`;
-            helpMessage += `Support: ${prefix}support`;
+            helpMessage += `Support: ${prefix}support\n`;
+            helpMessage += `Bot Channel: ${BOT_CHANNEL_LINK}`;
 
-            await sock.sendMessage(from, {
-                image: { url: botProfile.image },
+            await sock.sendMessage(from, withBotChannelPreview({
+                image: { url: MENU_HELP_IMAGE_URL },
                 caption: helpMessage,
                 mentions: [sender]
-            }, { quoted: message });
+            }), { quoted: message });
 
             try {
                 const songs = ['Love you by Amah', 'She Goes by Denver', 'anime lofi', 'night drive music'];

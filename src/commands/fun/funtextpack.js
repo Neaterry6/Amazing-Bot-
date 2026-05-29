@@ -10,9 +10,7 @@ const RESPONSES = {
     moviequote: ['"Why so serious?"', '"May the Force be with you."'],
     triviafact: ['Fact: Bananas are berries, strawberries are not.'],
     ascii: ['(\_/)', '( •_•)', '/ >🍪'],
-    progquote: ['"First, solve the problem. Then, write the code."'],
     dadjoke: ["Why don't eggs tell jokes? They crack each other up."],
-    prog: ['Programmer humor: It works on my machine.'],
     quotememe: ['"I can explain" - every developer after prod crash.'],
     fact: ['Sharks existed before trees.'],
     poem: ['Roses are red, code can be blue, tests are all green, deploy it too.']

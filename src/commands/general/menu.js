@@ -3,6 +3,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import os from 'os';
 import { getBotProfile } from '../../utils/botProfile.js';
+import { BOT_CHANNEL_LINK, MENU_HELP_IMAGE_URL, withBotChannelPreview } from '../../utils/botChannel.js';
 
 const startTime = Date.now();
 const CATEGORY_ORDER = ['ai', 'audio', 'downloader', 'fun', 'games', 'group', 'image', 'owner', 'religion', 'search', 'settings', 'sports', 'support', 'tools', 'translate', 'video', 'media', 'general', 'utility', 'ephoto360', 'groupstatus', 'other'];
@@ -119,6 +120,7 @@ export default {
         msg += `┃ *ᴜsᴀɢᴇ* : ${formatBytes(ramUsed)} of ${formatBytes(ramTotal)}\n`;
         msg += `┃ *ʀᴀᴍ:* ${ramBar(ramUsed, ramTotal)}\n`;
         msg += `┗▣ \n\n`;
+        msg += `📢 *Bot Channel:* ${BOT_CHANNEL_LINK}\n\n`;
 
         // Categories
         const processed = new Set();
@@ -149,7 +151,7 @@ export default {
         }
 
         // Try to send with image
-        const imgUrl = botProfile.image;
+        const imgUrl = MENU_HELP_IMAGE_URL;
         try {
             const imgResp = await axios.get(imgUrl, {
                 responseType: 'arraybuffer',
@@ -157,9 +159,9 @@ export default {
                 headers: { 'User-Agent': 'Mozilla/5.0' }
             });
             const imgBuf = Buffer.from(imgResp.data);
-            await sock.sendMessage(from, { image: imgBuf, caption: msg }, { quoted: message });
+            await sock.sendMessage(from, withBotChannelPreview({ image: imgBuf, caption: msg }), { quoted: message });
         } catch {
-            await sock.sendMessage(from, { text: msg }, { quoted: message });
+            await sock.sendMessage(from, withBotChannelPreview({ text: msg }), { quoted: message });
         }
     }
 };
