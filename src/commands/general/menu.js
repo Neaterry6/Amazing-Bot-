@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import { getBotProfile } from '../../utils/botProfile.js';
 import { BOT_CHANNEL_LINK, MENU_HELP_IMAGE_URL, withBotChannelPreview } from '../../utils/botChannel.js';
+import { sendCompressedMenuSong } from '../../utils/menuAudio.js';
 
 const startTime = Date.now();
 const CATEGORY_ORDER = ['ai', 'audio', 'downloader', 'fun', 'games', 'group', 'image', 'owner', 'religion', 'search', 'settings', 'sports', 'support', 'tools', 'translate', 'video', 'media', 'general', 'utility', 'ephoto360', 'groupstatus', 'other'];
@@ -103,7 +104,7 @@ export default {
         const botName = botProfile.name || process.env.BOT_NAME || 'Asta Bot';
         const ownerName = process.env.OWNER_NAME || 'Ilom';
         const version = process.env.BOT_VERSION || '1.0.0';
-        const mode = process.env.PUBLIC_MODE === 'true' ? 'Public' : 'Private';
+        const mode = process.env.PUBLIC_MODE === 'true' ? 'public' : 'self';
 
         const ramUsed = process.memoryUsage().rss;
         const ramTotal = os.totalmem();
@@ -163,5 +164,7 @@ export default {
         } catch {
             await sock.sendMessage(from, withBotChannelPreview({ text: msg }), { quoted: message });
         }
+
+        await sendCompressedMenuSong(sock, from, message);
     }
 };

@@ -1,14 +1,11 @@
+import axios from 'axios';
 import yts from 'yt-search';
 import fs from 'fs-extra';
 import path from 'path';
 
-// Try dynamic import of distube ytdl-core
-
 function findDownloadUrl(value, format = 'audio') {
   if (!value) return '';
-  if (typeof value === 'string') {
-    return /^https?:\/\//i.test(value) ? value : '';
-  }
+  if (typeof value === 'string') return /^https?:\/\//i.test(value) ? value : '';
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = findDownloadUrl(item, format);
@@ -19,8 +16,8 @@ function findDownloadUrl(value, format = 'audio') {
   if (typeof value !== 'object') return '';
 
   const preferredKeys = format === 'video'
-    ? ['video', 'videoUrl', 'video_url', 'mp4', 'download', 'downloadUrl', 'url', 'link']
-    : ['audio', 'audioUrl', 'audio_url', 'mp3', 'download', 'downloadUrl', 'url', 'link'];
+    ? ['video', 'videoUrl', 'video_url', 'mp4', 'download', 'downloadURL', 'downloadUrl', 'download_url', 'url', 'link']
+    : ['audio', 'audioUrl', 'audio_url', 'mp3', 'download', 'downloadURL', 'downloadUrl', 'download_url', 'url', 'link'];
 
   for (const key of preferredKeys) {
     const found = findDownloadUrl(value[key], format);
@@ -32,35 +29,6 @@ function findDownloadUrl(value, format = 'audio') {
     if (found) return found;
   }
   return '';
-}
-
-async function fetchFromPlaybackApis(axios, query, format) {
-  const headers = { 'User-Agent': 'Mozilla/5.0 (Asta-Bot)' };
-  const providers = [
-    {
-      name: 'DrexApp',
-      url: `https://api.drexapp.space/downloader/ytplayv2?q=${encodeURIComponent(query)}`
-    },
-    {
-      name: 'DavidCyril',
-      url: `https://apis.davidcyril.name.ng/play?query=${encodeURIComponent(query)}&format=${format}`
-    }
-  ];
-
-  let lastError = null;
-  for (const provider of providers) {
-    try {
-      const apiRes = await axios.get(provider.url, { timeout: 90000, headers });
-      const dlUrl = findDownloadUrl(apiRes.data, format);
-      if (!dlUrl) throw new Error(`${provider.name} did not return a download URL`);
-      const mediaRes = await axios.get(dlUrl, { responseType: 'arraybuffer', timeout: 180000, headers });
-      return { buffer: Buffer.from(mediaRes.data), provider: provider.name };
-    } catch (error) {
-      lastError = error;
-      console.error(`${provider.name} play API failed:`, error.message);
-    }
-  }
-  throw lastError || new Error('All play APIs failed');
 }
 
 async function getYtdl() {
@@ -75,6 +43,97 @@ async function getYtdl() {
   }
 }
 
+async function fetchFastApiUrl(query, format = 'audio') {
+  const headers = { 'User-Agent': 'Mozilla/5.0 (Asta-Bot)' };
+  const endpoints = [
+    {
+      name: 'DrexApp',
+      url: `https://api.drexapp.space/downloader/ytplayv2?q=${encodeURIComponent(query)}`
+    },
+    {
+      name: 'DavidCyril',
+      url: `https://apis.davidcyril.name.ng/play?query=${encodeURIComponent(query)}&format=${format}`
+    }
+  ];
+
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    try {
+      const { data } = await axios.get(endpoint.url, { timeout: 45000, headers });
+      const downloadUrl = findDownloadUrl(data, format);
+      if (!downloadUrl) throw new Error(`${endpoint.name} did not return a download URL`);
+      return {
+        downloadUrl,
+        provider: endpoint.name,
+        title: data?.result?.title || data?.title || data?.data?.title || ''
+      };
+    } catch (error) {
+      lastError = error;
+      console.error(`${endpoint.name} play API failed:`, error.message);
+    }
+  }
+  throw lastError || new Error('All play APIs failed');
+}
+
+function safeTitle(title = 'audio') {
+  return String(title).replace(/[\\/:*?"<>|]/g, '').slice(0, 120) || 'audio';
+}
+
+function getReplyTarget(message, from) {
+  const ctx = message.message?.extendedTextMessage?.contextInfo;
+  if (ctx?.participant && from.endsWith('@g.us')) return ctx.participant;
+  return from;
+}
+
+async function searchVideo(query) {
+  try {
+    const search = await yts(query);
+    return search?.videos?.[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function sendApiMedia({ sock, message, from, targetJid, query, format, metadata }) {
+  const api = await fetchFastApiUrl(query, format);
+  const title = metadata?.title || api.title || query;
+  const videoUrl = metadata?.url || '';
+  const thumbnail = metadata?.thumbnail || '';
+  const duration = metadata?.timestamp || 'N/A';
+  const views = metadata?.views?.toLocaleString?.() || 'N/A';
+
+  if (format === 'video') {
+    const mediaRes = await axios.get(api.downloadUrl, {
+      responseType: 'arraybuffer',
+      timeout: 180000,
+      headers: { 'User-Agent': 'Mozilla/5.0 (Asta-Bot)' }
+    });
+    await sock.sendMessage(targetJid, {
+      video: Buffer.from(mediaRes.data),
+      mimetype: 'video/mp4',
+      caption: `${title}${videoUrl ? `\n${videoUrl}` : ''}\n\nSource: ${api.provider}`
+    }, targetJid === from ? { quoted: message } : undefined);
+    return title;
+  }
+
+  await sock.sendMessage(targetJid, {
+    audio: { url: api.downloadUrl },
+    mimetype: 'audio/mpeg',
+    fileName: `${safeTitle(title)}.mp3`,
+    contextInfo: {
+      externalAdReply: {
+        thumbnailUrl: thumbnail,
+        title: title.slice(0, 100),
+        body: `${api.provider}${views !== 'N/A' ? ` • 👁️ ${views}` : ''}${duration !== 'N/A' ? ` • ⏱️ ${duration}` : ''}`,
+        sourceUrl: videoUrl || api.downloadUrl,
+        renderLargerThumbnail: true,
+        mediaType: 1
+      }
+    }
+  }, targetJid === from ? { quoted: message } : undefined);
+  return title;
+}
+
 export default {
   name: 'play',
   aliases: ['ytmp3', 'song', 'ytvideo', 'ytmp4'],
@@ -86,11 +145,10 @@ export default {
   async execute({ sock, message, args, from }) {
     if (!args.length) {
       return sock.sendMessage(from, {
-        text: `🎵 *Play*\n\nUsage:\nplay <song name> — send audio\nplay --video <name> — send video\nplay --audio <name> — force audio\n\nReply to someone with play <name> to send it to them.`
+        text: `🎵 *Play*\n\nUsage:\nplay <song name> — send audio\nplay --video <name> — send video\nplay --audio <name> — force audio\nReply to someone with play <name> to send it to them.`
       }, { quoted: message });
     }
 
-    // Detect mode
     let format = 'audio';
     let query = args.join(' ').trim();
     const first = args[0]?.toLowerCase();
@@ -106,24 +164,37 @@ export default {
       return sock.sendMessage(from, { text: '❌ Give a song name or video title.' }, { quoted: message });
     }
 
-    // Check if user replied to someone — send to that person instead
-    const ctx = message.message?.extendedTextMessage?.contextInfo;
-    let targetJid = from;
-    if (ctx?.participant && from.endsWith('@g.us')) {
-      targetJid = ctx.participant;
-    }
+    const targetJid = getReplyTarget(message, from);
 
     try {
       await sock.sendMessage(from, { react: { text: '🔍', key: message.key } });
 
-      // Search
-      const search = await yts(query);
-      if (!search?.videos?.length) {
+      const metadataPromise = searchVideo(query);
+
+      if (format === 'audio') {
+        await sock.sendMessage(from, { text: '🎵 Searching song...\n⬇️ Downloading audio...' }, { quoted: message });
+        try {
+          const metadata = await Promise.race([
+            metadataPromise,
+            new Promise((resolve) => setTimeout(() => resolve(null), 2500))
+          ]);
+          const title = await sendApiMedia({ sock, message, from, targetJid, query, format, metadata });
+          await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+          if (targetJid !== from) {
+            await sock.sendMessage(from, { text: `✅ Sent "${title}" to the replied user.` }, { quoted: message });
+          }
+          return;
+        } catch (apiError) {
+          console.error('Fast play API failed, falling back to ytdl-core:', apiError.message);
+        }
+      }
+
+      const video = await metadataPromise;
+      if (!video) {
         await sock.sendMessage(from, { react: { text: '❌', key: message.key } });
         return sock.sendMessage(from, { text: `❌ No results for "${query}".` }, { quoted: message });
       }
 
-      const video = search.videos[0];
       const title = video.title || 'Unknown';
       const duration = video.timestamp || 'N/A';
       const views = video.views?.toLocaleString() || 'N/A';
@@ -134,20 +205,15 @@ export default {
         text: `📥 Found: *${title}*\n⏱️ ${duration} • 👁️ ${views}\n⬇️ Downloading ${format}...`
       }, { quoted: message });
 
-      // Try ytdl-core first
       const ytdl = await getYtdl();
       if (ytdl && ytdl.default?.validateURL) {
         try {
           const yt = ytdl.default || ytdl;
-          await yt.getInfo(videoUrl);
           const tempDir = path.join(process.cwd(), 'temp', 'downloads');
           await fs.ensureDir(tempDir);
 
           if (format === 'audio') {
-            const stream = yt(videoUrl, {
-              filter: 'audioonly',
-              quality: 'highestaudio'
-            });
+            const stream = yt(videoUrl, { filter: 'audioonly', quality: 'lowestaudio' });
             const audioPath = path.join(tempDir, `play_${Date.now()}.mp3`);
             const writeStream = fs.createWriteStream(audioPath);
             stream.pipe(writeStream);
@@ -159,11 +225,10 @@ export default {
             const audioBuffer = await fs.readFile(audioPath);
             await fs.remove(audioPath).catch(() => {});
 
-            await sock.sendMessage(from, { react: { text: '🎧', key: message.key } });
             await sock.sendMessage(targetJid, {
               audio: audioBuffer,
               mimetype: 'audio/mpeg',
-              fileName: `${title.replace(/[\\/:*?"<>|]/g, '').slice(0, 120)}.mp3`,
+              fileName: `${safeTitle(title)}.mp3`,
               contextInfo: {
                 externalAdReply: {
                   thumbnailUrl: thumbnail,
@@ -175,17 +240,10 @@ export default {
                 }
               }
             }, targetJid === from ? { quoted: message } : undefined);
-
-            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
-            if (targetJid !== from) {
-              await sock.sendMessage(from, { text: `✅ Sent "${title}" to the replied user.` }, { quoted: message });
-            }
-            return;
           } else {
-            // Video
             const stream = yt(videoUrl, {
               filter: f => f.container === 'mp4' && f.hasVideo && f.hasAudio,
-              quality: 'lowest' // smallest file for WhatsApp
+              quality: 'lowest'
             });
             const videoPath = path.join(tempDir, `play_vid_${Date.now()}.mp4`);
             const writeStream = fs.createWriteStream(videoPath);
@@ -198,65 +256,29 @@ export default {
             const videoBuffer = await fs.readFile(videoPath);
             await fs.remove(videoPath).catch(() => {});
 
-            await sock.sendMessage(from, { react: { text: '🎬', key: message.key } });
             await sock.sendMessage(targetJid, {
               video: videoBuffer,
               mimetype: 'video/mp4',
-              caption: `${title}\n👁️ ${views} • ⏱️ ${duration}\n${videoUrl}`,
-              contextInfo: {
-                externalAdReply: {
-                  thumbnailUrl: thumbnail,
-                  title: title.slice(0, 100),
-                  body: `👁️ ${views} views • ⏱️ ${duration}`,
-                  sourceUrl: videoUrl,
-                  renderLargerThumbnail: true,
-                  mediaType: 1
-                }
-              }
+              caption: `${title}\n👁️ ${views} • ⏱️ ${duration}\n${videoUrl}`
             }, targetJid === from ? { quoted: message } : undefined);
-
-            await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
-            if (targetJid !== from) {
-              await sock.sendMessage(from, { text: `✅ Sent "${title}" to the replied user.` }, { quoted: message });
-            }
-            return;
           }
+
+          await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
+          if (targetJid !== from) {
+            await sock.sendMessage(from, { text: `✅ Sent "${title}" to the replied user.` }, { quoted: message });
+          }
+          return;
         } catch (ytdlErr) {
           console.error('ytdl-core failed, falling back to API:', ytdlErr.message);
         }
       }
 
-      // Fallback: use current query-based APIs (DrexApp first, DavidCyril second)
       await sock.sendMessage(from, { text: '🔄 Using fallback API...' }, { quoted: message });
-      const axios = (await import('axios')).default;
-      const { buffer: mediaBuffer, provider } = await fetchFromPlaybackApis(axios, query, format);
-
-      await sock.sendMessage(from, { react: { text: '🎧', key: message.key } });
-
-      const msgOpts = format === 'video'
-        ? { video: mediaBuffer, mimetype: 'video/mp4', caption: `${title}\n${videoUrl}\n\nSource: ${provider}` }
-        : {
-            audio: mediaBuffer,
-            mimetype: 'audio/mpeg',
-            fileName: `${title.replace(/[\\/:*?"<>|]/g, '').slice(0, 120)}.mp3`,
-            contextInfo: {
-              externalAdReply: {
-                thumbnailUrl: thumbnail,
-                title: title.slice(0, 100),
-                body: `👁️ ${views} views • ⏱️ ${duration}`,
-                sourceUrl: videoUrl,
-                renderLargerThumbnail: true,
-                mediaType: 1
-              }
-            }
-          };
-
-      await sock.sendMessage(targetJid, msgOpts, targetJid === from ? { quoted: message } : undefined);
+      const sentTitle = await sendApiMedia({ sock, message, from, targetJid, query, format, metadata: video });
       await sock.sendMessage(from, { react: { text: '✅', key: message.key } });
       if (targetJid !== from) {
-        await sock.sendMessage(from, { text: `✅ Sent "${title}" to the replied user.` }, { quoted: message });
+        await sock.sendMessage(from, { text: `✅ Sent "${sentTitle}" to the replied user.` }, { quoted: message });
       }
-
     } catch (error) {
       console.error('Play Error:', error.message);
       await sock.sendMessage(from, { react: { text: '❌', key: message.key } });

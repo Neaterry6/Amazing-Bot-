@@ -1,10 +1,10 @@
 import config from '../../config.js';
 import { getUser } from '../../models/User.js';
 import moment from 'moment';
-import axios from 'axios';
 import os from 'os';
 import { getBotProfile } from '../../utils/botProfile.js';
 import { BOT_CHANNEL_LINK, MENU_HELP_IMAGE_URL, withBotChannelPreview } from '../../utils/botChannel.js';
+import { sendCompressedMenuSong } from '../../utils/menuAudio.js';
 
 const bootTime = Date.now();
 
@@ -73,7 +73,8 @@ export default {
             const currentDate = now.format('DD/MM/YYYY');
             const currentDay = now.format('dddd');
             const currentTime = now.format('hh:mm:ss A');
-            const speedMs = (Number(process.hrtime.bigint() - process.hrtime.bigint()) / 1_000_000).toFixed(3);
+            const speedStart = process.hrtime.bigint();
+            const speedMs = (Number(process.hrtime.bigint() - speedStart) / 1_000_000).toFixed(3);
             const ramUsed = process.memoryUsage().rss;
             const ramTotal = os.totalmem();
             const uptime = formatUptime(Date.now() - bootTime);
@@ -121,24 +122,20 @@ export default {
             helpMessage += `Support: ${prefix}support\n`;
             helpMessage += `Bot Channel: ${BOT_CHANNEL_LINK}`;
 
-            await sock.sendMessage(from, withBotChannelPreview({
-                image: { url: MENU_HELP_IMAGE_URL },
-                caption: helpMessage,
-                mentions: [sender]
-            }), { quoted: message });
-
             try {
-                const songs = ['Love you by Amah', 'She Goes by Denver', 'anime lofi', 'night drive music'];
-                const song = songs[Math.floor(Math.random() * songs.length)];
-                const { data } = await axios.get(`https://apis.davidcyril.name.ng/play?query=${encodeURIComponent(song)}&apikey=`, { timeout: 20000 });
-                if (data?.status && data?.result?.download_url) {
-                    await sock.sendMessage(from, { 
-                        audio: { url: data.result.download_url }, 
-                        mimetype: 'audio/mpeg', 
-                        ptt: false 
-                    }, { quoted: message });
-                }
-            } catch {}
+                await sock.sendMessage(from, withBotChannelPreview({
+                    image: { url: MENU_HELP_IMAGE_URL },
+                    caption: helpMessage,
+                    mentions: [sender]
+                }), { quoted: message });
+            } catch {
+                await sock.sendMessage(from, withBotChannelPreview({
+                    text: helpMessage,
+                    mentions: [sender]
+                }), { quoted: message });
+            }
+
+            await sendCompressedMenuSong(sock, from, message);
 
         } catch (error) {
             await sock.sendMessage(from, {

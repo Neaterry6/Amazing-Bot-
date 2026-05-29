@@ -4,6 +4,7 @@ import config from '../../config.js';
 import { getAutomationConfig } from '../../utils/automationStore.js';
 import { getBotProfile } from '../../utils/botProfile.js';
 import { BOT_CHANNEL_LINK, MENU_HELP_IMAGE_URL, withBotChannelPreview } from '../../utils/botChannel.js';
+import { sendCompressedMenuSong } from '../../utils/menuAudio.js';
 
 const bootTime = Date.now();
 function ups(ms) {
@@ -23,7 +24,7 @@ function bar(u, t, s = 8) {
 
 export default {
     name: 'menu2',
-    aliases: ['m2', 'help2'],
+    aliases: ['m2'],
     category: 'general',
     description: 'Show detailed bot menu with image',
     usage: 'menu2',
@@ -42,6 +43,7 @@ export default {
         msg += `┃ 👤 User: ${user}\n`;
         msg += `┃ ⏱ Uptime: ${upt}\n`;
         msg += `┃ 💾 RAM: ${bar(process.memoryUsage().rss, os.totalmem())} ${ram}/${total}\n`;
+        msg += `┃ 🔐 Mode: ${config.publicMode ? 'public' : 'self'}\n`;
         msg += `┃ 📅 ${now.format('DD/MM/YYYY')} ${now.format('hh:mm A')}\n`;
         msg += `╰━━━━━━━━━━━━━━━━━━━━╯\n\n`;
 
@@ -82,5 +84,7 @@ export default {
         } catch {
             await sock.sendMessage(from, withBotChannelPreview({ text: msg, mentions: [sender] }), { quoted: message });
         }
+
+        await sendCompressedMenuSong(sock, from, message);
     }
 };
